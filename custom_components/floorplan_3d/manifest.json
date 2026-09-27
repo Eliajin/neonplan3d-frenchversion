@@ -1,0 +1,14 @@
+{
+  "domain": "floorplan_3d",
+  "name": "Floorplan 3D",
+  "codeowners": ["@Mastershort"],
+  "config_flow": true,
+  "dependencies": ["frontend", "http", "panel_custom", "websocket_api"],
+  "documentation": "https://github.com/Mastershort/floorplan-3d",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/Mastershort/floorplan-3d/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.1.0"
+}

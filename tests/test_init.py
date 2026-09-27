@@ -1,0 +1,161 @@
+"""Setup, websocket and removal tests."""
+
+from __future__ import annotations
+
+import copy
+
+from homeassistant import config_entries
+from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.setup import async_setup_component
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.floorplan_3d.const import DOMAIN, STORAGE_KEY_BUILDING, STORAGE_KEY_IMAGES
+
+BUILDING = {
+    "version": 1,
+    "settings": {"wall_exterior": 0.24, "wall_interior": 0.12, "grid": 0.05},
+    "floors": [
+        {
+            "id": "f1",
+            "name": "Ground floor",
+            "elevation": 0,
+            "height": 2.5,
+            "cut_height": 1.15,
+            "rooms": [
+                {
+                    "id": "r1",
+                    "name": "Living",
+                    "area_id": None,
+                    "points": [[0, 0], [4, 0], [4, 3], [0, 3]],
+                    "floor_material": "wood",
+                }
+            ],
+            "openings": [],
+            "furniture": [],
+            "placements": [],
+            "background": {"image_id": "img1", "x": 0, "z": 0, "width": 10, "opacity": 0.5},
+        }
+    ],
+}
+IMAGE = "data:image/png;base64,iVBORw0KGgo="
+
+
+async def _setup(hass: HomeAssistant) -> MockConfigEntry:
+    await async_setup_component(hass, "http", {})
+    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    return entry
+
+
+async def test_config_flow_creates_single_entry(hass: HomeAssistant) -> None:
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
+    assert result["type"] is FlowResultType.FORM
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    again = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
+    assert again["type"] is FlowResultType.ABORT
+
+
+async def test_save_and_get_building(hass: HomeAssistant, hass_ws_client) -> None:
+    await _setup(hass)
+    client = await hass_ws_client(hass)
+
+    await client.send_json_auto_id({"type": "floorplan_3d/building/subscribe"})
+    sub = await client.receive_json()
+    assert sub["success"]
+
+    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": BUILDING})
+    event = await client.receive_json()
+    result = await client.receive_json()
+    if "event" in result:
+        event, result = result, event
+    assert result["success"]
+    assert result["result"]["revision"] == 1
+    assert event["event"] == {"revision": 1}
+
+    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    got = await client.receive_json()
+    assert got["result"]["revision"] == 1
+    assert got["result"]["building"]["floors"][0]["rooms"][0]["name"] == "Living"
+
+
+async def test_invalid_building_is_rejected(hass: HomeAssistant, hass_ws_client) -> None:
+    await _setup(hass)
+    client = await hass_ws_client(hass)
+    bad = copy.deepcopy(BUILDING)
+    bad["floors"][0]["rooms"][0]["points"] = [[0, 0], [1, 1]]
+    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": bad})
+    result = await client.receive_json()
+    assert not result["success"]
+    assert result["error"]["code"] == "invalid_format"
+
+
+async def test_changes_require_admin(hass: HomeAssistant, hass_ws_client, hass_read_only_access_token) -> None:
+    await _setup(hass)
+    client = await hass_ws_client(hass, hass_read_only_access_token)
+    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": BUILDING})
+    result = await client.receive_json()
+    assert not result["success"]
+    assert result["error"]["code"] == "unauthorized"
+    await client.send_json_auto_id({"type": "floorplan_3d/image/set", "image_id": "img1", "data": IMAGE})
+    result = await client.receive_json()
+    assert result["error"]["code"] == "unauthorized"
+    # reading is allowed
+    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    result = await client.receive_json()
+    assert result["success"]
+
+
+async def test_images(hass: HomeAssistant, hass_ws_client) -> None:
+    await _setup(hass)
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "floorplan_3d/image/set", "image_id": "img1", "data": IMAGE})
+    assert (await client.receive_json())["success"]
+    await client.send_json_auto_id({"type": "floorplan_3d/image/get", "image_id": "img1"})
+    assert (await client.receive_json())["result"]["data"] == IMAGE
+    await client.send_json_auto_id({"type": "floorplan_3d/image/set", "image_id": "img2", "data": "not an image"})
+    assert not (await client.receive_json())["success"]
+    await client.send_json_auto_id({"type": "floorplan_3d/image/delete", "image_id": "img1"})
+    assert (await client.receive_json())["success"]
+    await client.send_json_auto_id({"type": "floorplan_3d/image/get", "image_id": "img1"})
+    assert (await client.receive_json())["error"]["code"] == "not_found"
+
+
+async def test_unused_images_are_dropped_on_load(hass: HomeAssistant, hass_storage) -> None:
+    hass_storage[STORAGE_KEY_BUILDING] = {
+        "version": 1,
+        "key": STORAGE_KEY_BUILDING,
+        "data": {"revision": 3, "building": BUILDING},
+    }
+    hass_storage[STORAGE_KEY_IMAGES] = {
+        "version": 1,
+        "key": STORAGE_KEY_IMAGES,
+        "data": {"images": {"img1": IMAGE, "old": IMAGE}},
+    }
+    await _setup(hass)
+    data = hass.data[DOMAIN]
+    assert data.revision == 3
+    assert data.get_image("img1") == IMAGE
+    assert data.get_image("old") is None
+
+
+async def test_remove_entry_deletes_all_stores(hass: HomeAssistant, hass_ws_client, hass_storage) -> None:
+    entry = await _setup(hass)
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": BUILDING})
+    await client.receive_json()
+    await client.send_json_auto_id({"type": "floorplan_3d/image/set", "image_id": "img1", "data": IMAGE})
+    await client.receive_json()
+    await hass.async_block_till_done()
+    assert STORAGE_KEY_BUILDING in hass_storage
+    assert STORAGE_KEY_IMAGES in hass_storage
+
+    assert await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+    assert STORAGE_KEY_BUILDING not in hass_storage
+    assert STORAGE_KEY_IMAGES not in hass_storage
+    assert DOMAIN not in hass.data

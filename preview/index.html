@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Floorplan 3D – Vorschau</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #070b14;
+      }
+      floorplan-3d-panel {
+        display: block;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <floorplan-3d-panel></floorplan-3d-panel>
+    <script type="module">
+      // Mock of the Home Assistant frontend object with invented demo data.
+      import { DEMO_BUILDING, DEMO_AREAS } from "./demo-data.js";
+
+      const params = new URLSearchParams(location.search);
+      let building = params.has("empty") ? { version: 1, floors: [], settings: { wall_exterior: 0.24, wall_interior: 0.12, grid: 0.05 } } : DEMO_BUILDING;
+      let revision = 1;
+      const images = {};
+      const listeners = new Set();
+
+      const hass = {
+        language: params.get("lang") || "de",
+        user: { is_admin: !params.has("user"), name: "Demo" },
+        areas: DEMO_AREAS,
+        states: {},
+        connection: {
+          async subscribeMessage(cb) {
+            listeners.add(cb);
+            return async () => listeners.delete(cb);
+          },
+        },
+        async callService(domain, service, data) {
+          console.log("callService", domain, service, data);
+        },
+        async callWS(msg) {
+          switch (msg.type) {
+            case "floorplan_3d/building/get":
+              return { building: structuredClone(building), revision };
+            case "floorplan_3d/building/save":
+              building = structuredClone(msg.building);
+              revision += 1;
+              for (const cb of listeners) cb({ revision });
+              return { revision };
+            case "floorplan_3d/image/get":
+              if (!images[msg.image_id]) throw { code: "not_found", message: "Image not found" };
+              return { data: images[msg.image_id] };
+            case "floorplan_3d/image/set":
+              images[msg.image_id] = msg.data;
+              return null;
+            default:
+              throw { code: "unknown_command", message: msg.type };
+          }
+        },
+      };
+
+      await import("../custom_components/floorplan_3d/frontend/floorplan-3d.js");
+      const panel = document.querySelector("floorplan-3d-panel");
+      panel.hass = hass;
+      panel.narrow = window.innerWidth < 870;
+      window.fp3dPanel = panel;
+    </script>
+  </body>
+</html>
