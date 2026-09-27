@@ -1,16 +1,24 @@
 // 3D view (separate bundle, loaded on demand). Renders only when something changes.
+//
+// Floors are shown in three levels: the whole house (floors pulled apart or stacked), one floor
+// (floors above fly up and fade out, floors below stay as a dim reference) and one room (camera
+// flight into it). Each floor is a group with its own materials so its height and opacity can be
+// animated independently.
 
 import {
   AdditiveBlending,
   Box3,
   CanvasTexture,
   Color,
+  DoubleSide,
   Group,
   LineBasicMaterial,
   LineSegments,
   Mesh,
   MeshBasicMaterial,
+  MultiplyBlending,
   PerspectiveCamera,
+  PlaneGeometry,
   Raycaster,
   RepeatWrapping,
   Scene,
@@ -19,10 +27,11 @@ import {
   Vector3,
   WebGLRenderer,
   type BufferGeometry,
+  type Material,
 } from "three";
 import type { Building, Floor } from "../model.ts";
 import { centroid } from "../model.ts";
-import { buildFloorGeometry, NEON, type FloorGeometry } from "./build.ts";
+import { buildFloorGeometry, NEON, SLAB, type FloorGeometry } from "./build.ts";
 import { OrbitControls } from "./controls.ts";
 
 export type Quality = "auto" | "low" | "high";
@@ -30,9 +39,14 @@ export type WallMode = "auto" | "cut";
 
 export interface ViewerOptions {
   quality?: Quality;
+  /** Pull floors apart in the house view (default true). */
+  explode?: boolean;
   onRoomTap?: (floorId: string, roomId: string | null) => void;
+  onFloorTap?: (floorId: string) => void;
   onBack?: () => void;
   onStats?: (stats: ViewerStats) => void;
+  /** Text for the floor labels in the house view, e.g. "5 rooms". */
+  floorInfo?: (floor: Floor) => string;
 }
 
 export interface ViewerStats {
@@ -41,12 +55,41 @@ export interface ViewerStats {
   triangles: number;
 }
 
+/** Extra gap between floors in the pulled-apart house view (metres). */
+const EXPLODE_GAP = 2.4;
+/** Opacity of the floors below the selected one. */
+const BELOW_OPACITY = 0.22;
+/** Time constant of the floor animation (ms); about 700 ms until settled. */
+const FLOOR_TAU = 140;
+/** Grid cells across the ground texture. */
+const GROUND_CELLS = 32;
+
+interface FloorMaterials {
+  floor: MeshBasicMaterial;
+  grid: MeshBasicMaterial;
+  wall: MeshBasicMaterial;
+  shadow: MeshBasicMaterial;
+  edge: LineBasicMaterial;
+  soft: LineBasicMaterial;
+}
+
 interface FloorView {
   floor: Floor;
+  /** Position in the stack, ordered by elevation. */
+  rank: number;
   group: Group;
   geo: FloorGeometry;
   floorMesh: Mesh;
+  shadowMesh: Mesh;
+  materials: FloorMaterials;
+  /** Current and target height offset and opacity. */
+  y: number;
+  o: number;
+  ty: number;
+  to: number;
+  appliedO: number;
   buckets: { normal: [number, number] | null; upper: Mesh; upperLines: LineSegments; cutLines: LineSegments }[];
+  label: HTMLButtonElement;
 }
 
 export function isLowEnd(): boolean {
@@ -61,46 +104,43 @@ export class FloorplanViewer {
   private readonly options: ViewerOptions;
   private renderer: WebGLRenderer;
   private readonly scene = new Scene();
-  private readonly camera = new PerspectiveCamera(38, 1, 0.1, 300);
+  private readonly camera = new PerspectiveCamera(38, 1, 0.1, 400);
   private controls: OrbitControls;
   private readonly labels: HTMLDivElement;
   private readonly root = new Group();
   private readonly gridTexture: CanvasTexture;
+  private readonly groundTexture: CanvasTexture;
+  private readonly ground: Mesh;
   private floors: FloorView[] = [];
   private building: Building | null = null;
   private floorId: string | null = null;
   private roomId: string | null = null;
   private wallMode: WallMode = "auto";
+  private explode: boolean;
   private frame = 0;
+  private lastFrame = 0;
   private disposed = false;
   private readonly resizeObserver: ResizeObserver;
   private fpsFrames = 0;
   private fpsStart = 0;
-  private readonly materials = {
-    floor: new MeshBasicMaterial({ vertexColors: true }),
-    grid: null as MeshBasicMaterial | null,
-    wall: new MeshBasicMaterial({ vertexColors: true }),
-    edge: new LineBasicMaterial({ color: NEON.edge, transparent: true, opacity: 0.85, blending: AdditiveBlending, depthWrite: false }),
-    cut: new LineBasicMaterial({ color: NEON.edge, transparent: true, opacity: 0.95, blending: AdditiveBlending, depthWrite: false }),
-  };
 
   constructor(host: HTMLElement, options: ViewerOptions = {}) {
     this.host = host;
     this.options = options;
+    this.explode = options.explode ?? true;
     this.renderer = this.makeRenderer(options.quality ?? "auto");
     this.labels = document.createElement("div");
     this.labels.className = "fp3d-labels";
     host.append(this.labels);
     this.gridTexture = makeGridTexture();
-    this.materials.grid = new MeshBasicMaterial({
-      map: this.gridTexture,
-      transparent: true,
-      blending: AdditiveBlending,
-      depthWrite: false,
-      polygonOffset: true,
-      polygonOffsetFactor: -1,
-    });
-    this.scene.add(this.root);
+    this.groundTexture = makeGroundTexture();
+    this.ground = new Mesh(
+      new PlaneGeometry(1, 1),
+      new MeshBasicMaterial({ map: this.groundTexture, transparent: true, blending: AdditiveBlending, depthWrite: false }),
+    );
+    this.ground.rotation.x = -Math.PI / 2;
+    this.ground.renderOrder = -1;
+    this.scene.add(this.ground, this.root);
     this.controls = this.makeControls();
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(host);
@@ -129,12 +169,21 @@ export class FloorplanViewer {
     this.invalidate();
   }
 
-  /** Show one floor (null = all floors stacked). */
+  /** Show one floor (null = the whole house). */
   setFloor(floorId: string | null, animate = true): void {
     this.floorId = floorId;
     this.roomId = null;
-    this.applyVisibility();
+    this.applyTargets(!animate);
+    this.applyHighlight();
     this.fit(animate ? 700 : 0);
+  }
+
+  /** Pull the floors apart in the house view, or stack them. */
+  setExplode(explode: boolean): void {
+    if (explode === this.explode) return;
+    this.explode = explode;
+    this.applyTargets(false);
+    if (this.floorId === null) this.fit(700);
   }
 
   /** Highlight a room and fly into it (null = back to the floor overview). */
@@ -152,7 +201,7 @@ export class FloorplanViewer {
     const xs = room.points.map((p) => p[0]);
     const zs = room.points.map((p) => p[1]);
     const size = new Vector3(Math.max(...xs) - Math.min(...xs), fv.floor.cut_height, Math.max(...zs) - Math.min(...zs));
-    this.controls.flyTo({ target: new Vector3(cx, fv.floor.elevation + 0.3, cz), radius: Math.max(4, this.distanceFor(size) * 1.05), phi: 0.72 });
+    this.controls.flyTo({ target: new Vector3(cx, fv.floor.elevation + fv.ty + 0.3, cz), radius: Math.max(4, this.distanceFor(size) * 1.05), phi: 0.72 });
   }
 
   setWallMode(mode: WallMode): void {
@@ -171,8 +220,10 @@ export class FloorplanViewer {
     document.removeEventListener("visibilitychange", this.onVisibility);
     this.controls.dispose();
     this.clear();
-    for (const m of Object.values(this.materials)) m?.dispose();
+    this.ground.geometry.dispose();
+    (this.ground.material as Material).dispose();
     this.gridTexture.dispose();
+    this.groundTexture.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.labels.remove();
@@ -188,7 +239,7 @@ export class FloorplanViewer {
   private makeRenderer(quality: Quality): WebGLRenderer {
     const low = quality === "low" || (quality === "auto" && isLowEnd());
     const renderer = new WebGLRenderer({ antialias: !low, alpha: true, powerPreference: low ? "low-power" : "default" });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, low ? 1 : 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, low ? 1 : quality === "high" ? 2.5 : 2));
     renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = SRGBColorSpace;
     renderer.domElement.className = "fp3d-canvas";
@@ -223,33 +274,94 @@ export class FloorplanViewer {
         const g = (o as Mesh).geometry as BufferGeometry | undefined;
         g?.dispose();
       });
+      for (const m of Object.values(fv.materials)) m.dispose();
       this.root.remove(fv.group);
     }
     this.floors = [];
     this.labels.replaceChildren();
   }
 
+  private makeMaterials(): FloorMaterials {
+    return {
+      floor: new MeshBasicMaterial({ vertexColors: true }),
+      grid: new MeshBasicMaterial({
+        map: this.gridTexture,
+        transparent: true,
+        blending: AdditiveBlending,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+      }),
+      wall: new MeshBasicMaterial({ vertexColors: true }),
+      // result = floor colour * vertex colour (white leaves the floor untouched)
+      shadow: new MeshBasicMaterial({
+        vertexColors: true,
+        blending: MultiplyBlending,
+        premultipliedAlpha: true,
+        transparent: true,
+        depthWrite: false,
+        side: DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+      }),
+      edge: new LineBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false }),
+      soft: new LineBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false }),
+    };
+  }
+
   private rebuild(): void {
+    const previous = new Map(this.floors.map((f) => [f.floor.id, { y: f.y, o: f.o }]));
     this.clear();
     const b = this.building;
     if (!b) return;
+    const ordered = [...b.floors].sort((p, q) => p.elevation - q.elevation);
     for (const floor of b.floors) {
       const geo = buildFloorGeometry(floor, b.settings.wall_exterior, b.settings.wall_interior);
+      const materials = this.makeMaterials();
       const group = new Group();
-      group.position.y = floor.elevation;
-      const floorMesh = new Mesh(geo.floor, this.materials.floor);
-      const grid = new Mesh(geo.floor, this.materials.grid!);
-      grid.renderOrder = 1;
-      group.add(floorMesh, grid, new Mesh(geo.lower, this.materials.wall));
+      const floorMesh = new Mesh(geo.floor, materials.floor);
+      const shadowMesh = new Mesh(geo.shadow, materials.shadow);
+      shadowMesh.renderOrder = 1;
+      const grid = new Mesh(geo.floor, materials.grid);
+      grid.renderOrder = 2;
+      group.add(floorMesh, shadowMesh, grid, new Mesh(geo.lower, materials.wall), new LineSegments(geo.lowerLines, materials.soft));
       const buckets = geo.buckets.map((bk) => {
-        const upper = new Mesh(bk.upper, this.materials.wall);
-        const upperLines = new LineSegments(bk.upperLines, this.materials.edge);
-        const cutLines = new LineSegments(bk.cutLines, this.materials.cut);
+        const upper = new Mesh(bk.upper, materials.wall);
+        const upperLines = new LineSegments(bk.upperLines, materials.edge);
+        const cutLines = new LineSegments(bk.cutLines, materials.edge);
         group.add(upper, upperLines, cutLines);
         return { normal: bk.normal, upper, upperLines, cutLines };
       });
       this.root.add(group);
-      this.floors.push({ floor, group, geo, floorMesh, buckets });
+
+      const label = document.createElement("button");
+      label.className = "fp3d-pin fp3d-pin-floor";
+      label.dataset.floor = floor.id;
+      const name = document.createElement("b");
+      name.textContent = floor.name || "–";
+      const info = document.createElement("span");
+      info.textContent = this.options.floorInfo?.(floor) ?? "";
+      label.append(name, info);
+      label.addEventListener("click", () => this.options.onFloorTap?.(floor.id));
+      this.labels.append(label);
+
+      const prev = previous.get(floor.id);
+      this.floors.push({
+        floor,
+        rank: ordered.indexOf(floor),
+        group,
+        geo,
+        floorMesh,
+        shadowMesh,
+        materials,
+        y: prev?.y ?? 0,
+        o: prev?.o ?? 1,
+        ty: 0,
+        to: 1,
+        appliedO: -1,
+        buckets,
+        label,
+      });
       for (const room of floor.rooms) {
         const pin = document.createElement("button");
         pin.className = "fp3d-pin";
@@ -261,17 +373,88 @@ export class FloorplanViewer {
       }
     }
     if (this.floorId && !b.floors.some((f) => f.id === this.floorId)) this.floorId = null;
-    this.applyVisibility();
+    this.applyTargets(previous.size === 0);
     this.applyHighlight();
   }
 
-  private visibleFloors(): FloorView[] {
-    return this.floors.filter((f) => this.floorId === null || f.floor.id === this.floorId);
+  /** True when the house view shows several floors (floor labels instead of room labels). */
+  private get houseView(): boolean {
+    return this.floorId === null && this.floors.length > 1;
   }
 
-  private applyVisibility(): void {
-    for (const fv of this.floors) fv.group.visible = this.floorId === null || fv.floor.id === this.floorId;
+  /** Target height offset and opacity of every floor for the current view. */
+  private applyTargets(immediate: boolean): void {
+    const sel = this.floors.find((f) => f.floor.id === this.floorId);
+    for (const fv of this.floors) {
+      let ty = 0;
+      let to = 1;
+      if (!sel) ty = this.explode ? fv.rank * EXPLODE_GAP : 0;
+      else if (fv.rank > sel.rank) {
+        ty = 5 + fv.rank; // floors above fly away
+        to = 0;
+      } else if (fv.rank < sel.rank) {
+        ty = -0.4; // floors below stay as a dim reference
+        to = BELOW_OPACITY;
+      }
+      fv.ty = ty;
+      fv.to = to;
+      if (immediate) {
+        fv.y = ty;
+        fv.o = to;
+      }
+      this.applyFloor(fv);
+    }
     this.invalidate();
+  }
+
+  /** Move a floor group to its current offset and fade its materials. */
+  private applyFloor(fv: FloorView): void {
+    fv.group.position.y = fv.floor.elevation + fv.y;
+    fv.group.visible = fv.o > 0.02;
+    fv.shadowMesh.visible = fv.o > 0.98; // a multiply layer cannot fade, so it goes with the first step
+    if (Math.abs(fv.appliedO - fv.o) < 1e-3) return;
+    fv.appliedO = fv.o;
+    const m = fv.materials;
+    const solid = fv.o > 0.999;
+    for (const mat of [m.floor, m.wall]) {
+      if (mat.transparent === solid) {
+        mat.transparent = !solid;
+        mat.depthWrite = solid;
+        mat.needsUpdate = true;
+      }
+      mat.opacity = fv.o;
+    }
+    m.grid.opacity = fv.o;
+    m.edge.opacity = fv.o;
+    m.soft.opacity = fv.o;
+  }
+
+  /** Advance the floor animation; returns true while something still moves. */
+  private stepFloors(dt: number): boolean {
+    let moving = false;
+    const k = 1 - Math.exp(-dt / FLOOR_TAU);
+    for (const fv of this.floors) {
+      const dy = fv.ty - fv.y;
+      const dO = fv.to - fv.o;
+      if (Math.abs(dy) < 0.004 && Math.abs(dO) < 0.004) {
+        if (dy !== 0 || dO !== 0) {
+          fv.y = fv.ty;
+          fv.o = fv.to;
+          this.applyFloor(fv);
+        }
+        continue;
+      }
+      fv.y += dy * k;
+      fv.o += dO * k;
+      moving = true;
+      this.applyFloor(fv);
+    }
+    return moving;
+  }
+
+  /** Floors that can be tapped and are framed by the camera: the whole house or the selected floor. */
+  private activeFloors(): FloorView[] {
+    return this.floors.filter((f) => f.to > 0.99);
   }
 
   private applyHighlight(): void {
@@ -286,28 +469,49 @@ export class FloorplanViewer {
       colors.needsUpdate = true;
     }
     for (const pin of this.labels.querySelectorAll<HTMLElement>(".fp3d-pin")) {
-      pin.classList.toggle("fp3d-pin-active", pin.dataset.room === this.roomId);
+      pin.classList.toggle("fp3d-pin-active", !!pin.dataset.room && pin.dataset.room === this.roomId);
     }
     this.invalidate();
   }
 
   private fit(duration: number): void {
     const box = new Box3();
-    for (const fv of this.visibleFloors()) {
+    for (const fv of this.activeFloors()) {
+      const y0 = fv.floor.elevation + fv.ty;
       for (const room of fv.floor.rooms) {
         for (const [x, z] of room.points) {
-          box.expandByPoint(new Vector3(x, fv.floor.elevation, z));
-          box.expandByPoint(new Vector3(x, fv.floor.elevation + fv.floor.height, z));
+          box.expandByPoint(new Vector3(x, y0, z));
+          box.expandByPoint(new Vector3(x, y0 + fv.floor.height, z));
         }
       }
     }
     if (box.isEmpty()) box.set(new Vector3(-4, 0, -4), new Vector3(4, 2.5, 4));
+    this.placeGround();
     const center = box.getCenter(new Vector3());
     const size = box.getSize(new Vector3());
-    const radius = Math.max(8, this.distanceFor(size) * 1.02);
+    // perspective widens the near corners; portrait screens need a little more room for that
+    const radius = Math.max(8, this.distanceFor(size) * (this.camera.aspect < 1 ? 1.16 : 1.02));
     this.controls.maxRadius = Math.max(40, radius * 3);
-    center.y = box.min.y + size.y * 0.3;
+    center.y = box.min.y + size.y * (this.houseView ? 0.45 : 0.3);
     this.controls.flyTo({ target: center, radius, phi: 0.85, theta: -0.6 }, duration);
+  }
+
+  /** The ground grid lies under the lowest floor and reaches well beyond the building. */
+  private placeGround(): void {
+    const box = new Box3();
+    let y = Infinity;
+    for (const fv of this.floors) {
+      y = Math.min(y, fv.floor.elevation + Math.min(0, fv.ty));
+      for (const room of fv.floor.rooms) for (const [x, z] of room.points) box.expandByPoint(new Vector3(x, 0, z));
+    }
+    this.ground.visible = !box.isEmpty();
+    if (box.isEmpty()) return;
+    const c = box.getCenter(new Vector3());
+    const s = box.getSize(new Vector3());
+    // the texture has 32 cells: 1 m each for a normal house, 2 m for a very large one
+    const span = GROUND_CELLS * Math.ceil((Math.max(s.x, s.z) + 16) / GROUND_CELLS);
+    this.ground.scale.set(span, span, 1);
+    this.ground.position.set(c.x, y - SLAB - 0.02, c.z);
   }
 
   /** Camera distance at which a box of this size fits the view (bounding sphere against the narrower field of view). */
@@ -322,7 +526,7 @@ export class FloorplanViewer {
     const ndc = new Vector2((x / rect.width) * 2 - 1, -(y / rect.height) * 2 + 1);
     const ray = new Raycaster();
     ray.setFromCamera(ndc, this.camera);
-    const meshes = this.visibleFloors().map((f) => f.floorMesh);
+    const meshes = this.activeFloors().map((f) => f.floorMesh);
     const hit = ray.intersectObjects(meshes, false)[0];
     if (!hit || hit.faceIndex == null) {
       this.options.onRoomTap?.(this.floorId ?? "", null);
@@ -337,7 +541,11 @@ export class FloorplanViewer {
   private render(now: number): void {
     this.frame = 0;
     if (this.disposed) return;
-    const moving = this.controls.update(now);
+    const dt = this.lastFrame ? Math.min(100, now - this.lastFrame) : 16;
+    const cameraMoving = this.controls.update(now);
+    const floorsMoving = this.stepFloors(dt);
+    const moving = cameraMoving || floorsMoving;
+    this.lastFrame = moving ? now : 0;
     this.updateWalls();
     this.renderer.render(this.scene, this.camera);
     this.updateLabels();
@@ -353,11 +561,12 @@ export class FloorplanViewer {
     const dz = cam.z - t.z;
     const l = Math.hypot(dx, dz) || 1;
     for (const fv of this.floors) {
+      // in a room, its floor's interior walls fold down as well
+      const inRoom = this.roomId !== null && fv.floor.rooms.some((r) => r.id === this.roomId);
       for (const bk of fv.buckets) {
-        // exterior walls facing the camera fold down; in a room, the interior walls fold down as well
         let show = this.wallMode !== "cut";
         if (show && bk.normal) show = (bk.normal[0] * dx) / l + (bk.normal[1] * dz) / l < 0.25;
-        else if (show && this.roomId) show = false;
+        else if (show && inRoom) show = false;
         bk.upper.visible = show;
         bk.upperLines.visible = show;
         bk.cutLines.visible = !show;
@@ -369,17 +578,37 @@ export class FloorplanViewer {
     const w = this.host.clientWidth;
     const h = this.host.clientHeight;
     const v = new Vector3();
-    for (const pin of this.labels.children as HTMLCollectionOf<HTMLElement>) {
+    const house = this.houseView;
+    for (const fv of this.floors) {
+      const show = house && fv.o > 0.5 && fv.floor.rooms.length > 0;
+      fv.label.hidden = !show;
+      if (!show) continue;
+      // left of the leftmost corner of the floor's bounding box, at wall-cut height
+      let best: { x: number; y: number } | null = null;
+      const xs = fv.floor.rooms.flatMap((r) => r.points.map((p) => p[0]));
+      const zs = fv.floor.rooms.flatMap((r) => r.points.map((p) => p[1]));
+      const y = fv.floor.elevation + fv.y + fv.floor.cut_height * 0.5;
+      for (const x of [Math.min(...xs), Math.max(...xs)]) {
+        for (const z of [Math.min(...zs), Math.max(...zs)]) {
+          v.set(x, y, z).project(this.camera);
+          const sx = ((v.x + 1) / 2) * w;
+          if (!best || sx < best.x) best = { x: sx, y: ((1 - v.y) / 2) * h };
+        }
+      }
+      const lw = fv.label.offsetWidth;
+      const left = Math.max(8, Math.min(w - lw - 8, best!.x - lw - 14));
+      fv.label.style.transform = `translate(${left}px, ${best!.y}px) translate(0, -50%)`;
+    }
+    for (const pin of this.labels.querySelectorAll<HTMLElement>(".fp3d-pin[data-room]")) {
       const fv = this.floors.find((f) => f.floor.id === pin.dataset.floor);
       const room = fv?.floor.rooms.find((r) => r.id === pin.dataset.room);
-      // with several floors stacked, room labels would show through the floors above
-      const stacked = this.floorId === null && this.floors.length > 1;
-      if (!fv || !room || !fv.group.visible || stacked) {
+      // in the house view, room labels would pile up between the floors
+      if (!fv || !room || fv.to < 0.99 || fv.o < 0.9 || house) {
         pin.hidden = true;
         continue;
       }
       const [cx, cz] = centroid(room.points);
-      v.set(cx, fv.floor.elevation + 0.05, cz).project(this.camera);
+      v.set(cx, fv.floor.elevation + fv.y + 0.05, cz).project(this.camera);
       const off = v.z > 1 || Math.abs(v.x) > 1.1 || Math.abs(v.y) > 1.1;
       pin.hidden = off;
       if (!off) pin.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -50%)`;
@@ -407,9 +636,9 @@ function makeGridTexture(): CanvasTexture {
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d")!;
-  ctx.strokeStyle = "rgba(55,224,255,0.10)";
-  ctx.lineWidth = 2;
-  for (const p of [1, size / 2]) {
+  ctx.strokeStyle = "rgba(55,224,255,0.09)";
+  ctx.lineWidth = 1.5;
+  for (const p of [0.75, size / 2]) {
     ctx.beginPath();
     ctx.moveTo(p, 0);
     ctx.lineTo(p, size);
@@ -420,6 +649,38 @@ function makeGridTexture(): CanvasTexture {
   const tex = new CanvasTexture(canvas);
   tex.wrapS = RepeatWrapping;
   tex.wrapT = RepeatWrapping;
+  tex.anisotropy = 4;
+  tex.colorSpace = SRGBColorSpace;
+  return tex;
+}
+
+/** Ground below the house: a wide 1 m grid that fades out towards the edges. */
+function makeGroundTexture(): CanvasTexture {
+  const size = 1024;
+  const cells = GROUND_CELLS;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  ctx.strokeStyle = "rgba(91,124,255,0.16)";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= cells; i++) {
+    const p = Math.round((i / cells) * size) + 0.5;
+    ctx.beginPath();
+    ctx.moveTo(p, 0);
+    ctx.lineTo(p, size);
+    ctx.moveTo(0, p);
+    ctx.lineTo(size, p);
+    ctx.stroke();
+  }
+  // fade out radially so the grid has no hard border
+  ctx.globalCompositeOperation = "destination-in";
+  const g = ctx.createRadialGradient(size / 2, size / 2, size * 0.12, size / 2, size / 2, size / 2);
+  g.addColorStop(0, "rgba(0,0,0,1)");
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new CanvasTexture(canvas);
   tex.anisotropy = 4;
   tex.colorSpace = SRGBColorSpace;
   return tex;

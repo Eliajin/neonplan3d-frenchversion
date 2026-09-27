@@ -2,7 +2,7 @@
 
 Draw your home directly in Home Assistant and see it as a 3D model in a neon look. No external tools, no cloud.
 
-> **Status: early development (Phase 1 of 6).** The data model, automatic walls, the 2D editor and a first 3D view work. Device control, doors and windows, furniture, energy flow and presence follow in later phases (see [docs/plan.md](docs/plan.md), in German).
+> **Status: early development (Phase 2 of 6).** The data model, automatic walls, the 2D editor and the neon 3D view with floors and camera flights work. Device control, doors and windows, furniture, energy flow and presence follow in later phases (see [docs/plan.md](docs/plan.md), in German).
 
 ## Features (so far)
 
@@ -16,9 +16,12 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
 - **Automatic walls**: each shared edge becomes an interior wall, outer edges become exterior walls. Corners and T-junctions are mitred. Wall thickness is configurable.
 - **Area link**: each room can be linked to a Home Assistant area.
 - **Floor plan image as template**: an image of your floor plan can be placed under the drawing, with scale and opacity.
-- **3D view**:
+- **3D view (neon look)**:
   - Walls in front of the camera fold down automatically; a "Cut" mode shows all walls low.
-  - Tap a room to fly in.
+  - Fine glowing top edges, faint corner lines and wall shadows baked into the floor.
+  - Three levels: the whole house (floors pulled apart or stacked, with a label per floor), one floor (floors above fly away, floors below stay dimmed) and one room.
+  - Tap a floor label or a room to go in; double tap, Esc or *Back* goes one level up.
+  - Quality levels *Auto*, *Tablet* and *High* (remembered per device).
   - Only renders when something changes, so it uses no GPU while idle.
 - **Sidebar page and dashboard card**: `custom:floorplan-3d-card` is loaded automatically, no resource needed.
 
@@ -41,6 +44,8 @@ type: custom:floorplan-3d-card
 floor: floor_ab12cd34   # optional: show a single floor (id from the editor)
 height: 420             # optional: height in pixels
 walls: auto             # optional: auto | cut
+explode: true           # optional: pull floors apart in the house view (default true)
+quality: auto           # optional: auto | low | high
 ```
 
 ## Development

@@ -35,6 +35,8 @@ const browser = await puppeteer.launch({ executablePath, headless: true, args: [
 
 const shots = [
   { name: "view-house", query: "?fp3d_stats", width: 1280, height: 800 },
+  { name: "view-stacked", query: "", width: 1280, height: 800, click: "Gestapelt" },
+  { name: "view-floor-og", query: "", width: 1280, height: 800, click: "Obergeschoss" },
   { name: "view-floor-eg", query: "?fp3d_stats", width: 1280, height: 800, click: "Erdgeschoss" },
   { name: "view-room", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Küche" },
   { name: "view-cut", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Schnitt" },

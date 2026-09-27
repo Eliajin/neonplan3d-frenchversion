@@ -77,6 +77,14 @@ const de = {
   card_name: "Floorplan 3D",
   card_description: "Deine Wohnung in 3D (Neon).",
   stats: "{fps} B/s · {calls} Draw-Calls · {tris} Dreiecke",
+  floors_apart: "Auseinander",
+  floors_stacked: "Gestapelt",
+  floor_rooms_one: "1 Raum",
+  floor_rooms: "{n} Räume",
+  quality: "Qualität",
+  quality_auto: "Auto",
+  quality_low: "Tablet",
+  quality_high: "Hoch",
 };
 
 type Key = keyof typeof de;
@@ -156,6 +164,14 @@ const en: Record<Key, string> = {
   card_name: "Floorplan 3D",
   card_description: "Your home in 3D (neon).",
   stats: "{fps} fps · {calls} draw calls · {tris} triangles",
+  floors_apart: "Apart",
+  floors_stacked: "Stacked",
+  floor_rooms_one: "1 room",
+  floor_rooms: "{n} rooms",
+  quality: "Quality",
+  quality_auto: "Auto",
+  quality_low: "Tablet",
+  quality_high: "High",
 };
 
 export type I18nKey = Key;

@@ -15,6 +15,7 @@ export class Fp3dView3d extends LitElement {
     floorId: { attribute: false },
     roomId: { attribute: false },
     wallMode: { attribute: false },
+    explode: { type: Boolean },
     quality: { attribute: false },
     showStats: { type: Boolean },
     _stats: { state: true },
@@ -26,6 +27,7 @@ export class Fp3dView3d extends LitElement {
   declare floorId: string | null;
   declare roomId: string | null;
   declare wallMode: WallMode;
+  declare explode: boolean;
   declare quality: Quality;
   declare showStats: boolean;
   private declare _stats: ViewerStats | null;
@@ -40,6 +42,7 @@ export class Fp3dView3d extends LitElement {
     this.floorId = null;
     this.roomId = null;
     this.wallMode = "auto";
+    this.explode = true;
     this.quality = "auto";
     this.showStats = false;
     this._stats = null;
@@ -70,7 +73,11 @@ export class Fp3dView3d extends LitElement {
       const host = this.renderRoot.querySelector(".fp3d-stage") as HTMLElement;
       this.viewer = mod.createViewer(host, {
         quality: this.quality,
+        explode: this.explode,
         onRoomTap: (floorId, roomId) => this.fire("room-tap", { floorId, roomId }),
+        onFloorTap: (floorId) => this.fire("floor-tap", { floorId }),
+        floorInfo: (floor) =>
+          floor.rooms.length === 1 ? translate(this.hass, "floor_rooms_one") : translate(this.hass, "floor_rooms", { n: floor.rooms.length }),
         onBack: () => this.fire("back", {}),
         onStats: this.showStats ? (s) => (this._stats = s) : undefined,
       });
@@ -92,6 +99,7 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("floorId")) v.setFloor(this.floorId);
     if (changed.has("roomId") && (this.roomId || changed.get("roomId"))) v.selectRoom(this.roomId);
     if (changed.has("wallMode")) v.setWallMode(this.wallMode);
+    if (changed.has("explode")) v.setExplode(this.explode);
     if (changed.has("quality") && changed.get("quality") !== undefined) v.setQuality(this.quality);
   }
 
@@ -160,6 +168,25 @@ export class Fp3dView3d extends LitElement {
         white-space: nowrap;
         backdrop-filter: blur(6px);
         box-shadow: var(--fp3d-shadow);
+      }
+      .fp3d-pin-floor {
+        display: grid;
+        justify-items: start;
+        gap: 1px;
+        padding: 8px 14px;
+        border-radius: 12px;
+        background: var(--fp3d-accent);
+        color: var(--fp3d-accent-text);
+        border-color: transparent;
+        box-shadow: 0 0 22px rgba(55, 224, 255, 0.28);
+      }
+      .fp3d-pin-floor b {
+        font: 700 15px var(--fp3d-title-font);
+        letter-spacing: -0.01em;
+      }
+      .fp3d-pin-floor span {
+        font: 500 12px var(--fp3d-font);
+        opacity: 0.78;
       }
       .fp3d-pin[hidden] {
         display: none;

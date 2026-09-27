@@ -8,9 +8,27 @@ import { translate, type I18nKey } from "./i18n.ts";
 import type { Building } from "./model.ts";
 import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
-import type { WallMode } from "./viewer/viewer3d.ts";
+import type { Quality, WallMode } from "./viewer/viewer3d.ts";
 
 type Mode = "view" | "editor";
+
+/** View preferences belong to the device (a wall tablet wants other settings than a desktop). */
+const prefs = {
+  get(key: string): string | null {
+    try {
+      return localStorage.getItem(`floorplan_3d.${key}`);
+    } catch {
+      return null;
+    }
+  },
+  set(key: string, value: string): void {
+    try {
+      localStorage.setItem(`floorplan_3d.${key}`, value);
+    } catch {
+      // storage unavailable (private mode): the choice just is not remembered
+    }
+  },
+};
 
 export class Floorplan3dPanel extends LitElement {
   static properties = {
@@ -22,6 +40,8 @@ export class Floorplan3dPanel extends LitElement {
     _floorId: { state: true },
     _roomId: { state: true },
     _wallMode: { state: true },
+    _explode: { state: true },
+    _quality: { state: true },
   };
 
   declare hass: HomeAssistant;
@@ -32,6 +52,8 @@ export class Floorplan3dPanel extends LitElement {
   private declare _floorId: string | null;
   private declare _roomId: string | null;
   private declare _wallMode: WallMode;
+  private declare _explode: boolean;
+  private declare _quality: Quality;
 
   private readonly data = new BuildingController(this);
   private readonly showStats = new URLSearchParams(location.search).has("fp3d_stats");
@@ -43,6 +65,9 @@ export class Floorplan3dPanel extends LitElement {
     this._floorId = null;
     this._roomId = null;
     this._wallMode = "auto";
+    this._explode = prefs.get("explode") !== "0";
+    const quality = prefs.get("quality");
+    this._quality = quality === "low" || quality === "high" ? quality : "auto";
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
@@ -73,6 +98,16 @@ export class Floorplan3dPanel extends LitElement {
     if (!roomId) return;
     if (this._floorId === null && (this.data.building?.floors.length ?? 0) > 1) this._floorId = floorId;
     this._roomId = roomId === this._roomId ? null : roomId;
+  }
+
+  private setExplode(explode: boolean): void {
+    this._explode = explode;
+    prefs.set("explode", explode ? "1" : "0");
+  }
+
+  private setQuality(quality: Quality): void {
+    this._quality = quality;
+    prefs.set("quality", quality);
   }
 
   private back(): void {
@@ -110,6 +145,13 @@ export class Floorplan3dPanel extends LitElement {
               </div>`
             : nothing}
           <span class="fp3d-grow"></span>
+          ${this._mode === "view" && b?.floors.some((f) => f.rooms.length)
+            ? html`<div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("quality")}>
+                ${(["auto", "low", "high"] as Quality[]).map(
+                  (q) => html`<button aria-pressed=${this._quality === q} @click=${() => this.setQuality(q)}>${this.t(`quality_${q}`)}</button>`,
+                )}
+              </div>`
+            : nothing}
           ${this._mode === "editor" && saveState !== "idle"
             ? html`<span class="fp3d-save fp3d-save-${saveState}">${this.t(saveState === "saving" ? "saving" : saveState === "saved" ? "saved" : "save_error")}</span>`
             : nothing}
@@ -186,8 +228,14 @@ export class Floorplan3dPanel extends LitElement {
           .floorId=${b.floors.length > 1 ? this._floorId : (b.floors[0]?.id ?? null)}
           .roomId=${this._roomId}
           .wallMode=${this._wallMode}
+          .explode=${this._explode}
+          .quality=${this._quality}
           ?showStats=${this.showStats}
           @room-tap=${this.onRoomTap}
+          @floor-tap=${(e: CustomEvent<{ floorId: string }>) => {
+            this._floorId = e.detail.floorId;
+            this._roomId = null;
+          }}
           @back=${() => this.back()}
         ></fp3d-view3d>
         <div class="fp3d-overlay">
@@ -195,6 +243,12 @@ export class Floorplan3dPanel extends LitElement {
             <button aria-pressed=${this._wallMode === "auto"} @click=${() => (this._wallMode = "auto")}>${this.t("walls_auto")}</button>
             <button aria-pressed=${this._wallMode === "cut"} @click=${() => (this._wallMode = "cut")}>${this.t("walls_cut")}</button>
           </div>
+          ${b.floors.length > 1 && !this._floorId
+            ? html`<div class="fp3d-seg">
+                <button aria-pressed=${this._explode} @click=${() => this.setExplode(true)}>${this.t("floors_apart")}</button>
+                <button aria-pressed=${!this._explode} @click=${() => this.setExplode(false)}>${this.t("floors_stacked")}</button>
+              </div>`
+            : nothing}
           ${this._roomId || (this._floorId && b.floors.length > 1)
             ? html`<button class="fp3d-chip" @click=${() => this.back()}>${this.t("back")}</button>`
             : nothing}
@@ -286,9 +340,21 @@ export class Floorplan3dPanel extends LitElement {
         position: absolute;
         right: 14px;
         top: 10px;
+        left: 14px;
         display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
         gap: 8px;
         align-items: center;
+        pointer-events: none;
+      }
+      .fp3d-overlay > * {
+        pointer-events: auto;
+      }
+      .fp3d-quality button {
+        padding: 5px 11px;
+        min-height: 30px;
+        font-size: 13px;
       }
       .fp3d-message,
       .fp3d-empty {
