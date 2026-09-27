@@ -159,3 +159,16 @@ async def test_remove_entry_deletes_all_stores(hass: HomeAssistant, hass_ws_clie
     assert STORAGE_KEY_BUILDING not in hass_storage
     assert STORAGE_KEY_IMAGES not in hass_storage
     assert DOMAIN not in hass.data
+
+
+async def test_panel_and_card_are_registered_and_removed(hass: HomeAssistant, mock_frontend) -> None:
+    entry = await _setup(hass)
+    mock_frontend["register"].assert_awaited_once()
+    assert mock_frontend["register"].await_args.kwargs["frontend_url_path"] == "floorplan-3d"
+    url = mock_frontend["add_js"].call_args.args[1]
+    assert url.startswith("/floorplan_3d_static/floorplan-3d.js?v=")
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    mock_frontend["remove_panel"].assert_called_once_with(hass, "floorplan-3d")
+    mock_frontend["remove_js"].assert_called_once_with(hass, url)
