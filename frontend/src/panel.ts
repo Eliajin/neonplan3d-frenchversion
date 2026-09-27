@@ -209,7 +209,9 @@ export class Floorplan3dPanel extends LitElement {
     css`
       :host {
         display: block;
-        height: 100%;
+        /* HA gives the custom panel's parent no explicit height, so 100% collapses. */
+        height: 100vh;
+        height: 100dvh;
         background: var(--fp3d-bg);
       }
       .fp3d-app {
