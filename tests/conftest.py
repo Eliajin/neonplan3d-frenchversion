@@ -20,9 +20,9 @@ def mock_frontend(hass: HomeAssistant) -> Generator[dict[str, object]]:
     """Stand in for the frontend and panel_custom components (hass_frontend is not installed in tests)."""
     hass.config.components.update({"frontend", "panel_custom"})
     with (
-        patch("custom_components.floorplan_3d.frontend.add_extra_js_url") as add_js,
-        patch("custom_components.floorplan_3d.frontend.remove_extra_js_url") as remove_js,
-        patch("custom_components.floorplan_3d.frontend.async_remove_panel") as remove_panel,
-        patch("custom_components.floorplan_3d.panel_custom.async_register_panel", new_callable=AsyncMock) as register,
+        patch("homeassistant.components.frontend.add_extra_js_url") as add_js,
+        patch("homeassistant.components.frontend.remove_extra_js_url") as remove_js,
+        patch("homeassistant.components.frontend.async_remove_panel") as remove_panel,
+        patch("homeassistant.components.panel_custom.async_register_panel", new_callable=AsyncMock) as register,
     ):
         yield {"add_js": add_js, "remove_js": remove_js, "remove_panel": remove_panel, "register": register}
