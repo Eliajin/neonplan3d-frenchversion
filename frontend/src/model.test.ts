@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { emptyBuilding, floorElevation, newFloor, normalizeBuilding, outdoorGround, resizeFurniture, roomTiles, spotGrid, surfaceHeight, type Furniture } from "./model.ts";
+import { emptyBuilding, floorElevation, newFloor, openingPreset, normalizeBuilding, outdoorGround, resizeFurniture, roomTiles, spotGrid, surfaceHeight, type Furniture } from "./model.ts";
 
 const item = (type: string, x: number, z: number, h: number, extra: Partial<Furniture> = {}): Furniture => ({
   id: `${type}_${x}`,
@@ -99,4 +99,11 @@ test("rooms for areas are laid out beside the existing rooms", () => {
   assert.deepEqual(rooms[0].points[0], [6, 0]);
   // three per row
   assert.deepEqual(rooms[3].points[0], [6, 3.5]);
+});
+
+test("opening kinds: terrace doors are windows down to the floor, double ones have two leaves", () => {
+  assert.equal(openingPreset({ type: "window", leaves: 2, sill: 0 }), "terrace_double");
+  assert.equal(openingPreset({ type: "window", leaves: 1, sill: 0.9 }), "window");
+  assert.equal(openingPreset({ type: "door", leaves: 2, sill: 0 }), "door_double");
+  assert.equal(openingPreset({ type: "garage", leaves: 1, sill: 0 }), "garage");
 });

@@ -92,7 +92,7 @@ test("light stays in its room unless a door connects the rooms", () => {
   const c1 = lightColors(s1, [lamp(3.5, 1.5, [1, 1, 1])]);
   assert.equal(floorAt(s1, c1, 4.5, 1.5)[0], 0);
 
-  const door: Opening = { id: "d", room_id: "a", edge: 1, offset: 1.5, width: 0.9, type: "door", sill: 0, height: 2.05, hinge: "left", cover: null, contact: null, tilt: null };
+  const door: Opening = { id: "d", room_id: "a", edge: 1, offset: 1.5, width: 0.9, type: "door", sill: 0, height: 2.05, hinge: "left", leaves: 1, swing: "in", cover: null, contact: null, contact2: null, tilt: null };
   const withDoor = { ...closed, openings: [door] };
   const s2 = surfaceOf(withDoor);
   assert.equal(s2.doors.length, 1);
@@ -115,7 +115,7 @@ test("a spot lights a small circle, a ceiling light a wide area", () => {
 });
 
 test("wall light leaves out windows", () => {
-  const win: Opening = { id: "w", room_id: "a", edge: 0, offset: 2, width: 1.2, type: "window", sill: 0.9, height: 1.3, hinge: "left", cover: null, contact: null, tilt: null };
+  const win: Opening = { id: "w", room_id: "a", edge: 0, offset: 2, width: 1.2, type: "window", sill: 0.9, height: 1.3, hinge: "left", leaves: 1, swing: "in", cover: null, contact: null, contact2: null, tilt: null };
   const plain = surfaceOf({ ...newFloor("f", "F", 0), rooms: [rect("a", 0, 0, 4, 3)] });
   const withWindow = surfaceOf({ ...newFloor("f", "F", 0), rooms: [rect("a", 0, 0, 4, 3)], openings: [win] });
   assert.ok(withWindow.room.length < plain.room.length);

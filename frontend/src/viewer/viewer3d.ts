@@ -180,8 +180,8 @@ const OPENING_TAU = 160;
 /** Frame interval while only the energy flow moves (ms): about 30 frames per second. */
 const FLOW_FRAME_MS = 33;
 /** Cable core and the soft glow around it (m). */
-const CABLE_WIDTH = 0.07;
-const CABLE_HALO = 0.34;
+const CABLE_WIDTH = 0.035;
+const CABLE_HALO = 0.14;
 const LAMP_BODY = 0x2a3a60;
 const LAMP_SHADE = 0x1d2946;
 const WALL_LAMP_Y = 1.75;
@@ -812,7 +812,10 @@ export class FloorplanViewer {
     const surface = fv.lightSurface;
     if (!surface) return;
     const sources = this.lightSources(fv);
-    const doorOpen = surface.doors.map((d) => fv.openings.get(d.id)?.open ?? 0.5);
+    const doorOpen = surface.doors.map((d) => {
+      const o = fv.openings.get(d.id);
+      return o ? Math.max(o.open, o.open2 ?? 0) : 0.5;
+    });
     const sig =
       sources.map((l) => `${l.x.toFixed(2)},${l.y.toFixed(2)},${l.z.toFixed(2)},${l.kind},${l.level.toFixed(3)},${l.color.map((c) => c.toFixed(3)).join("/")}`).join(";") +
       "|" +
@@ -1202,13 +1205,15 @@ export class FloorplanViewer {
       let changed = false;
       for (const [id, cur] of fv.openings) {
         const target = this.openingTargets.get(id) ?? CLOSED;
-        const next = { ...cur };
+        const next = { ...cur, open2: cur.open2 ?? 0 };
         let busy = false;
-        for (const key of ["open", "tilt"] as const) {
-          const d = target[key] - cur[key];
-          if (Math.abs(d) < 0.003) next[key] = target[key];
+        for (const key of ["open", "open2", "tilt"] as const) {
+          const to = target[key] ?? 0;
+          const from = cur[key] ?? 0;
+          const d = to - from;
+          if (Math.abs(d) < 0.003) next[key] = to;
           else {
-            next[key] = cur[key] + d * k;
+            next[key] = from + d * k;
             busy = true;
           }
         }
@@ -1221,7 +1226,7 @@ export class FloorplanViewer {
             busy = true;
           }
         }
-        if (next.open !== cur.open || next.tilt !== cur.tilt || next.cover !== cur.cover) {
+        if (next.open !== cur.open || next.open2 !== (cur.open2 ?? 0) || next.tilt !== cur.tilt || next.cover !== cur.cover) {
           fv.openings.set(id, next);
           changed = true;
         }

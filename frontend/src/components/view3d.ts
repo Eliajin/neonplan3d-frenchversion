@@ -66,6 +66,7 @@ export class Fp3dView3d extends LitElement {
     _stats: { state: true },
     _error: { state: true },
     _energy: { state: true },
+    _flows: { state: true },
   };
 
   declare hass: HomeAssistant;
@@ -87,6 +88,8 @@ export class Fp3dView3d extends LitElement {
   private declare _stats: ViewerStats | null;
   private declare _error: string | null;
   private declare _energy: EnergySummary | null;
+  /** Energy cables from the meter to the consumers (off unless switched on; kept per browser). */
+  private declare _flows: boolean;
 
   private viewer: FloorplanViewer | null = null;
   private starting = false;
@@ -120,6 +123,11 @@ export class Fp3dView3d extends LitElement {
     this._stats = null;
     this._error = null;
     this._energy = null;
+    try {
+      this._flows = localStorage.getItem("floorplan_3d.flows") === "1";
+    } catch {
+      this._flows = false;
+    }
   }
 
   connectedCallback(): void {
@@ -206,7 +214,7 @@ export class Fp3dView3d extends LitElement {
       this.openingLinks = openingEntities(hass, b.floors);
       this.furnitureLinks = furnitureEntities(hass, b.floors);
       this.linkedRegistry = hass.entities;
-      const links = [...this.openingLinks.values()].flatMap((e) => [e.cover, e.contact, e.tilt]);
+      const links = [...this.openingLinks.values()].flatMap((e) => [e.cover, e.contact, e.tilt, e.contact2 ?? null]);
       const placed = placedEntities(b);
       const power = placed.map((id) => powerSensorFor(hass, id));
       const e = b.energy;
@@ -245,7 +253,9 @@ export class Fp3dView3d extends LitElement {
     v.setOpeningStates(new Map([...this.openingLinks!].map(([id, e]) => [id, openingState(hass, e, types.get(id))])));
     const batteryPlaced = b.energy.battery ? b.floors.flatMap((f) => f.placements.filter((p) => p.entity_id === b.energy.battery).map((p) => ({ floorId: f.id, x: p.x, z: p.z })))[0] : null;
     v.setFlows(
-      flowSegments({ building: b, consumers, summary, battery: batteryPlaced ?? null }).map((f) => ({
+      !this._flows
+        ? []
+        : flowSegments({ building: b, consumers, summary, battery: batteryPlaced ?? null }).map((f) => ({
         floorId: f.floorId,
         a: f.a,
         b: f.b,
@@ -430,6 +440,16 @@ export class Fp3dView3d extends LitElement {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
+  private toggleFlows(): void {
+    this._flows = !this._flows;
+    try {
+      localStorage.setItem("floorplan_3d.flows", this._flows ? "1" : "0");
+    } catch {
+      // private mode: the choice lasts for this page only
+    }
+    this.syncDevices(true);
+  }
+
   private renderEnergy() {
     const e = this._energy;
     if (!e || this.roomId) return nothing;
@@ -448,6 +468,9 @@ export class Fp3dView3d extends LitElement {
     if (e.tariff) items.push({ cls: "tariff", label: t("energy_tariff"), value: `${formatNumber(this.hass, e.tariff.value, 3)} ${e.tariff.unit}`.trim() });
     return html`<div class="fp3d-energy" aria-live="off">
       ${items.map((i) => html`<div class="fp3d-energy-item fp3d-energy-${i.cls}"><span>${i.label}</span><b>${i.value}</b></div>`)}
+      <button class="fp3d-energy-item fp3d-flow-toggle" aria-pressed=${this._flows} title=${`${t("flows_hint")} (${t(this._flows ? "flow_on" : "flow_off")})`} aria-label=${t("flows")} @click=${() => this.toggleFlows()}>
+        <span>${t("flows")}</span><b>⚡</b>
+      </button>
     </div>`;
   }
 
@@ -693,6 +716,29 @@ export class Fp3dView3d extends LitElement {
       }
       .fp3d-energy-battery {
         border-left-color: #59ff8c;
+      }
+      .fp3d-flow-toggle {
+        pointer-events: auto;
+        cursor: pointer;
+        border: 0;
+        border-left: 3px solid var(--fp3d-line);
+        color: inherit;
+        text-align: left;
+        font: inherit;
+      }
+      .fp3d-flow-toggle[aria-pressed="true"] {
+        border-left-color: var(--fp3d-accent);
+      }
+      .fp3d-flow-toggle span {
+        display: none;
+      }
+      .fp3d-flow-toggle b {
+        opacity: 0.4;
+        filter: grayscale(1);
+      }
+      .fp3d-flow-toggle[aria-pressed="true"] b {
+        opacity: 1;
+        filter: none;
       }
       .fp3d-energy-tariff {
         border-left-color: #b98cff;

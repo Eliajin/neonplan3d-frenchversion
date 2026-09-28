@@ -28,8 +28,14 @@ export interface Opening {
   /** Height of the bottom above the floor; 0 for doors, garage doors and terrace doors. */
   sill: number;
   height: number;
-  /** Window sash hinge as seen from the room. */
+  /** Hinge as seen from the room; with two leaves, the side of the main leaf. */
   hinge: "left" | "right";
+  /** One leaf, or two (double door, French window) opening from the middle. */
+  leaves: 1 | 2;
+  /** Doors swing into their room ("in") or to the other side ("out"). */
+  swing: "in" | "out";
+  /** Contact of the second leaf (null = none). */
+  contact2: string | null;
   cover: EntityRef;
   contact: EntityRef;
   tilt: EntityRef;
@@ -474,6 +480,28 @@ export const OPENING_DEFAULTS = {
   garage: { width: 2.5, sill: 0, height: 2.1 },
 } as const;
 
+/** Kinds of openings offered when placing one; a terrace door is a window down to the floor. */
+export const OPENING_PRESETS = {
+  door: { type: "door", leaves: 1, width: 0.9, sill: 0, height: 2.05 },
+  door_double: { type: "door", leaves: 2, width: 1.6, sill: 0, height: 2.05 },
+  window: { type: "window", leaves: 1, width: 1.2, sill: 0.9, height: 1.3 },
+  window_double: { type: "window", leaves: 2, width: 1.6, sill: 0.9, height: 1.3 },
+  terrace: { type: "window", leaves: 1, width: 1.0, sill: 0, height: 2.1 },
+  terrace_double: { type: "window", leaves: 2, width: 1.8, sill: 0, height: 2.1 },
+  garage: { type: "garage", leaves: 1, width: 2.5, sill: 0, height: 2.1 },
+} as const satisfies Record<string, { type: OpeningType; leaves: 1 | 2; width: number; sill: number; height: number }>;
+
+export type OpeningPreset = keyof typeof OPENING_PRESETS;
+
+/** The preset an opening matches (by type, leaves and whether it reaches the floor). */
+export function openingPreset(o: Pick<Opening, "type" | "leaves" | "sill">): OpeningPreset {
+  if (o.type === "garage") return "garage";
+  const two = o.leaves === 2;
+  if (o.type === "door") return two ? "door_double" : "door";
+  if (o.sill < 0.1) return two ? "terrace_double" : "terrace";
+  return two ? "window_double" : "window";
+}
+
 /** Fill fields added in later versions so older saved buildings keep working. */
 export function normalizeBuilding(b: Building): Building {
   b.energy = { ...DEFAULT_ENERGY, ...(b.energy ?? {}) };
@@ -495,7 +523,16 @@ export function normalizeBuilding(b: Building): Building {
       }
       f.placements = f.placements.filter((p) => !p.entity_id.startsWith("light."));
     }
-    f.openings = f.openings.map((o) => ({ ...o, hinge: o.hinge ?? "left", cover: o.cover ?? null, contact: o.contact ?? null, tilt: o.tilt ?? null }));
+    f.openings = f.openings.map((o) => ({
+      ...o,
+      hinge: o.hinge ?? "left",
+      leaves: o.leaves ?? 1,
+      swing: o.swing ?? "in",
+      cover: o.cover ?? null,
+      contact: o.contact ?? null,
+      contact2: o.contact2 ?? null,
+      tilt: o.tilt ?? null,
+    }));
   }
   return b;
 }

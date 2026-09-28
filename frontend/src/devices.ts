@@ -260,6 +260,8 @@ export interface OpeningEntities {
   cover: string | null;
   contact: string | null;
   tilt: string | null;
+  /** Contact of the second leaf of a double door or window. */
+  contact2?: string | null;
 }
 
 /** Pairs openings with entities in order; with `shared`, a single entity serves all openings. */
@@ -303,6 +305,7 @@ export function openingEntities(hass: HomeAssistant, floors: readonly Floor[]): 
           cover: pick(o.cover, autoC?.get(o.id)),
           contact: pick(o.contact, autoK.get(o.id)),
           tilt: o.tilt === "none" ? null : o.tilt,
+          contact2: o.leaves === 2 && o.contact2 && o.contact2 !== "none" ? o.contact2 : null,
         });
       }
     }
@@ -317,10 +320,16 @@ export const DOOR_DEFAULT_OPEN = 0.5;
  * Visual state of an opening from its entities. Windows: sash open or tilted, blind closed fraction.
  * Doors: leaf open (contact) or half open. Garage doors: closed fraction from the cover or contact.
  */
-export function openingState(hass: HomeAssistant, e: OpeningEntities, type: Opening["type"] = "window"): { open: number; tilt: number; cover: number | null } {
-  const on = (id: string | null) => !!id && hass.states[id]?.state === "on";
-  const known = (id: string | null) => !!id && !!hass.states[id] && !isUnavailable(hass.states[id]);
-  if (type === "door") return { open: known(e.contact) ? (on(e.contact) ? 1 : 0) : DOOR_DEFAULT_OPEN, tilt: 0, cover: null };
+export function openingState(
+  hass: HomeAssistant,
+  e: OpeningEntities,
+  type: Opening["type"] = "window",
+): { open: number; open2: number; tilt: number; cover: number | null } {
+  const on = (id: string | null | undefined) => !!id && hass.states[id]?.state === "on";
+  const known = (id: string | null | undefined) => !!id && !!hass.states[id] && !isUnavailable(hass.states[id]);
+  // the second leaf of a double door or window stays closed without a sensor
+  const open2 = on(e.contact2) ? 1 : 0;
+  if (type === "door") return { open: known(e.contact) ? (on(e.contact) ? 1 : 0) : DOOR_DEFAULT_OPEN, open2, tilt: 0, cover: null };
   const tilted = on(e.tilt);
   const open = on(e.contact) && !tilted ? 1 : 0;
   let cover: number | null = null;
@@ -333,9 +342,9 @@ export function openingState(hass: HomeAssistant, e: OpeningEntities, type: Open
   if (type === "garage") {
     // a garage door without a cover shows its contact: open or closed
     if (cover === null) cover = known(e.contact) ? (on(e.contact) ? 0 : 1) : 1;
-    return { open: 0, tilt: 0, cover };
+    return { open: 0, open2: 0, tilt: 0, cover };
   }
-  return { open, tilt: tilted ? 1 : 0, cover };
+  return { open, open2, tilt: tilted ? 1 : 0, cover };
 }
 
 // ------------------------------------------------------------------ grouping by device

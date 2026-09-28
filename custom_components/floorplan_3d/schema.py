@@ -45,6 +45,11 @@ OPENING_SCHEMA = vol.Schema(
         # window sash hinge as seen from the room; entities: None = assign automatically by area,
         # "none" = no entity
         vol.Optional("hinge", default="left"): vol.In(["left", "right"]),
+        # double doors and windows: two leaves, the second with a contact of its own
+        vol.Optional("leaves", default=1): vol.In([1, 2]),
+        # doors: swing into the room ("in") or to the other side ("out")
+        vol.Optional("swing", default="in"): vol.In(["in", "out"]),
+        vol.Optional("contact2", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Optional("cover", default=None): _ENTITY_REF,
         vol.Optional("contact", default=None): _ENTITY_REF,
         vol.Optional("tilt", default=None): _ENTITY_REF,

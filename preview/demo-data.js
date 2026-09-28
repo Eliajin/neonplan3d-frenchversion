@@ -163,6 +163,7 @@ const DEVICES = [
   entity("binary_sensor.haustuer", "flur", "off", { friendly_name: "Haustür", device_class: "door" }),
   entity("cover.garagentor", "garage", "open", { friendly_name: "Garagentor", device_class: "garage", current_position: 60, supported_features: 15 }),
   entity("binary_sensor.wohnzimmer_terrasse", "wohnzimmer", "on", { friendly_name: "Terrassentür", device_class: "opening" }),
+  entity("binary_sensor.wohnzimmer_terrasse_2", "wohnzimmer", "off", { friendly_name: "Terrassentür Standflügel", device_class: "opening" }),
   entity("binary_sensor.schlafzimmer_fenster", "schlafzimmer", "on", { friendly_name: "Schlafzimmer Fenster", device_class: "window" }),
   entity("binary_sensor.schlafzimmer_kipp", "schlafzimmer", "on", { friendly_name: "Schlafzimmer Fenster gekippt", device_class: "window" }),
   entity("scene.wohnzimmer_film", "wohnzimmer", "2024-01-01T00:00:00", { friendly_name: "Wohnzimmer Film" }),
@@ -271,7 +272,7 @@ const hole = (type, room_id, edge, offset, width, extra = {}) => ({
 const terrace = { sill: 0, height: 2.15 };
 DEMO_BUILDING.floors[0].openings = [
   hole("window", "wohnen", 0, 1.6, 1.4, { contact: "none" }),
-  hole("window", "wohnen", 0, 4.3, 1.8, { ...terrace, contact: "binary_sensor.wohnzimmer_terrasse", hinge: "right" }),
+  hole("window", "wohnen", 0, 4.3, 1.8, { ...terrace, leaves: 2, contact: "binary_sensor.wohnzimmer_terrasse", contact2: "binary_sensor.wohnzimmer_terrasse_2", hinge: "right" }),
   hole("window", "wohnen", 3, 2.3, 1.2, { contact: "none" }),
   hole("door", "wohnen", 1, 3.4, 0.9),
   hole("door", "wohnen", 2, 4.2, 0.9),
@@ -283,7 +284,7 @@ DEMO_BUILDING.floors[0].openings = [
   hole("window", "schlafen", 3, 1.7, 1.0, { contact: "none" }),
   hole("window", "bad", 2, 1.2, 0.8, { sill: 1.3, height: 0.8 }),
   hole("door", "bad", 1, 1.2, 0.8),
-  hole("door", "flur", 4, 0.8, 1.0),
+  hole("door", "flur", 4, 0.8, 1.0, { swing: "out" }),
 ];
 DEMO_BUILDING.floors[1].openings = [
   hole("window", "kind", 0, 2.2, 1.2),

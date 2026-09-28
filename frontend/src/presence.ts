@@ -94,7 +94,7 @@ export function floorCounts(hass: HomeAssistant, building: Building, links: Map<
       if (!l) return false;
       // a garage door counts as open while its cover is not (almost) down
       if (o.type === "garage") return (openingState(hass, l, "garage").cover ?? 1) < 0.95;
-      return on(l.contact) || on(l.tilt);
+      return on(l.contact) || on(l.tilt) || on(l.contact2 ?? null);
     }).length;
     out.set(floor.id, {
       rooms: floor.rooms.length,

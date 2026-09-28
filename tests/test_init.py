@@ -106,8 +106,30 @@ async def test_opening_fields_get_defaults(hass: HomeAssistant, hass_ws_client) 
     assert (await client.receive_json())["success"]
     await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
     got = (await client.receive_json())["result"]["building"]["floors"][0]["openings"]
-    assert got[0] == {**opening, "hinge": "left", "cover": None, "contact": None, "tilt": None}
+    assert got[0] == {
+        **opening,
+        "hinge": "left",
+        "leaves": 1,
+        "swing": "in",
+        "cover": None,
+        "contact": None,
+        "contact2": None,
+        "tilt": None,
+    }
     assert got[1]["hinge"] == "right" and got[1]["cover"] == "cover.x" and got[1]["contact"] == "none"
+
+    double = {**opening, "id": "o3", "sill": 0, "leaves": 2, "contact2": "binary_sensor.b"}
+    building["floors"][0]["openings"] = [double, {**opening, "id": "o4", "type": "door", "swing": "out"}]
+    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": building})
+    assert (await client.receive_json())["success"]
+    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    got = (await client.receive_json())["result"]["building"]["floors"][0]["openings"]
+    assert got[0]["leaves"] == 2 and got[0]["contact2"] == "binary_sensor.b"
+    assert got[1]["swing"] == "out"
+
+    building["floors"][0]["openings"] = [{**opening, "leaves": 3}]
+    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": building})
+    assert not (await client.receive_json())["success"]
 
 
 async def test_furniture_links_default_to_automatic(hass: HomeAssistant, hass_ws_client) -> None:

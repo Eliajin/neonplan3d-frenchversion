@@ -10,13 +10,15 @@ import { ALWAYS, GeoBuffer, shade } from "./geo.ts";
 export interface OpeningState {
   /** Window sash or door leaf: 0 = closed, 1 = swung open. */
   open: number;
+  /** Second leaf of a double door or window. */
+  open2?: number;
   /** 0 = closed, 1 = tilted. */
   tilt: number;
   /** Closed fraction of the blind or garage door (0 = up, 1 = down); null = no blind. */
   cover: number | null;
 }
 
-export const CLOSED: OpeningState = { open: 0, tilt: 0, cover: null };
+export const CLOSED: OpeningState = { open: 0, open2: 0, tilt: 0, cover: null };
 
 const FRAME = 0x1f3052;
 const FRAME_TOP = 0x2a4270;
@@ -127,23 +129,32 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
       splitBox(frames, tf, 0.02, W - 0.02, n0, n1, T - 0.02, T + 0.045, frameC, frameTop, cut, bucket);
     }
     if (info.opening.type === "door") {
-      // leaf flush with the room side, swinging into the room around the hinge
-      const open = Math.min(1, Math.max(0, st.open));
-      const theta = open * DOOR_ANGLE;
-      const lw = W - 0.04;
-      const leafTf: Tf = (u, n, y) => {
-        const along = u * Math.cos(theta) - n * Math.sin(theta);
-        const nn = info.faceRoom + n * Math.cos(theta) + u * Math.sin(theta);
-        return tf(info.hingeAtStart ? 0.02 + along : W - 0.02 - along, nn, y);
-      };
-      const warm = open > 0.9;
-      const leafC = warm ? shade(OPEN_WARM, 0.7) : new Color(LEAF);
-      const leafTop = warm ? shade(OPEN_WARM, 0.9) : new Color(LEAF_TOP);
-      splitBox(frames, leafTf, 0, lw, -0.04, 0, 0.01, T - 0.01, leafC, leafTop, cut, bucket);
-      // handle on both sides
-      const hy = Math.min(1.05, T * 0.5);
-      splitBox(frames, leafTf, lw - 0.16, lw - 0.05, 0.004, 0.05, hy - 0.012, hy + 0.012, new Color(0x5b7cff), new Color(0x8aa2ff), cut, bucket);
-      splitBox(frames, leafTf, lw - 0.16, lw - 0.05, -0.09, -0.044, hy - 0.012, hy + 0.012, new Color(0x5b7cff), new Color(0x8aa2ff), cut, bucket);
+      // leaves flush with the face they swing towards (the room, or the other side), turning around
+      // their hinges; a double door has a leaf at each end meeting in the middle
+      const s = info.opening.swing === "out" ? -1 : 1;
+      const face = s > 0 ? info.faceRoom : -info.faceOut;
+      const two = info.opening.leaves === 2;
+      const lw = two ? (W - 0.04) / 2 - 0.004 : W - 0.04;
+      const leaves: [boolean, number][] = [[info.hingeAtStart, st.open]];
+      if (two) leaves.push([!info.hingeAtStart, st.open2 ?? 0]);
+      for (const [atStart, openness] of leaves) {
+        const theta = Math.min(1, Math.max(0, openness)) * DOOR_ANGLE;
+        const leafTf: Tf = (u, n, y) => {
+          const along = u * Math.cos(theta) - n * Math.sin(theta);
+          const nn = face + s * (n * Math.cos(theta) + u * Math.sin(theta));
+          return tf(atStart ? 0.02 + along : W - 0.02 - along, nn, y);
+        };
+        // an open leaf leaves its wall: keep it visible when the wall folds away
+        const leafBucket = theta > 0.05 ? ALWAYS : bucket;
+        const warm = openness > 0.9;
+        const leafC = warm ? shade(OPEN_WARM, 0.7) : new Color(LEAF);
+        const leafTop = warm ? shade(OPEN_WARM, 0.9) : new Color(LEAF_TOP);
+        splitBox(frames, leafTf, 0, lw, -0.04, 0, 0.01, T - 0.01, leafC, leafTop, cut, leafBucket);
+        // handle on both sides
+        const hy = Math.min(1.05, T * 0.5);
+        splitBox(frames, leafTf, lw - 0.16, lw - 0.05, 0.004, 0.05, hy - 0.012, hy + 0.012, new Color(0x5b7cff), new Color(0x8aa2ff), cut, leafBucket);
+        splitBox(frames, leafTf, lw - 0.16, lw - 0.05, -0.09, -0.044, hy - 0.012, hy + 0.012, new Color(0x5b7cff), new Color(0x8aa2ff), cut, leafBucket);
+      }
     } else if (info.opening.type === "garage") {
       // sectional door: the closed part hangs in the opening, the open part lies under the ceiling
       const closed = Math.min(1, Math.max(0, st.cover ?? 1));
@@ -166,37 +177,47 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
         splitBox(frames, tf, -0.04, W + 0.04, mid + fd, info.faceRoom + 0.07, S - 0.03, S, new Color(SILL), frameTop, cut, bucket);
         if (info.exterior) splitBox(frames, tf, -0.03, W + 0.03, -info.faceOut - 0.06, mid - fd, S - 0.04, S - 0.02, new Color(SILL), frameTop, cut, bucket);
       }
-      // sash: rotates into the room around the hinge, or tilts around its bottom edge
-      const alert = st.open > 0.02 || st.tilt > 0.02;
-      const sashC = alert ? shade(OPEN_WARM, 0.75) : new Color(SASH);
-      const sashTop = alert ? shade(OPEN_WARM, 0.95) : frameTop;
+      // sashes: each rotates into the room around its hinge, or tilts around its bottom edge; a
+      // double window (or French door) has two sashes meeting in the middle, only the main one tilts
       const sw = 0.055;
-      const sx0 = fw;
-      const sx1 = W - fw;
       const sy0 = S + (S > 0.05 ? fw : 0.03);
       const sy1 = T - fw;
-      const sashW = sx1 - sx0;
       const n0 = mid + fd;
       const n1 = mid + fd + 0.06;
-      const theta = st.open * OPEN_ANGLE;
-      const phi = st.tilt * TILT_ANGLE;
-      // sash coordinates: u from the hinge across the sash, n, y
-      const sashTf: Tf = (u, n, y) => {
-        const dy = y - sy0;
-        let nn = n + dy * Math.sin(phi);
-        const yy = sy0 + dy * Math.cos(phi);
-        const along = u * Math.cos(theta) - (nn - n0) * Math.sin(theta);
-        nn = n0 + (nn - n0) * Math.cos(theta) + u * Math.sin(theta);
-        const x = info.hingeAtStart ? sx0 + along : sx1 - along;
-        return tf(x, nn, yy);
-      };
-      // a sash that has swung into the room belongs to no wall: keep it visible
-      const sashBucket = theta > 0.05 ? ALWAYS : bucket;
-      splitBox(frames, sashTf, 0, sw, n0, n1, sy0, sy1, sashC, sashTop, cut, sashBucket);
-      splitBox(frames, sashTf, sashW - sw, sashW, n0, n1, sy0, sy1, sashC, sashTop, cut, sashBucket);
-      splitBox(frames, sashTf, sw, sashW - sw, n0, n1, sy0, sy0 + sw, sashC, sashTop, cut, sashBucket);
-      splitBox(frames, sashTf, sw, sashW - sw, n0, n1, sy1 - sw, sy1, sashC, sashTop, cut, sashBucket);
-      panel(glass, sashTf, sw, sashW - sw, (n0 + n1) / 2, sy0 + sw, sy1 - sw, alert ? shade(OPEN_WARM, 0.16) : shade(0x37e0ff, 0.08), cut, sashBucket);
+      const two = info.opening.leaves === 2;
+      const sashes: { atStart: boolean; x0: number; x1: number; open: number; tilt: number }[] = two
+        ? [
+            { atStart: info.hingeAtStart, x0: info.hingeAtStart ? fw : W / 2, x1: info.hingeAtStart ? W / 2 : W - fw, open: st.open, tilt: st.tilt },
+            { atStart: !info.hingeAtStart, x0: info.hingeAtStart ? W / 2 : fw, x1: info.hingeAtStart ? W - fw : W / 2, open: st.open2 ?? 0, tilt: 0 },
+          ]
+        : [{ atStart: info.hingeAtStart, x0: fw, x1: W - fw, open: st.open, tilt: st.tilt }];
+      for (const sash of sashes) {
+        const alert = sash.open > 0.02 || sash.tilt > 0.02;
+        const sashC = alert ? shade(OPEN_WARM, 0.75) : new Color(SASH);
+        const sashTop = alert ? shade(OPEN_WARM, 0.95) : frameTop;
+        const sx0 = sash.x0;
+        const sx1 = sash.x1;
+        const sashW = sx1 - sx0;
+        const theta = sash.open * OPEN_ANGLE;
+        const phi = sash.tilt * TILT_ANGLE;
+        // sash coordinates: u from the hinge across the sash, n, y
+        const sashTf: Tf = (u, n, y) => {
+          const dy = y - sy0;
+          let nn = n + dy * Math.sin(phi);
+          const yy = sy0 + dy * Math.cos(phi);
+          const along = u * Math.cos(theta) - (nn - n0) * Math.sin(theta);
+          nn = n0 + (nn - n0) * Math.cos(theta) + u * Math.sin(theta);
+          const x = sash.atStart ? sx0 + along : sx1 - along;
+          return tf(x, nn, yy);
+        };
+        // a sash that has swung into the room belongs to no wall: keep it visible
+        const sashBucket = theta > 0.05 ? ALWAYS : bucket;
+        splitBox(frames, sashTf, 0, sw, n0, n1, sy0, sy1, sashC, sashTop, cut, sashBucket);
+        splitBox(frames, sashTf, sashW - sw, sashW, n0, n1, sy0, sy1, sashC, sashTop, cut, sashBucket);
+        splitBox(frames, sashTf, sw, sashW - sw, n0, n1, sy0, sy0 + sw, sashC, sashTop, cut, sashBucket);
+        splitBox(frames, sashTf, sw, sashW - sw, n0, n1, sy1 - sw, sy1, sashC, sashTop, cut, sashBucket);
+        panel(glass, sashTf, sw, sashW - sw, (n0 + n1) / 2, sy0 + sw, sy1 - sw, alert ? shade(OPEN_WARM, 0.16) : shade(0x37e0ff, 0.08), cut, sashBucket);
+      }
     }
     // blind on the outside: box above the opening, slats down to the closed fraction
     if (st.cover !== null) {

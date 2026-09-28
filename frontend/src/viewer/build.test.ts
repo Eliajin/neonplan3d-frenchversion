@@ -17,7 +17,7 @@ function floorWith(rooms: Room[], openings: Opening[] = [], furniture: Furniture
 }
 
 function opening(type: "door" | "window", room_id: string, edge: number, offset: number, width: number): Opening {
-  return { id: `${type}${edge}`, room_id, edge, offset, width, type, sill: type === "door" ? 0 : 0.9, height: type === "door" ? 2.05 : 1.3, hinge: "left", cover: null, contact: null, tilt: null };
+  return { id: `${type}${edge}`, room_id, edge, offset, width, type, sill: type === "door" ? 0 : 0.9, height: type === "door" ? 2.05 : 1.3, hinge: "left", leaves: 1, swing: "in", cover: null, contact: null, contact2: null, tilt: null };
 }
 
 const near = (a: number, b: number, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);
