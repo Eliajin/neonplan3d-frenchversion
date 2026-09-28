@@ -104,14 +104,34 @@ export class Fp3dQuickMenu extends LitElement {
 
   private renderCover(st: HassEntity) {
     const pos = typeof st.attributes.current_position === "number" ? (st.attributes.current_position as number) : null;
-    return html`<div class="qm-ring qm-ring-cover">
-        <div class="qm-at" style="left:50%;top:14%"><button class="qm-round" aria-label=${this.t("cover_open")} @click=${() => this.call("cover", "open_cover")}>▲</button></div>
-        <button class="qm-power" aria-label=${this.t("cover_stop")} @click=${() => this.call("cover", "stop_cover")}>
-          <b>${pos !== null ? `${pos} %` : stateText(this.hass, st)}</b><small>■ ${this.t("cover_stop")}</small>
+    const moving = st.state === "opening" || st.state === "closing";
+    const setPos = coverPositionable(st);
+    // like the colour ring of lights: open and close, positions in between and stop around the blind
+    const slot = (label: string, aria: string, action: () => void, active = false) =>
+      html`<button class="qm-swatch qm-slot ${active ? "qm-slot-on" : ""}" aria-label=${aria} @click=${action}>${label}</button>`;
+    const at = (p: number) => pos !== null && Math.abs(pos - p) < 3;
+    const ring = [
+      slot("▲", this.t("cover_open"), () => this.call("cover", "open_cover"), at(100)),
+      ...(setPos ? [75, 50].map((p) => slot(`${p}`, `${p} %`, () => this.call("cover", "set_cover_position", { position: p }), at(p))) : []),
+      slot("▼", this.t("cover_close"), () => this.call("cover", "close_cover"), at(0)),
+      ...(setPos ? [25].map((p) => slot(`${p}`, `${p} %`, () => this.call("cover", "set_cover_position", { position: p }), at(p))) : []),
+      slot("■", this.t("cover_stop"), () => this.call("cover", "stop_cover"), moving),
+    ];
+    // the centre shows the blind: its closed part fills from the top
+    const closed = pos === null ? (st.state === "closed" ? 100 : 0) : 100 - pos;
+    return html`<div class="qm-ring">
+        ${this.ring(ring)}
+        <button
+          class="qm-power qm-blind ${closed < 100 ? "qm-on" : ""}"
+          style="--closed:${closed}%"
+          aria-label=${moving ? this.t("cover_stop") : closed > 50 ? this.t("cover_open") : this.t("cover_close")}
+          @click=${() => this.call("cover", moving ? "stop_cover" : closed > 50 ? "open_cover" : "close_cover")}
+        >
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4h16M5 4v15M19 4v15M7 8h10M7 12h10M7 16h10" /></svg>
+          <b>${pos !== null ? `${pos} %` : stateText(this.hass, st)}</b>
         </button>
-        <div class="qm-at" style="left:50%;top:86%"><button class="qm-round" aria-label=${this.t("cover_close")} @click=${() => this.call("cover", "close_cover")}>▼</button></div>
       </div>
-      ${coverPositionable(st)
+      ${setPos
         ? html`<input
             class="qm-slider"
             type="range"
@@ -237,6 +257,30 @@ export class Fp3dQuickMenu extends LitElement {
       }
       .qm-on b {
         color: #1a1204;
+      }
+      .qm-slot {
+        display: grid;
+        place-items: center;
+        border-color: var(--fp3d-line);
+        background: var(--fp3d-bg2, #16223a);
+        color: var(--fp3d-text);
+        font: 700 12px var(--fp3d-title-font);
+      }
+      .qm-slot-on {
+        background: var(--fp3d-accent);
+        color: var(--fp3d-accent-text);
+        border-color: transparent;
+        box-shadow: 0 0 14px rgba(55, 224, 255, 0.45);
+      }
+      /* the blind: its closed part covers the circle from the top, the open part glows like daylight */
+      .qm-blind.qm-on {
+        background: linear-gradient(to bottom, #1e2c4c var(--closed), #9fd9ff var(--closed));
+        box-shadow: 0 0 22px rgba(120, 200, 255, 0.4);
+        color: #06101f;
+      }
+      .qm-blind b {
+        text-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+        color: #fff;
       }
       .qm-round {
         width: 46px;

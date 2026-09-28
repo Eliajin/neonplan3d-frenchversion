@@ -2084,7 +2084,7 @@ export class Fp3dEditor extends LitElement {
   private renderSpotForm(room: Room) {
     const f = this._spots!;
     const count = spotGrid(room, f.rows, f.cols).length;
-    const lights = this.entityOptions((id) => id.startsWith("light."));
+    const lights = this.entityOptions((id) => /^(light|switch|input_boolean)\./.test(id));
     const set = (patch: Partial<NonNullable<Fp3dEditor["_spots"]>>) => (this._spots = { ...f, ...patch });
     return html`<div class="fp3d-form fp3d-spot-form">
       <label class="fp3d-field fp3d-wide"
@@ -2350,7 +2350,8 @@ export class Fp3dEditor extends LitElement {
     const lamp = isLamp(f.type);
     const entities = this.entityOptions((id) =>
       lamp
-        ? id.startsWith("light.")
+        ? // a lamp can follow a light or a plain switch (e.g. a relay that switches the ceiling light)
+          /^(light|switch|input_boolean)\./.test(id)
         : media
           ? id.startsWith("media_player.")
           : f.type === "radiator"
