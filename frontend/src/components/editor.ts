@@ -19,6 +19,7 @@ import {
   FURNITURE_SIZE,
   FURNITURE_TYPES,
   isLamp,
+  LAMP_MODEL,
   isAxisRect,
   OUTDOOR_TYPES,
   spotGrid,
@@ -52,6 +53,7 @@ import {
 import { controls, tokens } from "../styles.ts";
 import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
 import { importPack, removePack } from "../api.ts";
+import { load3d } from "../load3d.ts";
 import { furnitureName } from "../furniture-names.ts";
 import { furnitureSize, isElectric, packItemName, packType, setPacks, type FurniturePack } from "../packs.ts";
 
@@ -90,6 +92,7 @@ export class Fp3dEditor extends LitElement {
     narrow: { type: Boolean },
     packs: { attribute: false },
     _packMsg: { state: true },
+    _preview: { state: true },
     _doc: { state: true },
     _floorId: { state: true },
     _roomId: { state: true },
@@ -126,6 +129,8 @@ export class Fp3dEditor extends LitElement {
   declare packs: FurniturePack[] | undefined;
   /** Result of the last pack import. */
   private declare _packMsg: { ok: boolean; text: string } | null;
+  /** Picture of the furniture under the pointer in the library. */
+  private declare _preview: { type: string; url: string | null; left: number; top: number } | null;
   private declare _doc: Building;
   private declare _floorId: string | null;
   private declare _roomId: string | null;
@@ -189,6 +194,7 @@ export class Fp3dEditor extends LitElement {
     this._floorMenu = false;
     this._openingPreset = "door";
     this._packMsg = null;
+    this._preview = null;
     this._measureLen = 3;
     this._packages = false;
     this._rectSize = [4, 3];
@@ -1416,6 +1422,7 @@ export class Fp3dEditor extends LitElement {
     const floor = this.floor;
     const walls = floor ? generateWalls(floor.rooms, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior }) : null;
     return html`
+      ${this.renderPreview()}
       <div class="fp3d-editor ${this.narrow ? "fp3d-narrow" : ""}">
         <div class="fp3d-main">
           <div class="fp3d-toolbar">
@@ -2368,19 +2375,55 @@ export class Fp3dEditor extends LitElement {
       ${Object.entries(FURNITURE_GROUPS).map(
         ([group, types]) => html`<h4 class="fp3d-lib-head">${this.t(`furn_group_${group}` as I18nKey)}</h4>
           <div class="fp3d-library">
-            ${types.map((t) => html`<button class="fp3d-btn" @click=${() => this.addFurniture(t)}>${this.t(`furn_${t}` as I18nKey)}</button>`)}
+            ${types.map((t) => this.libraryButton(t, this.t(`furn_${t}` as I18nKey)))}
           </div>`,
       )}
       ${(this.packs ?? []).map(
         (pack) => html`<h4 class="fp3d-lib-head">${pack.name}</h4>
           <div class="fp3d-library">
-            ${pack.items.map(
-              (it) => html`<button class="fp3d-btn" @click=${() => this.addFurniture(packType(pack.id, it.id))}>${packItemName(it, this.hass?.language ?? "en")}</button>`,
-            )}
+            ${pack.items.map((it) => this.libraryButton(packType(pack.id, it.id), packItemName(it, this.hass?.language ?? "en")))}
           </div>`,
       )}
     </section>
     ${this.renderPacks()}`;
+  }
+
+  private libraryButton(type: string, label: string) {
+    const show = (e: Event) => void this.showPreview(type, e.currentTarget as HTMLElement);
+    return html`<button
+      class="fp3d-btn"
+      @click=${() => this.addFurniture(type)}
+      @mouseenter=${show}
+      @focus=${show}
+      @mouseleave=${() => (this._preview = null)}
+      @blur=${() => (this._preview = null)}
+    >
+      ${label}
+    </button>`;
+  }
+
+  /** Picture of an item, drawn by the 3D bundle and shown left of its button. */
+  private async showPreview(type: string, button: HTMLElement): Promise<void> {
+    const r = button.getBoundingClientRect();
+    const place = { left: Math.max(8, r.left - 196), top: Math.max(8, Math.min(window.innerHeight - 200, r.top + r.height / 2 - 95)) };
+    this._preview = { type, url: null, ...place };
+    try {
+      const mod = await load3d();
+      const [w, d, h] = furnitureSize(type);
+      const url = mod.furniturePreview({ type, w, d, h, variant: null, lamp: LAMP_MODEL[type] ?? null }, 180, this.packs ?? []);
+      if (this._preview?.type === type) this._preview = { type, url, ...place };
+    } catch {
+      this._preview = null;
+    }
+  }
+
+  private renderPreview() {
+    const p = this._preview;
+    if (!p) return nothing;
+    return html`<div class="fp3d-preview" style="left:${p.left}px;top:${p.top}px" aria-hidden="true">
+      ${p.url ? html`<img src=${p.url} alt="" />` : html`<span class="fp3d-preview-wait"></span>`}
+      <b>${furnitureName(this.hass, p.type)}</b>
+    </div>`;
   }
 
   private renderPacks() {
@@ -3077,6 +3120,41 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-rotate {
         cursor: grab;
+      }
+      .fp3d-preview {
+        position: fixed;
+        z-index: 20;
+        width: 180px;
+        padding: 8px 8px 10px;
+        border-radius: 16px;
+        background: radial-gradient(circle at 50% 40%, #1d2c4d, #0b1222 75%);
+        box-shadow: var(--fp3d-shadow), 0 0 0 1px var(--fp3d-line);
+        text-align: center;
+        pointer-events: none;
+        animation: fp3d-pop 120ms ease-out;
+      }
+      @keyframes fp3d-pop {
+        from {
+          opacity: 0;
+          transform: translateX(8px);
+        }
+      }
+      .fp3d-preview img,
+      .fp3d-preview-wait {
+        display: block;
+        width: 164px;
+        height: 164px;
+      }
+      .fp3d-preview-wait {
+        margin: 0 auto;
+        border-radius: 12px;
+        background: rgba(127, 127, 127, 0.1);
+      }
+      .fp3d-preview b {
+        display: block;
+        margin-top: 2px;
+        font-size: 13px;
+        color: #e8eeff;
       }
       .fp3d-pack {
         display: flex;

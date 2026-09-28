@@ -94,6 +94,10 @@ const shots = [
   { name: "view-quickmenu", query: "", width: 1280, height: 800, click: "Wohnzimmer", viewScript: "v.onDeviceHold('light.wohnzimmer_decke', 520, 420);" },
   { name: "view-quickmenu-cover", query: "", width: 1280, height: 800, viewScript: "v.onDeviceHold('cover.wohnzimmer', 700, 400);" },
   { name: "view-swipe", query: "", width: 1280, height: 800, viewScript: "v.onDeviceSwipe('light.wohnzimmer_decke', 'start', 0, 600, 420); v.onDeviceSwipe('light.wohnzimmer_decke', 'move', -40, 600, 420);" },
+  { name: "editor-preview-sofa", query: "", width: 1280, height: 800, editor: true, editorState: { _tool: "furniture" }, hover: "Sofa" },
+  { name: "editor-preview-pendant", query: "", width: 1280, height: 800, editor: true, editorState: { _tool: "furniture" }, hover: "Pendelleuchte" },
+  { name: "editor-preview-kitchen", query: "", width: 1280, height: 800, editor: true, editorState: { _tool: "furniture" }, hover: "Küchenzeile" },
+  { name: "editor-preview-pack", query: "", width: 1280, height: 800, editor: true, editorState: { _tool: "furniture" }, hover: "Kamin" },
   { name: "editor-package", query: "", width: 1280, height: 900, editor: true, editorScript: "const f = e._doc.floors[1]; e._floorId = f.id; e.applyPackage(f.rooms.find((r) => r.id === 'gast'), 'bedroom'); e.applyPackage(f.rooms.find((r) => r.id === 'kind'), 'kids');" },
   { name: "view-package", query: "", width: 1280, height: 800, editor: true, editorScript: "const f = e._doc.floors[1]; e.applyPackage(f.rooms.find((r) => r.id === 'gast'), 'bedroom');", then3d: "Obergeschoss" },
   { name: "view-furnish", query: "", width: 1280, height: 800, click: "Erdgeschoss", furnishDrag: { id: "m2", dx: -160, dy: 60 } },
@@ -132,6 +136,25 @@ for (const shot of shots.filter((s) => !only || only.includes(s.name))) {
       find(document)?.click();
     }, text);
     await new Promise((r) => setTimeout(r, 1200));
+  };
+  const hoverText = async (text) => {
+    const at = await page.evaluate((t) => {
+      const find = (root) => {
+        for (const el of root.querySelectorAll("button")) if (el.textContent.trim() === t) return el;
+        for (const el of root.querySelectorAll("*")) if (el.shadowRoot) {
+          const hit = find(el.shadowRoot);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const el = find(document);
+      if (!el) return null;
+      el.scrollIntoView({ block: "center" });
+      const r = el.getBoundingClientRect();
+      return [r.left + r.width / 2, r.top + r.height / 2];
+    }, text);
+    if (at) await page.mouse.move(at[0], at[1]);
+    await new Promise((r) => setTimeout(r, 1500));
   };
   if (shot.editor) await clickText("Editor");
   if (shot.select) await clickText(shot.select);
@@ -199,6 +222,7 @@ for (const shot of shots.filter((s) => !only || only.includes(s.name))) {
     }, shot.editorState);
     await new Promise((r) => setTimeout(r, 300));
   }
+  if (shot.hover) await hoverText(shot.hover);
   if (shot.openDetails) {
     await page.evaluate(() => {
       const editor = document.querySelector("floorplan-3d-panel").shadowRoot.querySelector("fp3d-editor");

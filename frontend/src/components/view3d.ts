@@ -28,29 +28,15 @@ import { coverPositionable, lightAbilities } from "./quick-menu.ts";
 import "./quick-menu.ts";
 import { load3d } from "../load3d.ts";
 import { buildMarkers, openMoreInfo, placedEntities, stateText, toggleEntity } from "../markers.ts";
-import { isLamp, outdoorGround, pointInPolygon, surfaceHeight, type Building, type Furniture } from "../model.ts";
+import { isLamp, LAMP_MODEL, outdoorGround, pointInPolygon, surfaceHeight, type Building, type Furniture } from "../model.ts";
 import { floorCounts, floorInfoText, personsInRooms } from "../presence.ts";
 import { tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
-import type { DeviceMarker, FloorplanViewer, LampModel, Quality, ScreenState, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
+import type { DeviceMarker, FloorplanViewer, Quality, ScreenState, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
 
 /** Which HTML markers are shown: none, only what has no 3D object or shows a value, or all. */
 export type MarkerMode = "none" | "important" | "all";
 
-const LAMP_MODEL: Record<string, LampModel> = {
-  lamp_ceiling: "ceiling",
-  lamp_downlight: "downlight",
-  lamp_spot: "spot",
-  lamp_panel: "panel",
-  lamp_uplight: "uplight",
-  lamp_bollard: "bollard",
-  lamp_garden: "garden",
-  lamp_pendant: "pendant",
-  lamp_floor: "floor",
-  lamp_table: "table",
-  lamp_wall: "wall",
-  led_strip: "strip",
-};
 
 export class Fp3dView3d extends LitElement {
   static properties = {

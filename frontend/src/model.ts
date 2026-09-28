@@ -1,6 +1,8 @@
 // Data model shared by editor, 3D view and backend (see custom_components/floorplan_3d/schema.py).
 // Units are metres; x grows to the right, z grows downwards (as in the 2D editor).
 
+import type { LampModel } from "./viewer/viewer3d.ts";
+
 export type Vec2 = [number, number];
 
 export interface Room {
@@ -627,3 +629,19 @@ export function pointInPolygon(p: Vec2, points: readonly Vec2[]): boolean {
   }
   return inside;
 }
+
+/** 3D model of each lamp type. */
+export const LAMP_MODEL: Record<string, LampModel> = {
+  lamp_ceiling: "ceiling",
+  lamp_downlight: "downlight",
+  lamp_spot: "spot",
+  lamp_panel: "panel",
+  lamp_uplight: "uplight",
+  lamp_bollard: "bollard",
+  lamp_garden: "garden",
+  lamp_pendant: "pendant",
+  lamp_floor: "floor",
+  lamp_table: "table",
+  lamp_wall: "wall",
+  led_strip: "strip",
+};
