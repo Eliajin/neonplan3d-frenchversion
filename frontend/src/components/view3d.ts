@@ -9,6 +9,7 @@ import {
   isActive,
   isUnavailable,
   kindOf,
+  lightGlow,
   openingEntities,
   openingState,
   TOGGLE_KINDS,
@@ -20,11 +21,23 @@ import { energySummary, findConsumers, flowColor, flowSegments, powerSensorFor, 
 import { formatNumber, translate } from "../i18n.ts";
 import { load3d } from "../load3d.ts";
 import { buildMarkers, openMoreInfo, placedEntities, stateText, toggleEntity } from "../markers.ts";
-import { pointInPolygon, type Building, type Furniture } from "../model.ts";
+import { isLamp, pointInPolygon, surfaceHeight, type Building, type Furniture } from "../model.ts";
 import { floorCounts, floorInfoText, personsInRooms } from "../presence.ts";
 import { tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
-import type { DeviceMarker, FloorplanViewer, Quality, ScreenState, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
+import type { DeviceMarker, FloorplanViewer, LampModel, Quality, ScreenState, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
+
+/** Which HTML markers are shown: none, only what has no 3D object or shows a value, or all. */
+export type MarkerMode = "none" | "important" | "all";
+
+const LAMP_MODEL: Record<string, LampModel> = {
+  lamp_ceiling: "ceiling",
+  lamp_pendant: "pendant",
+  lamp_floor: "floor",
+  lamp_table: "table",
+  lamp_wall: "wall",
+  led_strip: "strip",
+};
 
 export class Fp3dView3d extends LitElement {
   static properties = {
@@ -34,6 +47,7 @@ export class Fp3dView3d extends LitElement {
     roomId: { attribute: false },
     wallMode: { attribute: false },
     explode: { type: Boolean },
+    markerMode: { attribute: false },
     quality: { attribute: false },
     showStats: { type: Boolean },
     _stats: { state: true },
@@ -47,6 +61,7 @@ export class Fp3dView3d extends LitElement {
   declare roomId: string | null;
   declare wallMode: WallMode;
   declare explode: boolean;
+  declare markerMode: MarkerMode;
   declare quality: Quality;
   declare showStats: boolean;
   private declare _stats: ViewerStats | null;
@@ -72,6 +87,7 @@ export class Fp3dView3d extends LitElement {
     this.roomId = null;
     this.wallMode = "auto";
     this.explode = true;
+    this.markerMode = "important";
     this.quality = "auto";
     this.showStats = false;
     this._stats = null;
@@ -132,7 +148,7 @@ export class Fp3dView3d extends LitElement {
     const v = this.viewer;
     if (!v) return;
     if (changed.has("building") && this.building) v.setBuilding(this.building);
-    if (changed.has("building") || changed.has("hass")) this.syncDevices(changed.has("building"));
+    if (changed.has("building") || changed.has("hass") || changed.has("markerMode")) this.syncDevices(changed.has("building") || changed.has("markerMode"));
     if (changed.has("floorId")) v.setFloor(this.floorId);
     if (changed.has("roomId") && (this.roomId || changed.get("roomId"))) v.selectRoom(this.roomId);
     if (changed.has("wallMode")) v.setWallMode(this.wallMode);
@@ -179,9 +195,11 @@ export class Fp3dView3d extends LitElement {
     v.setDevices(
       [...deviceMarkers, ...furniture.markers].map((m) => {
         const power = byDevice.get(m.id) ?? null;
-        return { ...m, power, powerText: power === null ? undefined : formatPower(hass, power) };
+        const marker = { ...m, power, powerText: power === null ? undefined : formatPower(hass, power) };
+        return { ...marker, pin: this.showPin(marker) };
       }),
     );
+    v.setPickTargets(furniture.targets, this.openingTargets());
     v.setScreens(furniture.screens);
     const types = new Map(b.floors.flatMap((f) => f.openings.map((o) => [o.id, o.type] as const)));
     v.setOpeningStates(new Map([...this.openingLinks!].map(([id, e]) => [id, openingState(hass, e, types.get(id))])));
@@ -213,14 +231,20 @@ export class Fp3dView3d extends LitElement {
     b: Building,
     taken: Set<string>,
     consumerSensors: Set<string>,
-  ): { markers: DeviceMarker[]; consumers: Consumer[]; screens: Map<string, ScreenState> } {
-    const markers: DeviceMarker[] = [];
+  ): { markers: (DeviceMarker & { fromFurniture: boolean })[]; consumers: Consumer[]; screens: Map<string, ScreenState>; targets: Map<string, string> } {
+    const markers: (DeviceMarker & { fromFurniture: boolean })[] = [];
     const consumers: Consumer[] = [];
     const screens = new Map<string, ScreenState>();
+    const targets = new Map<string, string>();
     for (const floor of b.floors) {
       for (const f of floor.furniture) {
         const link = this.furnitureLinks.get(f.id);
+        if (isLamp(f.type)) {
+          markers.push(this.lampMarker(hass, floor, f, link?.entity ?? null));
+          continue;
+        }
         if (!link) continue;
+        targets.set(f.id, link.entity ?? link.power!);
         const id = link.entity ?? link.power!;
         const st = link.entity ? hass.states[link.entity] : undefined;
         const power = link.power ? readPower(hass.states[link.power]) : null;
@@ -250,10 +274,66 @@ export class Fp3dView3d extends LitElement {
           active: st ? isActive(st) : (power ?? 0) > 5,
           unavailable: st ? isUnavailable(st) : false,
           glow: null,
+          fromFurniture: true,
         });
       }
     }
-    return { markers, consumers, screens };
+    return { markers, consumers, screens, targets };
+  }
+
+  /** A lamp: its 3D model glows with the linked light and is tapped directly. */
+  private lampMarker(hass: HomeAssistant, floor: Building["floors"][number], f: Furniture, entity: string | null): DeviceMarker & { fromFurniture: boolean } {
+    const st = entity ? hass.states[entity] : undefined;
+    const model = LAMP_MODEL[f.type];
+    const base = model === "table" ? surfaceHeight(floor, f.x, f.z) : 0;
+    const room = floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon([f.x, f.z], r.points));
+    const H = floor.height;
+    const y = { ceiling: H - 0.3, pendant: Math.max(0.6, H - f.h - 0.25), floor: f.h + 0.25, table: base + f.h + 0.2, wall: 2.1, strip: H - 0.25 }[model];
+    return {
+      // a lamp without a light keeps a key of its own (it is drawn, but not tappable)
+      id: entity ?? `lamp:${f.id}`,
+      floorId: floor.id,
+      roomId: room?.id ?? null,
+      x: f.x,
+      z: f.z,
+      y,
+      icon: iconSvg("light"),
+      name: entity ? entityName(hass, entity) : translate(hass, `furn_${f.type}` as Parameters<typeof translate>[1]),
+      text: st ? stateText(hass, st) : "",
+      active: st ? isActive(st) : false,
+      unavailable: st ? isUnavailable(st) : false,
+      glow: st ? lightGlow(st) : null,
+      lamp: model,
+      rotation: f.rotation,
+      size: [f.w, f.d, f.h],
+      base,
+      pickable: !!entity,
+      fromFurniture: true,
+    };
+  }
+
+  /**
+   * Marker rule: "important" leaves out devices that their 3D object stands for (lamps, a TV that is
+   * off) and keeps devices without an object (sensors, heating, switches) and values (watts, the app).
+   */
+  private showPin(m: DeviceMarker & { fromFurniture?: boolean }): boolean {
+    if (this.markerMode === "none") return false;
+    if (this.markerMode === "all") return true;
+    if (m.lamp) return false;
+    const kind = kindOf(m.id);
+    if (kind === "light") return false;
+    if (m.fromFurniture) return (m.power ?? 0) >= 1 || (kind === "media" && m.active);
+    return true;
+  }
+
+  /** Tapping a window opens its blind (or contact); a door or garage door its cover or contact. */
+  private openingTargets(): Map<string, string> {
+    const out = new Map<string, string>();
+    for (const [id, e] of this.openingLinks ?? []) {
+      const target = e.cover ?? e.contact ?? e.tilt;
+      if (target) out.set(id, target);
+    }
+    return out;
   }
 
   private onDeviceTap(entityId: string): void {

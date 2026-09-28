@@ -12,7 +12,7 @@
 
 import { Color, type BufferGeometry } from "three";
 import type { Floor, Opening, Room, Vec2 } from "../model.ts";
-import { furnitureFootprint, pointInPolygon } from "../model.ts";
+import { furnitureFootprint, isLamp, pointInPolygon } from "../model.ts";
 import { generateWalls, locateOnWalls, type Wall } from "../geometry/walls.ts";
 import { pushFurniture } from "./furniture.ts";
 import { ALWAYS, CAP_OFFSET, CUT_OFFSET, EDGE_BASE, EDGE_CUT, EDGE_SOFT, EDGE_TOP, GeoBuffer, LineBuffer, LOWER_OFFSET, pushPrism, triangulate } from "./geo.ts";
@@ -72,6 +72,8 @@ export interface FloorGeometry {
   buckets: (Vec2 | null)[];
   openings: OpeningInfo[];
   walls2d: Wall[];
+  /** Triangle ranges of furniture in `walls`, for tapping furniture in 3D. */
+  furnitureTris: { id: string; start: number; end: number }[];
 }
 
 export const SLAB = 0.2;
@@ -253,7 +255,14 @@ export function buildFloorGeometry(floor: Floor, wallExterior: number, wallInter
 
   // ---------------------------------------------------------------- furniture and shadows
   const shadow = buildShadow(outline.edges, floor.rooms, spans);
-  for (const f of floor.furniture) pushFurniture(wallBuf, lines, shadow, f);
+  // lamps are drawn live by the viewer (they glow with their light)
+  const furnitureTris: FloorGeometry["furnitureTris"] = [];
+  for (const f of floor.furniture) {
+    if (isLamp(f.type)) continue;
+    const start = wallBuf.count;
+    pushFurniture(wallBuf, lines, shadow, f);
+    furnitureTris.push({ id: f.id, start, end: wallBuf.count });
+  }
 
   return {
     floor: floorBuf.geometry(),
@@ -264,6 +273,7 @@ export function buildFloorGeometry(floor: Floor, wallExterior: number, wallInter
     buckets,
     openings,
     walls2d: walls,
+    furnitureTris,
   };
 }
 

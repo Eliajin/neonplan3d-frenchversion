@@ -199,3 +199,19 @@ test("furniture finds its entities in the room's area: the TV, and power sensors
   assert.deepEqual(appColor(hass.states["media_player.fernseher"]), [0.9, 0.04, 0.08]);
   assert.equal(appColor({ entity_id: "media_player.x", state: "off", attributes: {} }), null);
 });
+
+test("lamps take a light of their room, preferring one whose name fits", () => {
+  const hass = hassWith();
+  hass.entities!["light.stehlampe"].area_id = "wohnen";
+  const lamp = (id: string, type: string, entity: string | null = null) => ({ id, type, x: 2, z: 1.5, rotation: 0, w: 0.4, d: 0.4, h: 1.7, variant: null, entity, power: null });
+  const floor: Floor = {
+    ...newFloor("f", "F", 0),
+    rooms: [{ ...room, area_id: "wohnen" }],
+    furniture: [lamp("a", "lamp_floor"), lamp("b", "lamp_ceiling"), lamp("c", "lamp_table")],
+  };
+  const links = furnitureEntities(hass, [floor]);
+  assert.equal(links.get("a")!.entity, "light.stehlampe");
+  assert.equal(links.get("b")!.entity, "light.decke");
+  // no free light left for the third lamp
+  assert.equal(links.get("c"), undefined);
+});

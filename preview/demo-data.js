@@ -109,6 +109,8 @@ const DEVICES = [
   light("flur", "Flurlicht", "flur", true, { brightness: 120 }),
   light("kinderzimmer", "Kinderzimmer Decke", "kinderzimmer", true, { brightness: 150 }),
   light("schreibtisch", "Schreibtischlampe", "arbeitszimmer", true, { color_temp_kelvin: 4500 }),
+  light("esstisch", "Esstisch Pendel", "kueche", true, { brightness: 200 }),
+  light("led_band", "LED Band", "wohnzimmer", true, { brightness: 160, color_mode: "hs", rgb_color: [120, 90, 255] }),
   entity("cover.wohnzimmer", "wohnzimmer", "open", { friendly_name: "Wohnzimmer Rollladen", current_position: 70, supported_features: 15 }),
   entity("cover.kueche", "kueche", "open", { friendly_name: "Rollladen Küche", current_position: 40, supported_features: 15 }),
   entity("climate.wohnzimmer", "wohnzimmer", "heat", {
@@ -194,7 +196,7 @@ export const DEMO_STATES = Object.fromEntries(DEVICES.map((d) => [d.state.entity
 const place = (entity_id, x, z) => ({ entity_id, x, z, y: null });
 DEMO_BUILDING.floors[0].placements = [
   place("light.wohnzimmer_decke", 3.6, 2.6),
-  place("light.stehlampe", 5.3, 0.7),
+  { entity_id: "light.stehlampe", x: 5.3, z: 0.7, y: null, mount: "floor" },
   place("cover.wohnzimmer", 1.6, 0.4),
   place("climate.wohnzimmer", 0.5, 2.2),
   place("media_player.fernseher", 3.0, 0.4),
@@ -202,7 +204,7 @@ DEMO_BUILDING.floors[0].placements = [
   place("switch.kaffeemaschine", 9.4, 0.6),
   place("binary_sensor.kueche_fenster", 7.2, 0.4),
   place("light.schlafzimmer", 2.9, 6.8),
-  place("light.nachttisch", 0.5, 5.3),
+  { entity_id: "light.nachttisch", x: 3.3, z: 7.78, y: null, mount: "table" },
   place("light.bad", 5.5, 7.2),
   place("light.flur", 8.8, 6.9),
 ];
@@ -287,6 +289,8 @@ DEMO_BUILDING.floors[0].furniture = [
   item("kitchen_wall", 8.9, 0.18, 0.9, 0.35, 0.7),
   item("corner_bench", 7.1, 3.55, 2.0, 1.6, 0.9, 270),
   item("table", 8.0, 2.9, 1.3, 0.85, 0.75),
+  { ...item("lamp_pendant", 8.0, 2.9, 0.45, 0.45, 0.85), entity: "light.esstisch" },
+  { ...item("led_strip", 2.4, 0.08, 3.2, 0.04, 0.03), entity: "light.led_band" },
   item("chair", 8.4, 2.2, 0.45, 0.5, 0.9),
   item("chair", 8.95, 2.9, 0.45, 0.5, 0.9, 270),
   item("bed", 2.2, 6.97, 1.6, 2.05, 0.9, 180),

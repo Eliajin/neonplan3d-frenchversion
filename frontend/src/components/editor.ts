@@ -16,6 +16,7 @@ import {
   FURNITURE_GROUPS,
   FURNITURE_SIZE,
   FURNITURE_TYPES,
+  isLamp,
   isAxisRect,
   OPENING_DEFAULTS,
   signedArea,
@@ -1027,8 +1028,20 @@ export class Fp3dEditor extends LitElement {
     if (!room || !entityIds.length || !this.isAdmin) return;
     const ids = new Set(entityIds);
     this.change((doc, floor) => {
-      for (const f of doc.floors) f.placements = f.placements.filter((pl) => !ids.has(pl.entity_id));
-      floor.placements.push(...autoPlace(room, entityIds, floor.placements.map((pl) => [pl.x, pl.z] as Vec2)));
+      for (const f of doc.floors) {
+        f.placements = f.placements.filter((pl) => !ids.has(pl.entity_id));
+        f.furniture = f.furniture.filter((m) => !(isLamp(m.type) && m.entity && ids.has(m.entity)));
+      }
+      const taken = [...floor.placements.map((pl) => [pl.x, pl.z] as Vec2), ...floor.furniture.filter((m) => isLamp(m.type)).map((m) => [m.x, m.z] as Vec2)];
+      for (const pl of autoPlace(room, entityIds, taken)) {
+        if (!pl.entity_id.startsWith("light.")) {
+          floor.placements.push(pl);
+          continue;
+        }
+        // a light becomes a ceiling lamp that is tapped directly in 3D
+        const [w, d, h] = FURNITURE_SIZE.lamp_ceiling;
+        floor.furniture.push({ id: uid("furniture"), type: "lamp_ceiling", x: pl.x, z: pl.z, rotation: 0, w, d, h, variant: null, entity: pl.entity_id, power: null });
+      }
     });
   }
 
@@ -1098,7 +1111,10 @@ export class Fp3dEditor extends LitElement {
 
   private removeDevice(entityId: string): void {
     this.change((doc) => {
-      for (const f of doc.floors) f.placements = f.placements.filter((pl) => pl.entity_id !== entityId);
+      for (const f of doc.floors) {
+        f.placements = f.placements.filter((pl) => pl.entity_id !== entityId);
+        f.furniture = f.furniture.filter((m) => !(isLamp(m.type) && m.entity === entityId));
+      }
     });
   }
 
@@ -1330,7 +1346,8 @@ export class Fp3dEditor extends LitElement {
       const reach = f.d / 2 + Math.max(0.3, 26 / k);
       const [hx, hy] = this.toScreen([f.x - Math.sin(a) * reach, f.z + Math.cos(a) * reach]);
       const [fx, fy] = this.toScreen([f.x - Math.sin(a) * (f.d / 2), f.z + Math.cos(a) * (f.d / 2)]);
-      return svg`<g data-furniture=${f.id} class=${sel ? "fp3d-furn fp3d-furn-sel" : "fp3d-furn"}>
+      const lit = isLamp(f.type) && !!f.entity && f.entity !== "none" && this.hass?.states[f.entity]?.state === "on";
+      return svg`<g data-furniture=${f.id} class=${`fp3d-furn${sel ? " fp3d-furn-sel" : ""}${lit ? " fp3d-furn-lit" : ""}`}>
         <g transform="translate(${cx} ${cy}) rotate(${f.rotation}) scale(${k})">
           <rect class="fp3d-furn-body" x=${-f.w / 2} y=${-f.d / 2} width=${f.w} height=${f.d} />
           <g class="fp3d-furn-sym">${furnitureSymbol(f.type, f.w, f.d)}</g>
@@ -1846,13 +1863,18 @@ export class Fp3dEditor extends LitElement {
       return furnitureEntities(hass, probe).get(f.id)?.[key] ?? null;
     };
     const media = f.type === "tv_board" || f.type === "tv_wall";
-    const entities = this.entityOptions((id) => (media ? id.startsWith("media_player.") : /^(switch|media_player|fan|input_boolean|climate)\./.test(id)));
+    const lamp = isLamp(f.type);
+    const entities = this.entityOptions((id) =>
+      lamp ? id.startsWith("light.") : media ? id.startsWith("media_player.") : /^(switch|media_player|fan|input_boolean|climate)\./.test(id),
+    );
     const power = this.entityOptions((id) => id.startsWith("sensor.") && hass.states[id]?.attributes.device_class === "power");
     return html`<div class="fp3d-form fp3d-links">
-        ${this.entitySelect(this.t(media ? "furn_entity_tv" : "furn_entity"), f.entity ?? null, autoPick("entity"), entities, (v) => this.updateFurniture({ entity: v }))}
-        ${this.entitySelect(this.t("furn_power"), f.power ?? null, autoPick("power"), power, (v) => this.updateFurniture({ power: v }))}
+        ${this.entitySelect(this.t(lamp ? "furn_entity_light" : media ? "furn_entity_tv" : "furn_entity"), f.entity ?? null, autoPick("entity"), entities, (v) =>
+          this.updateFurniture({ entity: v }),
+        )}
+        ${lamp ? nothing : this.entitySelect(this.t("furn_power"), f.power ?? null, autoPick("power"), power, (v) => this.updateFurniture({ power: v }))}
       </div>
-      <p class="fp3d-sub">${this.t(media ? "furn_links_hint_tv" : "furn_links_hint")}</p>`;
+      <p class="fp3d-sub">${this.t(lamp ? (f.type === "lamp_pendant" ? "lamp_hint_pendant" : "lamp_hint") : media ? "furn_links_hint_tv" : "furn_links_hint")}</p>`;
   }
 
   private renderFurnitureLibrary() {
@@ -1916,7 +1938,11 @@ export class Fp3dEditor extends LitElement {
     const hass = this.hass;
     const areaName = room.area_id ? hass?.areas?.[room.area_id]?.name : undefined;
     const ids = hass ? areaEntities(hass, room.area_id).filter((id) => isPlaceable(kindOf(id))) : [];
-    const placedHere = new Set(this.floor?.placements.filter((pl) => pointInPolygon([pl.x, pl.z], room.points)).map((pl) => pl.entity_id));
+    // placed as a device, or as a lamp with this light
+    const placedHere = new Set([
+      ...(this.floor?.placements.filter((pl) => pointInPolygon([pl.x, pl.z], room.points)).map((pl) => pl.entity_id) ?? []),
+      ...(this.floor?.furniture.filter((m) => isLamp(m.type) && m.entity && pointInPolygon([m.x, m.z], room.points)).map((m) => m.entity!) ?? []),
+    ]);
     const groups = hass ? groupByDevice(hass, ids) : [];
     // the automatic placement only takes each device's main entity
     const unplacedMain = groups.map((g) => g.primary).filter((id) => !placedHere.has(id));
@@ -2325,6 +2351,10 @@ export class Fp3dEditor extends LitElement {
       .fp3d-furn-sym .fp3d-sym-strong {
         stroke: var(--fp3d-accent);
         stroke-width: 2;
+      }
+      .fp3d-furn-lit .fp3d-furn-body {
+        fill: rgba(255, 181, 71, 0.35);
+        stroke: var(--fp3d-warm);
       }
       .fp3d-rotate {
         cursor: grab;

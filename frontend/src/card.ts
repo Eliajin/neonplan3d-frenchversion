@@ -19,6 +19,8 @@ interface CardConfig {
   quality?: Quality;
   /** Show the performance display (frames per second, draw calls). */
   stats?: boolean;
+  /** HTML markers: none | important (default) | all. */
+  markers?: "none" | "important" | "all";
 }
 
 export class Floorplan3dCard extends LitElement {
@@ -88,6 +90,7 @@ export class Floorplan3dCard extends LitElement {
               .explode=${this._config?.explode ?? true}
               .quality=${this._config?.quality ?? "auto"}
               ?showStats=${this._config?.stats ?? false}
+              .markerMode=${this._config?.markers ?? "important"}
               @room-tap=${(e: CustomEvent<{ floorId: string; roomId: string | null }>) => {
                 if (!e.detail.roomId) return;
                 if (!floorId && !this._config?.floor) this._floorId = e.detail.floorId;

@@ -93,6 +93,9 @@ export interface OpeningParts {
   frames: BufferGeometry;
   glass: BufferGeometry;
   blinds: BufferGeometry;
+  /** Triangle ranges per opening in frames and blinds, for tapping them in 3D. */
+  frameTris: { id: string; start: number; end: number }[];
+  blindTris: { id: string; start: number; end: number }[];
 }
 
 export function buildOpeningParts(infos: readonly OpeningInfo[], states: ReadonlyMap<string, OpeningState>, cut: number): OpeningParts {
@@ -101,7 +104,11 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
   const blinds = new GeoBuffer(true);
   const frameC = new Color(FRAME);
   const frameTop = new Color(FRAME_TOP);
+  const frameTris: OpeningParts["frameTris"] = [];
+  const blindTris: OpeningParts["blindTris"] = [];
   for (const info of infos) {
+    const fStart = frames.count;
+    const bStart = blinds.count;
     const st = states.get(info.opening.id) ?? CLOSED;
     const W = info.width;
     const { sill: S, top: T, bucket } = info;
@@ -202,6 +209,8 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
         panel(blinds, tf, 0, W, out - 0.07, bottom, T, new Color(0xffffff), cut, bucket, 0.045);
       }
     }
+    frameTris.push({ id: info.opening.id, start: fStart, end: frames.count });
+    blindTris.push({ id: info.opening.id, start: bStart, end: blinds.count });
   }
-  return { frames: frames.geometry(), glass: glass.geometry(), blinds: blinds.geometry() };
+  return { frames: frames.geometry(), glass: glass.geometry(), blinds: blinds.geometry(), frameTris, blindTris };
 }

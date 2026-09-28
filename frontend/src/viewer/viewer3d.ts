@@ -86,10 +86,20 @@ export interface DeviceMarker {
   /** Power drawn (W) when the device reports it. */
   power?: number | null;
   /** Lights: lamp model drawn at the device position. */
-  lamp?: "ceiling" | "floor" | "table" | "wall" | null;
+  lamp?: LampModel | null;
+  /** Lamp: turn around y (degrees), size (w, d, h) and height of what it stands on. */
+  rotation?: number;
+  size?: [number, number, number];
+  base?: number;
+  /** Show the HTML marker (false: the 3D object alone stands for the device). */
+  pin?: boolean;
+  /** The 3D lamp can be tapped (it has an entity). */
+  pickable?: boolean;
   /** Formatted power, e.g. "85 W". */
   powerText?: string;
 }
+
+export type LampModel = "ceiling" | "pendant" | "floor" | "table" | "wall" | "strip";
 
 /** Piece of energy cable (floor-local coordinates); the flow runs from a to b. */
 export interface FlowPiece {
@@ -152,6 +162,16 @@ const CABLE_WIDTH = 0.07;
 const CABLE_HALO = 0.34;
 const LAMP_BODY = 0x2a3a60;
 const LAMP_SHADE = 0x1d2946;
+const WALL_LAMP_Y = 1.75;
+const FLASH_MS = 450;
+const LAMP_SIZE: Record<LampModel, [number, number, number]> = {
+  ceiling: [0.4, 0.4, 0.08],
+  pendant: [0.4, 0.4, 0.8],
+  floor: [0.42, 0.42, 1.7],
+  table: [0.26, 0.26, 0.45],
+  wall: [0.22, 0.12, 0.2],
+  strip: [2, 0.04, 0.03],
+};
 
 interface FloorMaterials {
   floor: MeshBasicMaterial;
@@ -184,6 +204,11 @@ interface FloorView {
   blindsMesh: Mesh;
   flowMesh: Mesh;
   lampMesh: Mesh;
+  /** Triangle ranges of lamps (entity ids), furniture walls mesh and openings, for tapping. */
+  lampTris: { id: string; start: number; end: number }[];
+  frameTris: { id: string; start: number; end: number }[];
+  blindTris: { id: string; start: number; end: number }[];
+  wallMesh: Mesh;
   screenMesh: Mesh;
   screenSig: string;
   /** Pictures shown on lit screens, by furniture id. */
@@ -230,6 +255,11 @@ export class FloorplanViewer {
   private readonly blindTexture: CanvasTexture;
   private openingTargets = new Map<string, OpeningState>();
   private screens = new Map<string, ScreenState>();
+  /** Entities behind furniture (TV, …) and openings (blind, contact), for tapping them in 3D. */
+  private pickFurniture = new Map<string, string>();
+  private pickOpenings = new Map<string, string>();
+  /** Lamps flashing after a tap (entity id -> end time). */
+  private flashes = new Map<string, number>();
   private flows: FlowPiece[] = [];
   /** Stripe phase per cable piece, kept when its speed changes so the stripes do not jump. */
   private flowPhase = new Map<string, { speed: number; offset: number }>();
@@ -446,6 +476,12 @@ export class FloorplanViewer {
     this.invalidate();
   }
 
+  /** Entities opened by tapping furniture or openings in 3D (by furniture / opening id). */
+  setPickTargets(furniture: Map<string, string>, openings: Map<string, string>): void {
+    this.pickFurniture = furniture;
+    this.pickOpenings = openings;
+  }
+
   /** Screens of TVs and monitors that are on (by furniture id). */
   setScreens(screens: Map<string, ScreenState>): void {
     this.screens = screens;
@@ -519,6 +555,7 @@ export class FloorplanViewer {
     return new OrbitControls(this.renderer.domElement, this.camera, {
       change: () => this.invalidate(),
       tap: (x, y) => this.onTap(x, y),
+      hold: (x, y) => this.onHold(x, y),
       doubleTap: () => this.options.onBack?.(),
     });
   }
@@ -600,7 +637,7 @@ export class FloorplanViewer {
   private buildGlow(fv: FloorView): void {
     const sig = this.devices
       .filter((d) => d.floorId === fv.floor.id && d.glow)
-      .map((d) => `${d.x},${d.z},${d.glow!.level.toFixed(3)},${d.glow!.color.map((c) => c.toFixed(3)).join("/")}`)
+      .map((d) => `${d.x},${d.z},${d.rotation ?? 0},${d.lamp},${d.size?.[0] ?? 0},${d.glow!.level.toFixed(3)},${d.glow!.color.map((c) => c.toFixed(3)).join("/")}`)
       .join(";");
     if (sig === fv.glowSig && fv.glowMesh.geometry.getAttribute("position")) return;
     fv.glowSig = sig;
@@ -614,11 +651,19 @@ export class FloorplanViewer {
       // additive light on a blue floor washes out; a gamma > 1 keeps warm light warm
       const [cr, cg, cb] = d.glow.color.map((v) => Math.min(1, Math.pow(v, 1.7) * k));
       const y = 0.012;
+      // strips light a band along their length; wall lights throw their light into the room
+      const hx = r + (d.lamp === "strip" ? (d.size?.[0] ?? 1) / 2 : 0);
+      const hz = d.lamp === "strip" ? r * 0.7 : r;
+      const oz = d.lamp === "wall" || d.lamp === "strip" ? r * 0.45 : 0;
+      const ang = ((d.rotation ?? 0) * Math.PI) / 180;
+      const ca = Math.cos(ang);
+      const sa = Math.sin(ang);
+      const at = (lx: number, lz: number) => [d.x + lx * ca - (lz + oz) * sa, d.z + lx * sa + (lz + oz) * ca];
       const quad = [
-        [d.x - r, d.z - r, 0, 0],
-        [d.x + r, d.z - r, 1, 0],
-        [d.x + r, d.z + r, 1, 1],
-        [d.x - r, d.z + r, 0, 1],
+        [...at(-hx, -hz), 0, 0],
+        [...at(hx, -hz), 1, 0],
+        [...at(hx, hz), 1, 1],
+        [...at(-hx, hz), 0, 1],
       ];
       for (const i of [0, 2, 1, 0, 3, 2]) {
         const [x, z, u, v] = quad[i];
@@ -713,13 +758,14 @@ export class FloorplanViewer {
       for (const m of [framesMesh, blindsMesh, glassMesh]) m.frustumCulled = false;
       // glass walls are drawn after everything opaque in the room, so doors and furniture show through
       const glassWalls = new Mesh(geo.walls, materials.glassWall);
+      const wallMesh = new Mesh(geo.walls, materials.wall);
       glassWalls.renderOrder = 6;
       group.add(
         floorMesh,
         shadowMesh,
         pattern,
         glowMesh,
-        new Mesh(geo.walls, materials.wall),
+        wallMesh,
         new LineSegments(geo.lines, materials.lines),
         framesMesh,
         blindsMesh,
@@ -757,6 +803,10 @@ export class FloorplanViewer {
         blindsMesh,
         flowMesh,
         lampMesh,
+        lampTris: [],
+        frameTris: [],
+        blindTris: [],
+        wallMesh,
         screenMesh,
         screenSig: "",
         screenPics: new Map(),
@@ -941,50 +991,93 @@ export class FloorplanViewer {
 
   /** Lamp models of the lights on a floor, merged into one mesh; lit shades take the light colour. */
   private buildLamps(fv: FloorView): void {
+    const now = performance.now();
+    const flash = (id: string) => {
+      const until = this.flashes.get(id);
+      return until && until > now ? Math.round(((until - now) / FLASH_MS) * 10) / 10 : 0;
+    };
     const sig =
       this.wallMode +
       this.devices
         .filter((d) => d.floorId === fv.floor.id && d.lamp)
-        .map((d) => `${d.lamp},${d.x},${d.z},${d.glow ? `${d.glow.level.toFixed(3)},${d.glow.color.map((c) => c.toFixed(3)).join("/")}` : "off"}`)
+        .map(
+          (d) =>
+            `${d.id},${d.lamp},${d.x},${d.z},${d.rotation ?? 0},${d.size?.join("/")},${d.base ?? 0},${flash(d.id)},${d.glow ? `${d.glow.level.toFixed(3)},${d.glow.color.map((c) => c.toFixed(3)).join("/")}` : "off"}`,
+        )
         .join(";");
     if (sig === fv.lampSig && fv.lampMesh.geometry.getAttribute("position")) return;
     fv.lampSig = sig;
     const buf = new GeoBuffer();
+    const tris: FloorView["lampTris"] = [];
     const H = fv.floor.height;
     for (const d of this.devices) {
       if (d.floorId !== fv.floor.id || !d.lamp) continue;
-      if (d.lamp === "ceiling" && this.wallMode === "cut") continue;
-      // a lit shade glows in the light's colour, brighter with more brightness
+      // hanging lamps would float above cut walls
+      if ((d.lamp === "ceiling" || d.lamp === "pendant") && this.wallMode === "cut") continue;
+      const start = buf.count;
+      // a lit shade glows in the light's colour, brighter with more brightness; a tap flashes it white
       const k = d.glow ? 0.55 + 0.45 * d.glow.level : 0;
-      const shadeCol = d.glow ? new Color(...(d.glow.color.map((c) => Math.min(1, c * k)) as [number, number, number])).getHex() : LAMP_SHADE;
+      const shadeC = d.glow ? new Color(...(d.glow.color.map((c) => Math.min(1, c * k)) as [number, number, number])) : new Color(LAMP_SHADE);
+      const f = flash(d.id);
+      if (f > 0) shadeC.lerp(new Color(1, 1, 1), 0.7 * f);
+      const shadeCol = shadeC.getHex();
+      const [w, dd, h] = d.size ?? LAMP_SIZE[d.lamp];
+      const base = d.base ?? 0;
+      const ang = ((d.rotation ?? 0) * Math.PI) / 180;
+      const ca = Math.cos(ang);
+      const sa = Math.sin(ang);
+      const L = (x: number, z: number): [number, number] => [d.x + x * ca - z * sa, d.z + x * sa + z * ca];
       const cyl = (r: number, y0: number, y1: number, side: number, top: number, n = 14) => {
         const poly: [number, number][] = [];
         for (let i = 0; i < n; i++) {
           const a = (i / n) * Math.PI * 2;
-          poly.push([d.x + Math.cos(a) * r, d.z - Math.sin(a) * r]);
+          poly.push([d.x + Math.cos(a) * r, d.z + Math.sin(a) * r]);
         }
         pushPrism(buf, poly, y0, y1, side, top, { aoFrom: 0, bottom: true });
       };
+      const box = (x0: number, x1: number, z0: number, z1: number, y0: number, y1: number, side: number, top = side) =>
+        pushPrism(buf, [L(x0, z0), L(x1, z0), L(x1, z1), L(x0, z1)], y0, y1, side, top, { aoFrom: 0, bottom: true });
+      const r = Math.max(0.05, Math.min(w, dd) / 2);
       switch (d.lamp) {
         case "ceiling":
-          cyl(0.05, H - 0.04, H, LAMP_BODY, LAMP_BODY, 8);
-          cyl(0.2, H - 0.075, H - 0.04, shadeCol, shadeCol);
+          cyl(r * 0.25, H - 0.04, H, LAMP_BODY, LAMP_BODY, 8);
+          cyl(r, H - Math.max(0.04, h) - 0.035, H - 0.04, shadeCol, shadeCol);
           break;
+        case "pendant": {
+          const bottom = Math.max(0.4, H - h);
+          cyl(0.06, H - 0.02, H, LAMP_BODY, LAMP_BODY, 8);
+          cyl(0.008, bottom + 0.2, H - 0.02, LAMP_BODY, LAMP_BODY, 5);
+          cyl(r * 0.35, bottom + 0.14, bottom + 0.2, shadeCol, shadeCol, 12);
+          cyl(r, bottom, bottom + 0.14, shadeCol, shadeCol, 16);
+          break;
+        }
         case "floor":
-          cyl(0.15, 0, 0.03, LAMP_BODY, LAMP_BODY);
-          cyl(0.014, 0.03, 1.5, LAMP_BODY, LAMP_BODY, 6);
-          cyl(0.21, 1.45, 1.75, shadeCol, shadeCol);
+          cyl(Math.max(0.1, r * 0.7), 0, 0.03, LAMP_BODY, LAMP_BODY);
+          cyl(0.014, 0.03, h - 0.28, LAMP_BODY, LAMP_BODY, 6);
+          cyl(r, h - 0.3, h, shadeCol, shadeCol);
           break;
         case "table":
-          cyl(0.08, 0.72, 0.75, LAMP_BODY, LAMP_BODY);
-          cyl(0.012, 0.75, 1.02, LAMP_BODY, LAMP_BODY, 6);
-          cyl(0.13, 0.98, 1.16, shadeCol, shadeCol);
+          cyl(Math.max(0.05, r * 0.55), base, base + 0.03, LAMP_BODY, LAMP_BODY);
+          cyl(0.012, base + 0.03, base + h - 0.16, LAMP_BODY, LAMP_BODY, 6);
+          cyl(r, base + h - 0.18, base + h, shadeCol, shadeCol);
           break;
-        case "wall":
-          cyl(0.09, 1.68, 1.86, shadeCol, shadeCol, 10);
+        case "wall": {
+          // plate on the wall (back at -z) and a glowing shade in front of it
+          const y0 = WALL_LAMP_Y;
+          box(-w / 2 + 0.03, w / 2 - 0.03, -dd / 2, -dd / 2 + 0.02, y0, y0 + h, LAMP_BODY);
+          box(-w / 2, w / 2, -dd / 2 + 0.02, dd / 2, y0 + h * 0.15, y0 + h * 0.85, shadeCol);
           break;
+        }
+        case "strip": {
+          // cove light: a thin bar just under the ceiling along the wall
+          const y1 = H - 0.04;
+          box(-w / 2, w / 2, -dd / 2, dd / 2, y1 - Math.max(0.02, h), y1, shadeCol);
+          break;
+        }
       }
+      if (d.pickable !== false) tris.push({ id: d.id, start, end: buf.count });
     }
+    fv.lampTris = tris;
     fv.lampMesh.geometry.dispose();
     fv.lampMesh.geometry = buf.geometry();
     fv.lampMesh.visible = buf.count > 0;
@@ -1180,6 +1273,8 @@ export class FloorplanViewer {
 
   private buildOpenings(fv: FloorView): void {
     const parts = buildOpeningParts(fv.geo.openings, fv.openings, Math.min(fv.floor.cut_height, fv.floor.height));
+    fv.frameTris = parts.frameTris;
+    fv.blindTris = parts.blindTris;
     for (const [mesh, geo] of [
       [fv.framesMesh, parts.frames],
       [fv.glassMesh, parts.glass],
@@ -1259,21 +1354,54 @@ export class FloorplanViewer {
     return size.length() / 2 / Math.sin(Math.min(vfov, hfov) / 2);
   }
 
-  private onTap(x: number, y: number): void {
+  /**
+   * What lies under a screen point: a lamp, a linked piece of furniture or opening (their entity), or
+   * a room. Walls are looked through (the ones in front are glass), furniture without an entity too.
+   */
+  private pick(x: number, y: number): { entity: string } | { floorId: string; roomId: string | null } | null {
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new Vector2((x / rect.width) * 2 - 1, -(y / rect.height) * 2 + 1);
     const ray = new Raycaster();
     ray.setFromCamera(ndc, this.camera);
-    const meshes = this.activeFloors().map((f) => f.floorMesh);
-    const hit = ray.intersectObjects(meshes, false)[0];
-    if (!hit || hit.faceIndex == null) {
-      this.options.onRoomTap?.(this.floorId ?? "", null);
+    const floors = this.activeFloors();
+    const meshes = floors.flatMap((f) => [f.lampMesh, f.framesMesh, f.blindsMesh, f.wallMesh, f.floorMesh].filter((m) => m.visible));
+    const inRange = (list: { id: string; start: number; end: number }[], tri: number) => list.find((r) => tri >= r.start && tri < r.end)?.id;
+    for (const hit of ray.intersectObjects(meshes, false)) {
+      if (hit.faceIndex == null) continue;
+      const tri = hit.faceIndex;
+      const fv = floors.find((f) => f.group === hit.object.parent)!;
+      if (hit.object === fv.lampMesh) {
+        const id = inRange(fv.lampTris, tri);
+        if (id) return { entity: id };
+      } else if (hit.object === fv.framesMesh || hit.object === fv.blindsMesh) {
+        const id = inRange(hit.object === fv.framesMesh ? fv.frameTris : fv.blindTris, tri);
+        const entity = id ? this.pickOpenings.get(id) : undefined;
+        if (entity) return { entity };
+      } else if (hit.object === fv.wallMesh) {
+        const id = inRange(fv.geo.furnitureTris, tri);
+        const entity = id ? this.pickFurniture.get(id) : undefined;
+        if (entity) return { entity };
+      } else if (hit.object === fv.floorMesh) {
+        return { floorId: fv.floor.id, roomId: inRange(fv.geo.roomTris.map((r) => ({ id: r.roomId, start: r.start, end: r.end })), tri) ?? null };
+      }
+    }
+    return null;
+  }
+
+  private onTap(x: number, y: number): void {
+    const hit = this.pick(x, y);
+    if (hit && "entity" in hit) {
+      this.flashes.set(hit.entity, performance.now() + FLASH_MS);
+      this.invalidate();
+      this.options.onDeviceTap?.(hit.entity);
       return;
     }
-    const fv = this.floors.find((f) => f.floorMesh === hit.object)!;
-    const tri = hit.faceIndex;
-    const room = fv.geo.roomTris.find((r) => tri >= r.start && tri < r.end);
-    this.options.onRoomTap?.(fv.floor.id, room?.roomId ?? null);
+    this.options.onRoomTap?.(hit?.floorId ?? this.floorId ?? "", hit?.roomId ?? null);
+  }
+
+  private onHold(x: number, y: number): void {
+    const hit = this.pick(x, y);
+    if (hit && "entity" in hit) this.options.onDeviceHold?.(hit.entity);
   }
 
   private render(now: number): void {
@@ -1283,7 +1411,13 @@ export class FloorplanViewer {
     const cameraMoving = this.controls.update(now);
     const floorsMoving = this.stepFloors(dt);
     const openingsMoving = this.stepOpenings(dt);
-    const moving = cameraMoving || floorsMoving || openingsMoving;
+    let flashing = false;
+    if (this.flashes.size) {
+      for (const [id, until] of this.flashes) if (until <= now) this.flashes.delete(id);
+      flashing = this.flashes.size > 0;
+      for (const fv of this.floors) this.buildLamps(fv);
+    }
+    const moving = cameraMoving || floorsMoving || openingsMoving || flashing;
     this.lastFrame = moving ? now : 0;
     this.flowTime.value = this.flowSeconds();
     this.updateWalls();
@@ -1396,7 +1530,7 @@ export class FloorplanViewer {
       if (!pin) continue;
       const fv = this.floors.find((f) => f.floor.id === d.floorId);
       // device markers belong to the floor and room views; the house view only shows floor labels
-      if (!fv || house || fv.to < 0.99 || fv.o < 0.9) {
+      if (!fv || house || fv.to < 0.99 || fv.o < 0.9 || d.pin === false) {
         pin.hidden = true;
         continue;
       }

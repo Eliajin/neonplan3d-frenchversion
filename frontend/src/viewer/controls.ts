@@ -16,7 +16,11 @@ export interface ControlEvents {
   change(): void;
   tap(x: number, y: number): void;
   doubleTap(x: number, y: number): void;
+  /** Press without moving for HOLD_MS; the following release is no tap. */
+  hold(x: number, y: number): void;
 }
+
+const HOLD_MS = 500;
 
 const MIN_PHI = 0.12;
 const MAX_PHI = 1.35;
@@ -33,6 +37,8 @@ export class OrbitControls {
   private flight: { from: OrbitView; to: OrbitView; start: number; duration: number } | null = null;
   private down: { x: number; y: number; time: number; moved: boolean } | null = null;
   private lastTap = 0;
+  private holdTimer: ReturnType<typeof setTimeout> | undefined;
+  private held = false;
   private pinch: { dist: number; mid: [number, number] } | null = null;
   private readonly el: HTMLElement;
   private readonly camera: PerspectiveCamera;
@@ -56,6 +62,7 @@ export class OrbitControls {
   }
 
   dispose(): void {
+    clearTimeout(this.holdTimer);
     for (const [type, fn] of this.listeners) this.el.removeEventListener(type, fn);
   }
 
@@ -115,8 +122,19 @@ export class OrbitControls {
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button, type: e.pointerType });
     this.flight = null;
     this.velocity = { theta: 0, phi: 0 };
-    if (this.pointers.size === 1) this.down = { x: e.clientX, y: e.clientY, time: performance.now(), moved: false };
-    else {
+    clearTimeout(this.holdTimer);
+    this.held = false;
+    if (this.pointers.size === 1) {
+      this.down = { x: e.clientX, y: e.clientY, time: performance.now(), moved: false };
+      const rect = this.el.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      this.holdTimer = setTimeout(() => {
+        if (!this.down || this.down.moved || this.pointers.size !== 1) return;
+        this.held = true;
+        this.events.hold(x, y);
+      }, HOLD_MS);
+    } else {
       this.down = null;
       this.pinch = this.pinchState();
     }
@@ -127,7 +145,10 @@ export class OrbitControls {
     if (!p) return;
     const dx = e.clientX - p.x;
     const dy = e.clientY - p.y;
-    if (this.down && Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 6) this.down.moved = true;
+    if (this.down && Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 6) {
+      this.down.moved = true;
+      clearTimeout(this.holdTimer);
+    }
     if (this.pointers.size === 1) {
       if (this.down && !this.down.moved) {
         p.x = e.clientX;
@@ -163,7 +184,11 @@ export class OrbitControls {
     if (!this.pointers.has(e.pointerId)) return;
     this.pointers.delete(e.pointerId);
     if (this.pointers.size < 2) this.pinch = null;
-    if (this.down && !this.down.moved && e.type === "pointerup" && performance.now() - this.down.time < 400) {
+    clearTimeout(this.holdTimer);
+    if (this.held) {
+      this.held = false;
+      this.down = null;
+    } else if (this.down && !this.down.moved && e.type === "pointerup" && performance.now() - this.down.time < 400) {
       const rect = this.el.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;

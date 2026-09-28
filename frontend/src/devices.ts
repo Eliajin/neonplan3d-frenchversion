@@ -396,6 +396,15 @@ const FURNITURE_NAMES: Record<string, RegExp> = {
   sink: /(spülmaschine|geschirrspül|dishwasher)/i,
 };
 const MEDIA_FURNITURE = new Set(["tv_board", "tv_wall"]);
+/** Name hints for picking a lamp's light (a light that fits the name wins, otherwise any free one). */
+const LAMP_NAMES: Record<string, RegExp> = {
+  lamp_ceiling: /(decke|ceiling|haupt|main)/i,
+  lamp_pendant: /(pendel|pendant|hänge|esstisch|dining)/i,
+  lamp_floor: /(steh|floor)/i,
+  lamp_table: /(tisch|nacht|table|bedside|lese|reading)/i,
+  lamp_wall: /(wand|wall)/i,
+  led_strip: /(led|strip|streifen|leiste|band)/i,
+};
 
 export interface FurnitureLinks {
   entity: string | null;
@@ -424,7 +433,8 @@ export function furnitureEntities(hass: HomeAssistant, floors: readonly Floor[])
   for (const floor of floors) {
     const used = new Set<string>(floor.furniture.flatMap((f) => [f.entity, f.power]).filter((v): v is string => !!v && v !== "none"));
     for (const f of floor.furniture) {
-      const pattern = FURNITURE_NAMES[f.type];
+      const lamp = f.type in LAMP_NAMES;
+      const pattern = lamp ? LAMP_NAMES[f.type] : FURNITURE_NAMES[f.type];
       if (!pattern && f.entity == null && f.power == null) continue;
       const room = floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon([f.x, f.z], r.points));
       const ids = room ? primaryEntities(hass, areaEntities(hass, room.area_id)) : [];
@@ -432,7 +442,10 @@ export function furnitureEntities(hass: HomeAssistant, floors: readonly Floor[])
       let entity: string | null = f.entity === "none" ? null : (f.entity ?? null);
       if (f.entity == null) {
         const free = ids.filter((id) => !used.has(id));
-        if (MEDIA_FURNITURE.has(f.type)) {
+        if (lamp) {
+          const lights = free.filter((id) => kindOf(id) === "light");
+          entity = lights.find((id) => pattern.test(name(id))) ?? lights[0] ?? null;
+        } else if (MEDIA_FURNITURE.has(f.type)) {
           const media = free.filter((id) => kindOf(id) === "media");
           entity = media.find((id) => hass.states[id]?.attributes.device_class === "tv") ?? media.find((id) => pattern?.test(name(id))) ?? media[0] ?? null;
         } else if (pattern) {
@@ -443,7 +456,7 @@ export function furnitureEntities(hass: HomeAssistant, floors: readonly Floor[])
       let power: string | null = f.power === "none" ? null : (f.power ?? null);
       if (f.power == null) {
         power = entity ? devicePower(hass, entity) : null;
-        if (!power && pattern && room) {
+        if (!power && pattern && room && !lamp) {
           const all = areaEntities(hass, room.area_id);
           power = all.find((id) => isPower(hass, id) && !used.has(id) && pattern.test(name(id))) ?? null;
         }

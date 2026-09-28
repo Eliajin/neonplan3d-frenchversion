@@ -117,6 +117,25 @@ export function furnitureSymbol(type: string, w: number, d: number): Part[] | ty
       return [line(-Math.min(w * 0.4, 0.72), -d / 2 + 0.14, Math.min(w * 0.4, 0.72), -d / 2 + 0.14, "fp3d-sym-strong"), ...fronts(w, d, Math.max(2, Math.round(w / 0.6)))];
     case "tv_wall":
       return [line(-w / 2, 0, w / 2, 0, "fp3d-sym-strong")];
+    case "lamp_ceiling":
+    case "lamp_pendant":
+    case "lamp_floor":
+    case "lamp_table": {
+      // a lamp from above: the shade, and short rays for hanging ones
+      const r = Math.min(w, d) / 2;
+      const out: Part[] = [circle(0, 0, r * 0.9, "fp3d-sym-fill"), circle(0, 0, r * 0.3)];
+      if (type === "lamp_ceiling" || type === "lamp_pendant") {
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2;
+          out.push(line(Math.cos(a) * r * 1.05, Math.sin(a) * r * 1.05, Math.cos(a) * r * 1.35, Math.sin(a) * r * 1.35));
+        }
+      }
+      return out;
+    }
+    case "lamp_wall":
+      return [rect(-w / 2, -d / 2, w / 2, -d / 2 + 0.03, "fp3d-sym-fill"), ellipse(0, 0.01, w * 0.4, d * 0.4)];
+    case "led_strip":
+      return [line(-w / 2, 0, w / 2, 0, "fp3d-sym-strong")];
     case "plant":
       return [circle(0, 0, Math.min(w, d) * 0.46), circle(0, 0, Math.min(w, d) * 0.25)];
     case "rug":

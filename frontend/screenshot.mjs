@@ -42,6 +42,7 @@ const shots = [
   { name: "view-garage", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Garage" },
   { name: "view-hall", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Flur" },
   { name: "view-tablet-level", query: "?fp3d_stats", width: 1280, height: 800, click: "Tablet", then: "Erdgeschoss" },
+  { name: "view-tap-lamp", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Küche", tapAt: [688, 395] },
   { name: "view-cut", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Schnitt" },
   { name: "view-room-panel", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Wohnzimmer" },
   { name: "tablet-room", query: "", width: 800, height: 1280, click: "Erdgeschoss", then: "Wohnzimmer" },
@@ -92,6 +93,10 @@ for (const shot of shots) {
   if (shot.select) await clickText(shot.select);
   if (shot.click) await clickText(shot.click);
   if (shot.then) await clickText(shot.then);
+  if (shot.tapAt) {
+    await page.mouse.click(shot.tapAt[0], shot.tapAt[1]);
+    await new Promise((r) => setTimeout(r, 900));
+  }
   if (shot.editRoomName) {
     // change a room name through the panel's data controller, wait for the failed save, then reload
     await page.evaluate((name) => {

@@ -151,6 +151,12 @@ export function newFloor(id: string, name: string, elevation: number): Floor {
 }
 
 export const FURNITURE_TYPES = [
+  "lamp_ceiling",
+  "lamp_pendant",
+  "lamp_floor",
+  "lamp_table",
+  "lamp_wall",
+  "led_strip",
   "sofa",
   "armchair",
   "stool",
@@ -195,6 +201,7 @@ export const FURNITURE_TYPES = [
 
 /** Furniture library sections (the editor lists them in this order). */
 export const FURNITURE_GROUPS: Record<string, FurnitureType[]> = {
+  lights: ["lamp_ceiling", "lamp_pendant", "lamp_floor", "lamp_table", "lamp_wall", "led_strip"],
   living: ["sofa", "armchair", "stool", "coffee_table", "tv_board", "tv_wall", "sideboard", "shelf", "plant", "rug"],
   dining: ["table", "table_round", "chair", "bench", "corner_bench", "bar_stool"],
   kitchen: ["kitchen", "kitchen_wall", "kitchen_tall", "island", "sink", "stove", "dishwasher", "fridge"],
@@ -204,7 +211,42 @@ export const FURNITURE_GROUPS: Record<string, FurnitureType[]> = {
 };
 
 /** Furniture that can show a linked entity (TV state, power, …). */
+/** Lamps: drawn live (they glow with their light) and tapped directly in 3D. */
+export const LAMP_TYPES = new Set<string>(["lamp_ceiling", "lamp_pendant", "lamp_floor", "lamp_table", "lamp_wall", "led_strip"]);
+
+export function isLamp(type: string): boolean {
+  return LAMP_TYPES.has(type);
+}
+
+/** Furniture a table lamp can stand on. */
+const SURFACES = new Set<string>([
+  "table",
+  "table_round",
+  "coffee_table",
+  "desk",
+  "nightstand",
+  "sideboard",
+  "dresser",
+  "kitchen",
+  "island",
+  "tv_board",
+  "dishwasher",
+  "washer",
+  "dryer",
+]);
+
+/** Height of the highest furniture top under a point (0 = the floor). */
+export function surfaceHeight(floor: Floor, x: number, z: number): number {
+  let top = 0;
+  for (const f of floor.furniture) {
+    if (!SURFACES.has(f.type) || !pointInPolygon([x, z], furnitureFootprint(f))) continue;
+    top = Math.max(top, f.h);
+  }
+  return top;
+}
+
 export const ELECTRIC_FURNITURE = new Set<string>([
+  ...LAMP_TYPES,
   "tv_board",
   "tv_wall",
   "desk",
@@ -245,6 +287,12 @@ export const FURNITURE_SIZE: Record<FurnitureType, [number, number, number]> = {
   rug: [2.0, 1.4, 0.01],
   stairs: [1.0, 3.2, 2.75],
   stool: [0.55, 0.55, 0.42],
+  lamp_ceiling: [0.4, 0.4, 0.08],
+  lamp_pendant: [0.4, 0.4, 0.8],
+  lamp_floor: [0.4, 0.4, 1.7],
+  lamp_table: [0.28, 0.28, 0.45],
+  lamp_wall: [0.22, 0.12, 0.2],
+  led_strip: [2.0, 0.04, 0.03],
   coffee_table: [1.1, 0.6, 0.42],
   tv_wall: [1.3, 0.08, 0.75],
   sideboard: [1.6, 0.45, 0.8],
@@ -278,6 +326,17 @@ export function normalizeBuilding(b: Building): Building {
   for (const f of b.floors) {
     f.placements = f.placements.map((p) => ({ ...p, mount: p.mount ?? null }));
     f.furniture = f.furniture.map((m) => ({ ...m, entity: m.entity ?? null, power: m.power ?? null }));
+    // lights placed as devices (before lamps existed) become lamps of their mount type
+    const lights = f.placements.filter((p) => p.entity_id.startsWith("light."));
+    if (lights.length) {
+      const type: Record<LampMount, FurnitureType> = { ceiling: "lamp_ceiling", floor: "lamp_floor", table: "lamp_table", wall: "lamp_wall" };
+      for (const p of lights) {
+        const t = type[p.mount ?? "ceiling"];
+        const [w, d, h] = FURNITURE_SIZE[t];
+        f.furniture.push({ id: `lamp_${p.entity_id.slice(6).replace(/[^A-Za-z0-9_\-.]/g, "_")}`.slice(0, 64), type: t, x: p.x, z: p.z, rotation: 0, w, d, h, variant: null, entity: p.entity_id, power: null });
+      }
+      f.placements = f.placements.filter((p) => !p.entity_id.startsWith("light."));
+    }
     f.openings = f.openings.map((o) => ({ ...o, hinge: o.hinge ?? "left", cover: o.cover ?? null, contact: o.contact ?? null, tilt: o.tilt ?? null }));
   }
   return b;

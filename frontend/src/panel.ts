@@ -9,6 +9,7 @@ import { translate, type I18nKey } from "./i18n.ts";
 import type { Building } from "./model.ts";
 import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
+import type { MarkerMode } from "./components/view3d.ts";
 import type { Quality, WallMode } from "./viewer/viewer3d.ts";
 
 type Mode = "view" | "editor";
@@ -44,6 +45,7 @@ export class Floorplan3dPanel extends LitElement {
     _explode: { state: true },
     _quality: { state: true },
     _stats: { state: true },
+    _markers: { state: true },
   };
 
   declare hass: HomeAssistant;
@@ -58,6 +60,7 @@ export class Floorplan3dPanel extends LitElement {
   private declare _quality: Quality;
   /** Performance display (per device; also switched on by ?fp3d_stats in the URL). */
   private declare _stats: boolean;
+  private declare _markers: MarkerMode;
 
   private readonly data = new BuildingController(this);
 
@@ -73,6 +76,8 @@ export class Floorplan3dPanel extends LitElement {
     const quality = prefs.get("quality");
     this._quality = quality === "low" || quality === "high" ? quality : "auto";
     this._stats = prefs.get("stats") === "1" || new URLSearchParams(location.search).has("fp3d_stats");
+    const markers = prefs.get("markers");
+    this._markers = markers === "none" || markers === "all" ? markers : "important";
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
@@ -154,6 +159,21 @@ export class Floorplan3dPanel extends LitElement {
             ? html`<div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("quality")}>
                 ${(["auto", "low", "high"] as Quality[]).map(
                   (q) => html`<button aria-pressed=${this._quality === q} @click=${() => this.setQuality(q)}>${this.t(`quality_${q}`)}</button>`,
+                )}
+              </div>
+              <div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("markers")}>
+                ${(["none", "important", "all"] as MarkerMode[]).map(
+                  (m) =>
+                    html`<button
+                      aria-pressed=${this._markers === m}
+                      title=${this.t("markers")}
+                      @click=${() => {
+                        this._markers = m;
+                        prefs.set("markers", m);
+                      }}
+                    >
+                      ${this.t(`markers_${m}`)}
+                    </button>`,
                 )}
               </div>
               <div class="fp3d-seg fp3d-quality">
@@ -268,6 +288,7 @@ export class Floorplan3dPanel extends LitElement {
           .roomId=${this._roomId}
           .wallMode=${this._wallMode}
           .explode=${this._explode}
+          .markerMode=${this._markers}
           .quality=${this._quality}
           ?showStats=${this._stats}
           @room-tap=${this.onRoomTap}
