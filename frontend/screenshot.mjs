@@ -41,6 +41,7 @@ const shots = [
   { name: "view-room", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Küche" },
   { name: "view-garage", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Garage" },
   { name: "view-hall", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Flur" },
+  { name: "view-tablet-level", query: "?fp3d_stats", width: 1280, height: 800, click: "Tablet", then: "Erdgeschoss" },
   { name: "view-cut", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Schnitt" },
   { name: "view-room-panel", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Wohnzimmer" },
   { name: "tablet-room", query: "", width: 800, height: 1280, click: "Erdgeschoss", then: "Wohnzimmer" },
@@ -62,6 +63,8 @@ for (const shot of shots) {
   page.on("pageerror", (e) => errors.push(`${shot.name}: ${e.message}`));
   page.on("console", (m) => m.type() === "error" && !m.location()?.url?.endsWith("favicon.ico") && errors.push(`${shot.name}: ${m.text()}`));
   await page.setViewport({ width: shot.width, height: shot.height, deviceScaleFactor: 1 });
+  // every shot starts with the default settings (the panel remembers quality and FPS per device)
+  await page.evaluateOnNewDocument(() => localStorage.clear());
   await page.goto(base + shot.query, { waitUntil: "networkidle0" });
   await new Promise((r) => setTimeout(r, 1200));
   const clickText = async (text) => {

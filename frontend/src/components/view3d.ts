@@ -230,7 +230,8 @@ export class Fp3dView3d extends LitElement {
         }
         if (st && (f.type === "tv_board" || f.type === "tv_wall" || f.type === "desk")) {
           const color = kindOf(st.entity_id) === "media" ? appColor(st) : isActive(st) ? ([0.22, 0.88, 1] as [number, number, number]) : null;
-          if (color) screens.set(f.id, { color, level: st.state === "playing" ? 1 : 0.6 });
+          const picture = kindOf(st.entity_id) === "media" ? ((st.attributes.entity_picture as string | undefined) ?? null) : null;
+          if (color) screens.set(f.id, { color, level: st.state === "playing" ? 1 : 0.6, picture });
         }
         if (taken.has(id)) continue;
         taken.add(id);

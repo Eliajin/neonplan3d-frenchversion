@@ -37,6 +37,7 @@ export function stateText(hass: HomeAssistant | undefined, st: HassEntity | unde
       return running && what ? what : translateState(hass, st.state);
     }
     case "lock":
+    case "camera":
       return translateState(hass, st.state);
     case "binary": {
       const opening = ["door", "window", "opening", "garage_door"].includes(a.device_class as string);

@@ -24,6 +24,8 @@ import {
   RepeatWrapping,
   Scene,
   SRGBColorSpace,
+  TextureLoader,
+  type Texture,
   Float32BufferAttribute,
   BufferGeometry as Geometry,
   Vector2,
@@ -32,7 +34,7 @@ import {
   type BufferGeometry,
   type Material,
 } from "three";
-import type { Building, Floor } from "../model.ts";
+import type { Building, Floor, Furniture } from "../model.ts";
 import { centroid } from "../model.ts";
 import { buildFloorGeometry, SLAB, stairHoles, type FloorGeometry } from "./build.ts";
 import { OrbitControls } from "./controls.ts";
@@ -104,6 +106,8 @@ export interface FlowPiece {
 export interface ScreenState {
   color: [number, number, number];
   level: number;
+  /** Picture of what is running (app icon or cover art from the media player), if any. */
+  picture?: string | null;
 }
 
 export interface PersonPin {
@@ -173,6 +177,7 @@ interface FloorView {
   geo: FloorGeometry;
   floorMesh: Mesh;
   shadowMesh: Mesh;
+  patternMesh: Mesh;
   glowMesh: Mesh;
   framesMesh: Mesh;
   glassMesh: Mesh;
@@ -181,6 +186,8 @@ interface FloorView {
   lampMesh: Mesh;
   screenMesh: Mesh;
   screenSig: string;
+  /** Pictures shown on lit screens, by furniture id. */
+  screenPics: Map<string, { url: string; mesh: Mesh; texture: Texture | null }>;
   /** Content signatures: meshes are only rebuilt when these change. */
   flowLayout: string;
   glowSig: string;
@@ -283,6 +290,7 @@ export class FloorplanViewer {
   setQuality(quality: Quality): void {
     const canvas = this.renderer.domElement;
     const next = this.makeRenderer(quality);
+    this.applyDetail();
     canvas.replaceWith(next.domElement);
     this.renderer.dispose();
     this.renderer = next;
@@ -530,6 +538,10 @@ export class FloorplanViewer {
 
   private clear(): void {
     for (const fv of this.floors) {
+      for (const pic of fv.screenPics.values()) {
+        (pic.mesh.material as Material).dispose();
+        pic.texture?.dispose();
+      }
       fv.group.traverse((o) => {
         const g = (o as Mesh).geometry as BufferGeometry | undefined;
         g?.dispose();
@@ -738,6 +750,7 @@ export class FloorplanViewer {
         geo,
         floorMesh,
         shadowMesh,
+        patternMesh: pattern,
         glowMesh,
         framesMesh,
         glassMesh,
@@ -746,6 +759,7 @@ export class FloorplanViewer {
         lampMesh,
         screenMesh,
         screenSig: "",
+        screenPics: new Map(),
         flowLayout: "",
         glowSig: "",
         lampSig: "",
@@ -782,6 +796,23 @@ export class FloorplanViewer {
     }
     this.applyTargets(previous.size === 0);
     this.applyHighlight();
+    this.applyDetail();
+  }
+
+  /**
+   * Tablet level: leave out the passes that cover the whole picture but add little (floor patterns,
+   * baked floor shadows, the ground grid, the wide glow around cables).
+   */
+  private applyDetail(): void {
+    const low = this.lowQuality;
+    this.ground.visible = !low && this.floors.some((f) => f.floor.rooms.length > 0);
+    for (const fv of this.floors) {
+      fv.patternMesh.visible = !low;
+      fv.shadowMesh.visible = !low && fv.o > 0.98;
+      fv.flowLayout = "";
+      this.buildFlows(fv);
+    }
+    this.invalidate();
   }
 
   /** True when the house view shows several floors (floor labels instead of room labels). */
@@ -818,7 +849,8 @@ export class FloorplanViewer {
   private applyFloor(fv: FloorView): void {
     fv.group.position.y = fv.floor.elevation + fv.y;
     fv.group.visible = fv.o > 0.02;
-    fv.shadowMesh.visible = fv.o > 0.98; // a multiply layer cannot fade, so it goes with the first step
+    // a multiply layer cannot fade, so it goes with the first step; the tablet level leaves it out
+    fv.shadowMesh.visible = fv.o > 0.98 && !this.lowQuality;
     if (Math.abs(fv.appliedO - fv.o) < 1e-3) return;
     fv.appliedO = fv.o;
     const m = fv.materials;
@@ -839,6 +871,11 @@ export class FloorplanViewer {
     m.flow.opacity = fv.o;
     m.lamps.opacity = fv.o;
     m.screens.opacity = fv.o;
+    for (const pic of fv.screenPics.values()) {
+      const mat = pic.mesh.material as MeshBasicMaterial;
+      mat.transparent = fv.o < 0.999;
+      mat.opacity = fv.o;
+    }
   }
 
   /** Advance the floor animation; returns true while something still moves. */
@@ -957,7 +994,8 @@ export class FloorplanViewer {
   private buildScreens(fv: FloorView): void {
     const items = fv.floor.furniture.filter((f) => this.screens.has(f.id));
     const sig = items.map((f) => `${f.id}:${f.x},${f.z},${f.rotation},${f.w},${f.d},${f.h}:${JSON.stringify(this.screens.get(f.id))}`).join(";");
-    if (sig === fv.screenSig && fv.screenMesh.geometry.getAttribute("position")) return;
+    // pictures follow the screens even when only they changed
+    if (sig === fv.screenSig && fv.screenMesh.geometry.getAttribute("position")) return this.updateScreenPictures(fv, items);
     fv.screenSig = sig;
     const buf = new GeoBuffer();
     for (const f of items) {
@@ -987,6 +1025,73 @@ export class FloorplanViewer {
     fv.screenMesh.geometry.dispose();
     fv.screenMesh.geometry = buf.geometry();
     fv.screenMesh.visible = buf.count > 0;
+    this.updateScreenPictures(fv, items);
+  }
+
+  /** App icons or cover art on the screens, fitted into the screen with their own aspect ratio. */
+  private updateScreenPictures(fv: FloorView, items: Furniture[]): void {
+    const wanted = new Map(items.map((f) => [f.id, f]).filter(([id]) => !!this.screens.get(id as string)?.picture) as [string, Furniture][]);
+    for (const [id, pic] of fv.screenPics) {
+      if (wanted.has(id) && this.screens.get(id)!.picture === pic.url) continue;
+      fv.group.remove(pic.mesh);
+      pic.mesh.geometry.dispose();
+      (pic.mesh.material as Material).dispose();
+      pic.texture?.dispose();
+      fv.screenPics.delete(id);
+    }
+    for (const [id, f] of wanted) {
+      const st = this.screens.get(id)!;
+      const r = screenRect(f);
+      if (!r) continue;
+      let pic = fv.screenPics.get(id);
+      if (!pic) {
+        const mesh = new Mesh(new PlaneGeometry(1, 1), new MeshBasicMaterial({ color: 0xffffff }));
+        mesh.visible = false;
+        mesh.renderOrder = 5;
+        pic = { url: st.picture!, mesh, texture: null };
+        fv.screenPics.set(id, pic);
+        fv.group.add(mesh);
+        const entry = pic;
+        new TextureLoader().load(
+          st.picture!,
+          (tex) => {
+            if (fv.screenPics.get(id) !== entry) {
+              tex.dispose();
+              return;
+            }
+            tex.colorSpace = SRGBColorSpace;
+            entry.texture = tex;
+            const mat = entry.mesh.material as MeshBasicMaterial;
+            mat.map = tex;
+            mat.needsUpdate = true;
+            this.placeScreenPicture(entry.mesh, f, r, tex);
+            entry.mesh.visible = true;
+            this.invalidate();
+          },
+          undefined,
+          // no picture (e.g. an expired token): the screen keeps its coloured glow
+          () => undefined,
+        );
+      }
+      (pic.mesh.material as MeshBasicMaterial).color.setScalar(0.45 + 0.55 * st.level);
+      if (pic.texture) this.placeScreenPicture(pic.mesh, f, r, pic.texture);
+    }
+  }
+
+  private placeScreenPicture(mesh: Mesh, f: Furniture, r: { x0: number; x1: number; y0: number; y1: number; z: number }, tex: Texture): void {
+    const img = tex.image as { width?: number; height?: number } | undefined;
+    const aspect = img?.width && img?.height ? img.width / img.height : 16 / 9;
+    const sw = r.x1 - r.x0 - 0.04;
+    const sh = r.y1 - r.y0 - 0.04;
+    // contain: the whole picture is visible, letterboxed by the dark screen around it
+    const w = Math.min(sw, sh * aspect);
+    const h = w / aspect;
+    const a = (f.rotation * Math.PI) / 180;
+    const cx = (r.x0 + r.x1) / 2;
+    const z = r.z + 0.008;
+    mesh.scale.set(w, h, 1);
+    mesh.rotation.set(0, -a, 0);
+    mesh.position.set(f.x + cx * Math.cos(a) - z * Math.sin(a), (r.y0 + r.y1) / 2, f.z + cx * Math.sin(a) + z * Math.cos(a));
   }
 
   private flowSeconds(): number {
@@ -1019,10 +1124,12 @@ export class FloorplanViewer {
         sides.push([-dir[2] / l, 0, dir[0] / l]);
       } else sides.push([1, 0, 0], [0, 0, 1]);
       // a wide, faint halo under a bright core
-      const layers: [number, number][] = [
-        [CABLE_HALO, 0.3],
-        [CABLE_WIDTH, 1],
-      ];
+      const layers: [number, number][] = this.lowQuality
+        ? [[CABLE_WIDTH * 1.4, 1]]
+        : [
+            [CABLE_HALO, 0.3],
+            [CABLE_WIDTH, 1],
+          ];
       for (const [width, strength] of layers) {
         for (const n of sides) {
           const h = width / 2;
@@ -1135,7 +1242,7 @@ export class FloorplanViewer {
       y = Math.min(y, fv.floor.elevation + Math.min(0, fv.ty));
       for (const room of fv.floor.rooms) for (const [x, z] of room.points) box.expandByPoint(new Vector3(x, 0, z));
     }
-    this.ground.visible = !box.isEmpty();
+    this.ground.visible = !box.isEmpty() && !this.lowQuality;
     if (box.isEmpty()) return;
     const c = box.getCenter(new Vector3());
     const s = box.getSize(new Vector3());

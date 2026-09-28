@@ -19,7 +19,7 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
 - **Furniture library** of 40 detailed low-poly models in six sections (living, dining, kitchen, sleeping, bath & laundry, work), e.g. sofa, corner bench, bar stool, office chair, wall and tall kitchen units with oven, kitchen island, dishwasher, washing machine, dryer, bunk bed, chest of drawers, coat rack, wall TV and stairs.
   - Top-view symbols in the plan show how an item is turned; a handle in front of the selected item rotates it (15° steps).
   - Dragged near a wall, an item turns its back (or side) to the wall and sits flush; Alt moves freely.
-  - Electric furniture can be linked to entities (automatically from the room's area, or by hand): a TV shows its media player, with the screen glowing in the colour of the running app (Netflix, YouTube, …) and the app or title on its label; a power sensor adds watts and an energy cable.
+  - Electric furniture can be linked to entities (automatically from the room's area, or by hand): a TV shows its media player, with the picture the media player provides (app icon or cover art) on its screen, glowing in the colour of the running app, and the app or title on its label; a power sensor adds watts and an energy cable.
 - **Stairs** open the ceiling of the floor above.
 - **Floor materials** (wood, oak, tiles, carpet, stone, concrete) show as subtle patterns in 3D.
 - **Area link**: each room can be linked to a Home Assistant area.
@@ -37,8 +37,9 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
   - Blinds are drawn in front of their windows and follow the cover position; window contacts open or tilt the sash (a second sensor can mark "tilted"); open windows glow warm. Blinds and contacts are matched with windows automatically by area and can be set by hand.
   - Device markers with their state; lights that are on cast a glow on the floor that follows brightness and colour.
   - Tap a light or switch to toggle it; a long press opens Home Assistant's details dialog.
+  - The *Tablet* level (also chosen automatically on Fire tablets) leaves out floor patterns, baked floor shadows, the ground grid and the wide cable glow.
   - Quality levels *Auto*, *Tablet* and *High* and an *FPS* display (frame rate, slowest frame, draw calls, quality level), both remembered per device.
-- **Room panel** (next to the 3D view, at the bottom on phones and portrait tablets): lights with brightness, colour temperature and colours, covers, heating, media, switches, sensors, scenes and scripts of the room's area.
+- **Room panel** (next to the 3D view, at the bottom on phones and portrait tablets): lights with brightness, colour temperature and colours, covers, heating, media, switches, cameras (snapshots every few seconds, a tap opens the live view), sensors, scenes and scripts of the room's area.
   - Only renders when something changes, so it uses no GPU while idle.
 - **Energy flow**: place the meter in the editor and choose power sensors for grid, solar, battery (with charge level) and an optional tariff sensor.
   - Glowing cables run from the meter along the wall bases and through the walls to every placed device that reports power (its own sensor or a power sensor of the same device); cables shared by several devices carry their sum.
