@@ -19,6 +19,8 @@ import {
   MeshBasicMaterial,
   MultiplyBlending,
   PerspectiveCamera,
+  Points,
+  PointsMaterial,
   PlaneGeometry,
   Raycaster,
   RepeatWrapping,
@@ -96,6 +98,10 @@ export interface DeviceMarker {
   pin?: boolean;
   /** The 3D lamp can be tapped (it has an entity). */
   pickable?: boolean;
+  /** A colour effect runs (colour loop …): the colour is animated in 3D. */
+  effect?: boolean;
+  /** Pendant shape: shade (default), globe, cone or drum. */
+  variant?: string | null;
   /** Formatted power, e.g. "85 W". */
   powerText?: string;
 }
@@ -167,6 +173,9 @@ const WALL_LAMP_Y = 1.75;
 /** Lamps that hang from the ceiling (hidden in the cut view). */
 const HANGING = new Set<LampModel>(["ceiling", "downlight", "spot", "panel", "pendant", "strip"]);
 const FLASH_MS = 450;
+const EFFECT_MS = 125;
+/** Turns of the colour wheel per second while a colour effect runs. */
+const EFFECT_SPEED = 0.08;
 const LAMP_SIZE: Record<LampModel, [number, number, number]> = {
   ceiling: [0.4, 0.4, 0.08],
   downlight: [0.1, 0.1, 0.02],
@@ -193,6 +202,8 @@ interface FloorMaterials {
   blinds: MeshBasicMaterial;
   flow: MeshBasicMaterial;
   lamps: MeshBasicMaterial;
+  halos: PointsMaterial;
+  cones: MeshBasicMaterial;
   screens: MeshBasicMaterial;
 }
 
@@ -213,6 +224,9 @@ interface FloorView {
   blindsMesh: Mesh;
   flowMesh: Mesh;
   lampMesh: Mesh;
+  /** Soft glow around lit lamps, and light cones under spots (quality "High"). */
+  haloMesh: Points;
+  coneMesh: Mesh;
   /** Triangle ranges of lamps (entity ids), furniture walls mesh and openings, for tapping. */
   lampTris: { id: string; start: number; end: number }[];
   frameTris: { id: string; start: number; end: number }[];
@@ -297,6 +311,11 @@ export class FloorplanViewer {
   private worstFrame = 0;
   private lastStatsFrame = 0;
   private lowQuality = false;
+  private highQuality = false;
+  /** Seconds used for animated colour effects (advanced in steps while an effect runs). */
+  private effectTime = 0;
+  private effectTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly haloTexture: CanvasTexture;
   private fpsStart = 0;
 
   constructor(host: HTMLElement, options: ViewerOptions = {}) {
@@ -310,6 +329,7 @@ export class FloorplanViewer {
     this.patternTexture = makePatternTexture();
     this.blindTexture = makeBlindTexture();
     this.groundTexture = makeGroundTexture();
+    this.haloTexture = makeHaloTexture();
     this.ground = new Mesh(
       new PlaneGeometry(1, 1),
       new MeshBasicMaterial({ map: this.groundTexture, transparent: true, blending: AdditiveBlending, depthWrite: false }),
@@ -524,6 +544,7 @@ export class FloorplanViewer {
     this.disposed = true;
     cancelAnimationFrame(this.frame);
     clearTimeout(this.flowTimer);
+    clearTimeout(this.effectTimer);
     this.resizeObserver.disconnect();
     document.removeEventListener("visibilitychange", this.onVisibility);
     this.controls.dispose();
@@ -533,6 +554,7 @@ export class FloorplanViewer {
     this.patternTexture.dispose();
     this.blindTexture.dispose();
     this.groundTexture.dispose();
+    this.haloTexture.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.labels.remove();
@@ -548,6 +570,7 @@ export class FloorplanViewer {
   private makeRenderer(quality: Quality): WebGLRenderer {
     const low = quality === "low" || (quality === "auto" && isLowEnd());
     this.lowQuality = low;
+    this.highQuality = quality === "high";
     const renderer = new WebGLRenderer({ antialias: !low, alpha: true, powerPreference: low ? "low-power" : "default" });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, low ? 1 : quality === "high" ? 2.5 : 2));
     renderer.setClearColor(0x000000, 0);
@@ -661,7 +684,8 @@ export class FloorplanViewer {
     const H = fv.floor.height;
     const out: LightSource[] = [];
     for (const d of this.devices) {
-      if (d.floorId !== fv.floor.id || !d.glow) continue;
+      const glow = this.glowOf(d);
+      if (d.floorId !== fv.floor.id || !glow) continue;
       const room = roomIndexAt(fv.floor, d.x, d.z);
       if (room < 0) continue;
       const [w, , h] = d.size ?? (d.lamp ? LAMP_SIZE[d.lamp] : [0.3, 0.3, 0.3]);
@@ -679,14 +703,14 @@ export class FloorplanViewer {
         strip: [H - 0.05, "ceiling"],
       };
       const [y, kind] = d.lamp ? kinds[d.lamp] : [d.y, "omni" as LightKind];
-      const color = d.glow.color;
+      const color = glow.color;
       if (d.lamp === "strip") {
         // a strip lights along its length: three sources spread over it
         const a = ((d.rotation ?? 0) * Math.PI) / 180;
         for (const t of [-1 / 3, 0, 1 / 3]) {
-          out.push({ x: d.x + Math.cos(a) * w * t, y, z: d.z + Math.sin(a) * w * t, color, level: d.glow.level * 0.55, kind, room });
+          out.push({ x: d.x + Math.cos(a) * w * t, y, z: d.z + Math.sin(a) * w * t, color, level: glow.level * 0.55, kind, room });
         }
-      } else out.push({ x: d.x, y, z: d.z, color, level: d.glow.level, kind, room });
+      } else out.push({ x: d.x, y, z: d.z, color, level: glow.level, kind, room });
     }
     return out;
   }
@@ -762,6 +786,16 @@ export class FloorplanViewer {
       blinds: makeFoldable(new MeshBasicMaterial({ map: this.blindTexture, vertexColors: true, side: DoubleSide }), mask),
       flow: flowMaterial(this.flowTime),
       lamps: new MeshBasicMaterial({ vertexColors: true }),
+      halos: new PointsMaterial({
+        map: this.haloTexture,
+        size: 0.9,
+        sizeAttenuation: true,
+        vertexColors: true,
+        transparent: true,
+        blending: AdditiveBlending,
+        depthWrite: false,
+      }),
+      cones: new MeshBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false, side: DoubleSide }),
       screens: new MeshBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false, side: DoubleSide }),
     };
   }
@@ -792,6 +826,12 @@ export class FloorplanViewer {
       glassMesh.renderOrder = 4;
       const lampMesh = new Mesh(new Geometry(), materials.lamps);
       lampMesh.visible = false;
+      const haloMesh = new Points(new Geometry(), materials.halos);
+      haloMesh.visible = false;
+      haloMesh.renderOrder = 7;
+      const coneMesh = new Mesh(new Geometry(), materials.cones);
+      coneMesh.visible = false;
+      coneMesh.renderOrder = 7;
       const screenMesh = new Mesh(new Geometry(), materials.screens);
       screenMesh.visible = false;
       screenMesh.renderOrder = 5;
@@ -816,6 +856,8 @@ export class FloorplanViewer {
         glassMesh,
         flowMesh,
         lampMesh,
+        haloMesh,
+        coneMesh,
         screenMesh,
         glassWalls,
       );
@@ -848,6 +890,8 @@ export class FloorplanViewer {
         blindsMesh,
         flowMesh,
         lampMesh,
+        haloMesh,
+        coneMesh,
         lampTris: [],
         frameTris: [],
         blindTris: [],
@@ -907,6 +951,7 @@ export class FloorplanViewer {
       fv.flowLayout = "";
       this.buildFlows(fv);
       this.buildLightSurface(fv);
+      this.buildLamps(fv);
     }
     this.invalidate();
   }
@@ -966,6 +1011,8 @@ export class FloorplanViewer {
     m.glassWall.opacity = fv.o;
     m.flow.opacity = fv.o;
     m.lamps.opacity = fv.o;
+    m.halos.opacity = fv.o;
+    m.cones.opacity = fv.o;
     m.screens.opacity = fv.o;
     for (const pic of fv.screenPics.values()) {
       const mat = pic.mesh.material as MeshBasicMaterial;
@@ -1038,6 +1085,18 @@ export class FloorplanViewer {
     return moving;
   }
 
+  /** Glow of a device, with the hue turning while a colour effect runs. */
+  private glowOf(d: DeviceMarker): DeviceMarker["glow"] {
+    if (!d.glow || !d.effect) return d.glow;
+    const c = new Color(...d.glow.color);
+    const hsl = { h: 0, s: 0, l: 0 };
+    c.getHSL(hsl);
+    // lamps start at different points of the colour wheel, so a room does not blink in sync
+    const offset = (d.x * 0.37 + d.z * 0.61) % 1;
+    c.setHSL((hsl.h + this.effectTime * EFFECT_SPEED + offset) % 1, Math.max(0.6, hsl.s), Math.max(0.45, hsl.l));
+    return { color: [c.r, c.g, c.b], level: d.glow.level };
+  }
+
   /** Lamp models of the lights on a floor, merged into one mesh; lit shades take the light colour. */
   private buildLamps(fv: FloorView): void {
     const now = performance.now();
@@ -1047,11 +1106,12 @@ export class FloorplanViewer {
     };
     const sig =
       this.wallMode +
+      (this.lowQuality ? "L" : this.highQuality ? "H" : "M") +
       this.devices
         .filter((d) => d.floorId === fv.floor.id && d.lamp)
         .map(
           (d) =>
-            `${d.id},${d.lamp},${d.x},${d.z},${d.rotation ?? 0},${d.size?.join("/")},${d.base ?? 0},${flash(d.id)},${d.glow ? `${d.glow.level.toFixed(3)},${d.glow.color.map((c) => c.toFixed(3)).join("/")}` : "off"}`,
+            `${d.id},${d.lamp},${d.variant},${d.x},${d.z},${d.rotation ?? 0},${d.size?.join("/")},${d.base ?? 0},${flash(d.id)},${this.glowOf(d) ? `${this.glowOf(d)!.level.toFixed(3)},${this.glowOf(d)!.color.map((c) => c.toFixed(3)).join("/")}` : "off"}`,
         )
         .join(";");
     if (sig === fv.lampSig && fv.lampMesh.geometry.getAttribute("position")) return;
@@ -1064,9 +1124,10 @@ export class FloorplanViewer {
       // hanging lamps would float above cut walls
       if (HANGING.has(d.lamp) && this.wallMode === "cut") continue;
       const start = buf.count;
+      const glow = this.glowOf(d);
       // a lit shade glows in the light's colour, brighter with more brightness; a tap flashes it white
-      const k = d.glow ? 0.55 + 0.45 * d.glow.level : 0;
-      const shadeC = d.glow ? new Color(...(d.glow.color.map((c) => Math.min(1, c * k)) as [number, number, number])) : new Color(LAMP_SHADE);
+      const k = glow ? 0.55 + 0.45 * glow.level : 0;
+      const shadeC = glow ? new Color(...(glow.color.map((c) => Math.min(1, c * k)) as [number, number, number])) : new Color(LAMP_SHADE);
       const f = flash(d.id);
       if (f > 0) shadeC.lerp(new Color(1, 1, 1), 0.7 * f);
       const shadeCol = shadeC.getHex();
@@ -1095,9 +1156,25 @@ export class FloorplanViewer {
         case "pendant": {
           const bottom = Math.max(0.4, H - h);
           cyl(0.06, H - 0.02, H, LAMP_BODY, LAMP_BODY, 8);
-          cyl(0.008, bottom + 0.2, H - 0.02, LAMP_BODY, LAMP_BODY, 5);
-          cyl(r * 0.35, bottom + 0.14, bottom + 0.2, shadeCol, shadeCol, 12);
-          cyl(r, bottom, bottom + 0.14, shadeCol, shadeCol, 16);
+          const shapeTop = d.variant === "globe" ? bottom + 2 * r : d.variant === "drum" ? bottom + 0.24 : bottom + 0.2;
+          cyl(0.008, shapeTop, H - 0.02, LAMP_BODY, LAMP_BODY, 5);
+          if (d.variant === "globe") {
+            // stacked rings approximate a ball
+            const n = 7;
+            for (let i = 0; i < n; i++) {
+              const a0 = Math.PI * (i / n);
+              const a1 = Math.PI * ((i + 1) / n);
+              cyl(r * Math.max(0.2, Math.sin((a0 + a1) / 2)), bottom + r - r * Math.cos(a0), bottom + r - r * Math.cos(a1), shadeCol, shadeCol, 14);
+            }
+          } else if (d.variant === "cone") {
+            const n = 4;
+            for (let i = 0; i < n; i++) cyl(r * (0.25 + (0.75 * (n - i)) / n), bottom + 0.06 * i, bottom + 0.06 * (i + 1), shadeCol, shadeCol, 16);
+          } else if (d.variant === "drum") {
+            cyl(r, bottom, bottom + 0.24, shadeCol, shadeCol, 18);
+          } else {
+            cyl(r * 0.35, bottom + 0.14, bottom + 0.2, shadeCol, shadeCol, 12);
+            cyl(r, bottom, bottom + 0.14, shadeCol, shadeCol, 16);
+          }
           break;
         }
         case "downlight":
@@ -1151,6 +1228,70 @@ export class FloorplanViewer {
     fv.lampMesh.geometry.dispose();
     fv.lampMesh.geometry = buf.geometry();
     fv.lampMesh.visible = buf.count > 0;
+    this.buildHalos(fv);
+  }
+
+  /** Glow points at lit shades (not at the tablet level) and light cones under spots (level "High"). */
+  private buildHalos(fv: FloorView): void {
+    const H = fv.floor.height;
+    const hp: number[] = [];
+    const hc: number[] = [];
+    const cones = new GeoBuffer();
+    for (const d of this.devices) {
+      const glow = this.glowOf(d);
+      if (d.floorId !== fv.floor.id || !d.lamp || !glow) continue;
+      if (HANGING.has(d.lamp) && this.wallMode === "cut") continue;
+      const [w, dd, h] = d.size ?? LAMP_SIZE[d.lamp];
+      const base = d.base ?? 0;
+      const ang = ((d.rotation ?? 0) * Math.PI) / 180;
+      const y = {
+        ceiling: H - 0.07,
+        downlight: H - 0.03,
+        spot: H - h,
+        panel: H - 0.03,
+        pendant: Math.max(0.4, H - h) + 0.08,
+        floor: h - 0.15,
+        uplight: h,
+        table: base + h - 0.09,
+        wall: WALL_LAMP_Y + h / 2,
+        strip: H - 0.05,
+      }[d.lamp];
+      // a wall light glows in front of the wall
+      const push = (x: number, z: number, k = 1) => {
+        hp.push(x, y, z);
+        hc.push(...glow.color.map((c) => c * glow.level * 0.7 * k));
+      };
+      if (d.lamp === "strip") for (const t of [-0.4, -0.13, 0.13, 0.4]) push(d.x + Math.cos(ang) * w * t, d.z + Math.sin(ang) * w * t, 0.6);
+      else if (d.lamp === "wall") push(d.x - Math.sin(ang) * (dd / 2 + 0.05), d.z + Math.cos(ang) * (dd / 2 + 0.05));
+      else push(d.x, d.z);
+      if (this.highQuality && (d.lamp === "downlight" || d.lamp === "spot")) {
+        // soft cone from the lamp to the floor, fading towards the floor
+        const top = new Color(...glow.color.map((c) => c * 0.09 * glow.level) as [number, number, number]);
+        const bottom = new Color(0, 0, 0);
+        const r0 = Math.max(0.03, w / 2);
+        const r1 = 0.45 + 0.35 * glow.level;
+        const n = 16;
+        for (let i = 0; i < n; i++) {
+          const a0 = (i / n) * Math.PI * 2;
+          const a1 = ((i + 1) / n) * Math.PI * 2;
+          const t0 = [d.x + Math.cos(a0) * r0, y, d.z + Math.sin(a0) * r0];
+          const t1 = [d.x + Math.cos(a1) * r0, y, d.z + Math.sin(a1) * r0];
+          const b0 = [d.x + Math.cos(a0) * r1, 0.02, d.z + Math.sin(a0) * r1];
+          const b1 = [d.x + Math.cos(a1) * r1, 0.02, d.z + Math.sin(a1) * r1];
+          cones.tri(t0, b0, b1, top, bottom, bottom);
+          cones.tri(t0, b1, t1, top, bottom, top);
+        }
+      }
+    }
+    const g = new Geometry();
+    g.setAttribute("position", new Float32BufferAttribute(hp, 3));
+    g.setAttribute("color", new Float32BufferAttribute(hc, 3));
+    fv.haloMesh.geometry.dispose();
+    fv.haloMesh.geometry = g;
+    fv.haloMesh.visible = hp.length > 0 && !this.lowQuality;
+    fv.coneMesh.geometry.dispose();
+    fv.coneMesh.geometry = cones.geometry();
+    fv.coneMesh.visible = cones.count > 0;
   }
 
   /** Lit screens of a floor: a bright panel in the app colour and a faint glow around it. */
@@ -1496,7 +1637,20 @@ export class FloorplanViewer {
     // the energy flow counts as motion here, so its frame rate shows too
     this.reportStats(now, moving || this.flowActive);
     if (moving) this.invalidate();
-    else if (this.flowActive && !this.flowTimer) {
+    const effects = this.devices.some((d) => d.effect && d.glow);
+    if (effects && !this.effectTimer && !document.hidden) {
+      // colour effects: a few steps per second are enough and keep the tablet idle in between
+      this.effectTimer = setTimeout(() => {
+        this.effectTimer = undefined;
+        this.effectTime += EFFECT_MS / 1000;
+        for (const fv of this.floors) {
+          this.buildLamps(fv);
+          this.buildGlow(fv);
+        }
+        this.invalidate();
+      }, EFFECT_MS);
+    }
+    if (!moving && this.flowActive && !this.flowTimer) {
       // only the energy flow moves: about 30 frames per second are enough
       this.flowTimer = setTimeout(() => {
         this.flowTimer = undefined;
@@ -1794,6 +1948,25 @@ function flowMaterial(time: { value: number }): MeshBasicMaterial {
   };
   m.customProgramCacheKey = () => "fp3d-flow";
   return m;
+}
+
+/** Soft round glow for the halos around lamps. */
+function makeHaloTexture(): CanvasTexture {
+  const size = 64;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, "rgba(255,255,255,0.9)");
+  g.addColorStop(0.2, "rgba(255,255,255,0.45)");
+  g.addColorStop(0.55, "rgba(255,255,255,0.1)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new CanvasTexture(canvas);
+  tex.colorSpace = SRGBColorSpace;
+  return tex;
 }
 
 /** Ground below the house: a wide 1 m grid that fades out towards the edges. */

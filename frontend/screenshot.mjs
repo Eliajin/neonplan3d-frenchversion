@@ -43,6 +43,7 @@ const shots = [
   { name: "view-hall", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Flur" },
   { name: "view-tablet-level", query: "?fp3d_stats", width: 1280, height: 800, click: "Tablet", then: "Erdgeschoss" },
   { name: "view-tap-lamp", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Küche", tapAt: [688, 395] },
+  { name: "view-high", query: "", width: 1280, height: 800, click: "Hoch", then: "Bad" },
   { name: "view-cut", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Schnitt" },
   { name: "view-room-panel", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Wohnzimmer" },
   { name: "tablet-room", query: "", width: 800, height: 1280, click: "Erdgeschoss", then: "Wohnzimmer" },

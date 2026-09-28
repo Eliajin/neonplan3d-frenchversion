@@ -323,6 +323,8 @@ export class Fp3dView3d extends LitElement {
       size: [f.w, f.d, f.h],
       base,
       pickable: !!entity,
+      effect: !!st && st.state === "on" && typeof st.attributes.effect === "string" && !/^(none|off|solid|static|normal)$/i.test(st.attributes.effect),
+      variant: f.variant,
       fromFurniture: true,
     };
   }

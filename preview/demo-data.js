@@ -109,10 +109,10 @@ const DEVICES = [
   light("flur", "Flurlicht", "flur", true, { brightness: 120 }),
   light("kinderzimmer", "Kinderzimmer Decke", "kinderzimmer", true, { brightness: 150 }),
   light("schreibtisch", "Schreibtischlampe", "arbeitszimmer", true, { color_temp_kelvin: 4500 }),
-  light("esstisch", "Esstisch Pendel", "kueche", false),
+  light("esstisch", "Esstisch Pendel", "kueche", true, { brightness: 140 }),
   light("kueche_links", "Küche links", "kueche", true, { brightness: 230, color_mode: "hs", rgb_color: [255, 70, 40] }),
   light("kueche_rechts", "Küche rechts", "kueche", true, { brightness: 230, color_mode: "hs", rgb_color: [60, 110, 255] }),
-  light("led_band", "LED Band", "wohnzimmer", true, { brightness: 160, color_mode: "hs", rgb_color: [120, 90, 255] }),
+  light("led_band", "LED Band", "wohnzimmer", true, { brightness: 160, color_mode: "hs", rgb_color: [120, 90, 255], effect: "colorloop", effect_list: ["colorloop", "none"] }),
   entity("cover.wohnzimmer", "wohnzimmer", "open", { friendly_name: "Wohnzimmer Rollladen", current_position: 70, supported_features: 15 }),
   entity("cover.kueche", "kueche", "open", { friendly_name: "Rollladen Küche", current_position: 40, supported_features: 15 }),
   entity("climate.wohnzimmer", "wohnzimmer", "heat", {
@@ -291,7 +291,7 @@ DEMO_BUILDING.floors[0].furniture = [
   item("kitchen_wall", 8.9, 0.18, 0.9, 0.35, 0.7),
   item("corner_bench", 7.1, 3.55, 2.0, 1.6, 0.9, 270),
   item("table", 8.0, 2.9, 1.3, 0.85, 0.75),
-  { ...item("lamp_pendant", 8.0, 2.9, 0.45, 0.45, 0.85), entity: "light.esstisch" },
+  { ...item("lamp_pendant", 8.0, 2.9, 0.3, 0.3, 0.95), entity: "light.esstisch", variant: "globe" },
   { ...item("lamp_ceiling", 7.0, 2.1, 0.45, 0.45, 0.08), entity: "light.kueche_links" },
   { ...item("lamp_ceiling", 9.0, 2.1, 0.45, 0.45, 0.08), entity: "light.kueche_rechts" },
   ...[

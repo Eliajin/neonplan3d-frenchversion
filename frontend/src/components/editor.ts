@@ -1832,6 +1832,18 @@ export class Fp3dEditor extends LitElement {
         ${this.num(this.t("rotation"), f.rotation, (v) => this.updateFurniture({ rotation: ((v % 360) + 360) % 360 }), 1)}
       </div>
       ${f.type === "stairs" ? html`<p class="fp3d-sub">${this.t("stairs_hint")}</p>` : nothing}
+      ${f.type === "lamp_pendant"
+        ? html`<div class="fp3d-form">
+            <label class="fp3d-field fp3d-wide"
+              >${this.t("pendant_shape")}
+              <select ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ variant: (e.target as HTMLSelectElement).value || null })}>
+                ${(["", "globe", "cone", "drum"] as const).map(
+                  (v) => html`<option value=${v} ?selected=${(f.variant ?? "") === v}>${this.t(`pendant_${v || "shade"}` as I18nKey)}</option>`,
+                )}
+              </select></label
+            >
+          </div>`
+        : nothing}
       ${ELECTRIC_FURNITURE.has(f.type) ? this.renderFurnitureLinks(f) : nothing}
       ${admin
         ? html`<div class="fp3d-actions">
