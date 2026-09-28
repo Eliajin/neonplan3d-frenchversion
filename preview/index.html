@@ -80,6 +80,8 @@
             case "floorplan_3d/building/get":
               return { building: structuredClone(building), revision };
             case "floorplan_3d/building/save":
+              // ?savefail simulates a backend that still runs an older version
+              if (params.has("savefail")) throw { code: "invalid_format", message: "extra keys not allowed @ data['building']['floors'][0]['furniture'][0]['entity']" };
               building = structuredClone(msg.building);
               revision += 1;
               for (const cb of listeners) cb({ revision });

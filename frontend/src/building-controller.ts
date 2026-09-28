@@ -8,11 +8,46 @@ import type { HomeAssistant } from "./types.ts";
 export type SaveState = "idle" | "saving" | "saved" | "error";
 
 const SAVE_DELAY = 700;
+/** Edits that could not be saved are kept here, so a reload does not lose them. */
+const DRAFT_KEY = "floorplan_3d.unsaved";
+
+/** Version of this frontend, set by the build (see build.mjs). */
+declare const __FP3D_VERSION__: string;
+export const FRONTEND_VERSION = typeof __FP3D_VERSION__ === "string" ? __FP3D_VERSION__ : "dev";
+
+export interface Draft {
+  building: Building;
+  savedAt: number;
+}
+
+function readDraft(): Draft | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    return raw ? (JSON.parse(raw) as Draft) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(draft: Draft | null): void {
+  try {
+    if (draft) localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    else localStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // storage full or unavailable: the edit stays until the page is closed
+  }
+}
 
 export class BuildingController implements ReactiveController {
   building: Building | null = null;
   error: string | null = null;
   saveState: SaveState = "idle";
+  /** Why the last save failed (message from the backend). */
+  saveError: string | null = null;
+  /** Integration version the backend runs (differs from the frontend until Home Assistant restarts). */
+  backendVersion: string | null = null;
+  /** Unsaved edits from an earlier session, offered for restoring. */
+  draft: Draft | null = null;
 
   private readonly host: ReactiveControllerHost;
   private hass: HomeAssistant | null = null;
@@ -57,6 +92,26 @@ export class BuildingController implements ReactiveController {
     this.host.requestUpdate();
   }
 
+  /** The backend runs another version than this frontend: Home Assistant has to restart. */
+  get needsRestart(): boolean {
+    // an older backend that does not report its version yet rejects the new fields ("extra keys")
+    if (this.saveError && /extra keys not allowed/i.test(this.saveError)) return true;
+    return !!this.backendVersion && FRONTEND_VERSION !== "dev" && this.backendVersion !== FRONTEND_VERSION;
+  }
+
+  /** Take over the unsaved edits of an earlier session (they are saved right away). */
+  restoreDraft(): void {
+    const draft = this.draft;
+    this.draft = null;
+    if (draft) this.edit(normalizeBuilding(draft.building));
+  }
+
+  discardDraft(): void {
+    this.draft = null;
+    writeDraft(null);
+    this.host.requestUpdate();
+  }
+
   async flush(): Promise<void> {
     clearTimeout(this.saveTimer);
     if (this.saving) await this.saving;
@@ -71,9 +126,13 @@ export class BuildingController implements ReactiveController {
         this.ownRevisions.add(revision);
         this.revision = revision;
         this.saveState = this.pending ? "saving" : "saved";
+        this.saveError = null;
+        writeDraft(null);
       } catch (err) {
         this.saveState = "error";
-        this.error = errorText(err);
+        this.saveError = errorText(err);
+        // keep the edit: after a restart it can be restored and saved
+        writeDraft({ building, savedAt: Date.now() });
       }
       this.host.requestUpdate();
     })();
@@ -102,6 +161,8 @@ export class BuildingController implements ReactiveController {
     try {
       const res = await fetchBuilding(this.hass);
       this.building = normalizeBuilding(res.building);
+      this.backendVersion = res.version ?? null;
+      if (this.draft === null && !this.pending) this.draft = readDraft();
       this.revision = res.revision;
       this.error = null;
     } catch (err) {

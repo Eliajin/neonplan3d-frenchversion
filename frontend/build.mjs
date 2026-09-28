@@ -20,11 +20,13 @@ const common = {
 const viewerConfig = { ...common, entryPoints: ["src/viewer/viewer3d.ts"], outfile: `${out}/floorplan-3d-3d.js` };
 // The main bundle loads the 3D bundle with a hash of its content in the URL, so a new 3D bundle is
 // never taken from the browser cache (the integration version only changes after a restart).
+// the frontend knows its own version, to notice a backend that still runs an older one
+const version = JSON.parse(readFileSync("../custom_components/floorplan_3d/manifest.json", "utf8")).version;
 const mainConfig = (viewerHash) => ({
   ...common,
   entryPoints: ["src/main.ts"],
   outfile: `${out}/floorplan-3d.js`,
-  define: { __FP3D_VIEWER_HASH__: JSON.stringify(viewerHash) },
+  define: { __FP3D_VIEWER_HASH__: JSON.stringify(viewerHash), __FP3D_VERSION__: JSON.stringify(version) },
 });
 const hashOf = (file) => createHash("sha256").update(readFileSync(file)).digest("hex").slice(0, 12);
 

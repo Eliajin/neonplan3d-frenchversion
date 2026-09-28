@@ -53,6 +53,7 @@ const shots = [
   { name: "editor-energy", query: "", width: 1280, height: 1400, editor: true, openDetails: true, scrollSide: true },
   { name: "editor-device", query: "", width: 1280, height: 900, editor: true, editorState: { _deviceId: "light.wohnzimmer_decke", _roomId: "wohnen" } },
   { name: "editor-devlist", query: "", width: 1280, height: 1100, editor: true, editorState: { _roomId: "wohnen" }, scrollSide: true },
+  { name: "save-failed", query: "?savefail", width: 1280, height: 800, editor: true, editRoomName: "Wohnen", reload: true },
   { name: "tablet", query: "", width: 800, height: 1280, click: "Obergeschoss" },
   { name: "empty", query: "?empty", width: 1280, height: 800 },
 ];
@@ -64,7 +65,12 @@ for (const shot of shots) {
   page.on("console", (m) => m.type() === "error" && !m.location()?.url?.endsWith("favicon.ico") && errors.push(`${shot.name}: ${m.text()}`));
   await page.setViewport({ width: shot.width, height: shot.height, deviceScaleFactor: 1 });
   // every shot starts with the default settings (the panel remembers quality and FPS per device)
-  await page.evaluateOnNewDocument(() => localStorage.clear());
+  // (only on the first load of the tab, so a reload keeps what the page stored)
+  await page.evaluateOnNewDocument(() => {
+    if (sessionStorage.getItem("fp3d-shot")) return;
+    sessionStorage.setItem("fp3d-shot", "1");
+    localStorage.clear();
+  });
   await page.goto(base + shot.query, { waitUntil: "networkidle0" });
   await new Promise((r) => setTimeout(r, 1200));
   const clickText = async (text) => {
@@ -86,6 +92,20 @@ for (const shot of shots) {
   if (shot.select) await clickText(shot.select);
   if (shot.click) await clickText(shot.click);
   if (shot.then) await clickText(shot.then);
+  if (shot.editRoomName) {
+    // change a room name through the panel's data controller, wait for the failed save, then reload
+    await page.evaluate((name) => {
+      const panel = document.querySelector("floorplan-3d-panel");
+      const b = structuredClone(panel.data.building);
+      b.floors[0].rooms[0].name = name;
+      panel.data.edit(b);
+    }, shot.editRoomName);
+    await new Promise((r) => setTimeout(r, 1500));
+    if (shot.reload) {
+      await page.reload({ waitUntil: "networkidle0" });
+      await new Promise((r) => setTimeout(r, 1200));
+    }
+  }
   if (shot.editorState) {
     await page.evaluate((state) => {
       const editor = document.querySelector("floorplan-3d-panel").shadowRoot.querySelector("fp3d-editor");

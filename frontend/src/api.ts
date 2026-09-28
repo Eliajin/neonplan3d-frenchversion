@@ -3,7 +3,7 @@
 import type { Building } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
 
-export async function fetchBuilding(hass: HomeAssistant): Promise<{ building: Building; revision: number }> {
+export async function fetchBuilding(hass: HomeAssistant): Promise<{ building: Building; revision: number; version?: string }> {
   return hass.callWS({ type: "floorplan_3d/building/get" });
 }
 

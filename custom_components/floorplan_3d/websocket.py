@@ -7,6 +7,7 @@ from typing import Any
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.loader import async_get_integration
 import voluptuous as vol
 
 from .const import DOMAIN, SIGNAL_BUILDING_UPDATED
@@ -38,12 +39,19 @@ def _data(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: 
 
 
 @websocket_api.websocket_command({vol.Required("type"): "floorplan_3d/building/get"})
-@callback
-def ws_get_building(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Return the building and its revision."""
+@websocket_api.async_response
+async def ws_get_building(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Return the building, its revision and the running integration version.
+
+    The frontend compares the version with its own: after an update the new frontend files are served
+    at once, but the backend (and its validation) only changes with a restart.
+    """
     if (data := _data(hass, connection, msg)) is None:
         return
-    connection.send_result(msg["id"], {"building": data.building, "revision": data.revision})
+    integration = await async_get_integration(hass, DOMAIN)
+    connection.send_result(
+        msg["id"], {"building": data.building, "revision": data.revision, "version": str(integration.version)}
+    )
 
 
 @websocket_api.websocket_command(

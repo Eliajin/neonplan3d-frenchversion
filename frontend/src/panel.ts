@@ -173,11 +173,33 @@ export class Floorplan3dPanel extends LitElement {
             ? html`<span class="fp3d-save fp3d-save-${saveState}">${this.t(saveState === "saving" ? "saving" : saveState === "saved" ? "saved" : "save_error")}</span>`
             : nothing}
         </header>
+        ${this.renderNotices()}
         ${this.data.error && !b ? html`<p class="fp3d-message">${this.t("load_error")}: ${this.data.error}</p>` : nothing}
         ${!b && !this.data.error ? html`<p class="fp3d-message">${this.t("loading")}</p>` : nothing}
         ${b ? (this._mode === "editor" && this.isAdmin ? this.renderEditor(b) : this.renderView(b)) : nothing}
       </div>
     `;
+  }
+
+  /** Restart hint, save errors and unsaved edits from an earlier session. */
+  private renderNotices() {
+    const d = this.data;
+    const notices = [];
+    if (d.needsRestart) notices.push(html`<div class="fp3d-notice fp3d-notice-warn">${d.backendVersion ? this.t("needs_restart", { version: d.backendVersion }) : this.t("needs_restart_old")}</div>`);
+    if (d.saveState === "error" && d.saveError) {
+      notices.push(html`<div class="fp3d-notice fp3d-notice-error">${this.t("save_failed_detail", { error: d.saveError })}</div>`);
+    }
+    if (d.draft && this.isAdmin) {
+      const at = new Date(d.draft.savedAt).toLocaleString(this.hass?.language);
+      notices.push(
+        html`<div class="fp3d-notice">
+          <span>${this.t("draft_found", { time: at })}</span>
+          <button class="fp3d-btn fp3d-primary" @click=${() => d.restoreDraft()}>${this.t("draft_restore")}</button>
+          <button class="fp3d-btn" @click=${() => d.discardDraft()}>${this.t("draft_discard")}</button>
+        </div>`,
+      );
+    }
+    return notices.length ? html`<div class="fp3d-notices">${notices}</div>` : nothing;
   }
 
   private renderEditor(b: Building) {
@@ -319,6 +341,35 @@ export class Floorplan3dPanel extends LitElement {
         letter-spacing: -0.01em;
         margin: 0 4px 0 8px;
         white-space: nowrap;
+      }
+      .fp3d-notices {
+        display: grid;
+        gap: 6px;
+        padding: 8px 14px 0;
+      }
+      .fp3d-notice {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+        padding: 9px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--fp3d-line);
+        background: var(--fp3d-chrome-solid);
+        font-size: 13.5px;
+      }
+      .fp3d-notice span {
+        flex: 1;
+        min-width: 200px;
+      }
+      .fp3d-notice-warn {
+        border-color: rgba(255, 181, 71, 0.6);
+        color: var(--fp3d-warm);
+      }
+      .fp3d-notice-error {
+        border-color: rgba(255, 107, 139, 0.6);
+        color: var(--fp3d-danger);
+        word-break: break-word;
       }
       .fp3d-grow {
         flex: 1;
