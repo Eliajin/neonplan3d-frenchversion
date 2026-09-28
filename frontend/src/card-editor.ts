@@ -19,6 +19,9 @@ const DEFAULTS: Partial<CardConfig> = {
   theme: "neon",
   energy: true,
   room_panel: true,
+  fill: false,
+  controls: false,
+  fullscreen_button: false,
 };
 
 type Choice = [value: string, label: I18nKey];
@@ -82,7 +85,7 @@ export class Floorplan3dCardEditor extends LitElement {
     </label>`;
   }
 
-  private toggle(key: "explode" | "energy" | "room_panel" | "stats", label: I18nKey, hint?: I18nKey) {
+  private toggle(key: "explode" | "energy" | "room_panel" | "stats" | "controls" | "fullscreen_button", label: I18nKey, hint?: I18nKey) {
     const on = this.value[key];
     return html`<label class="toggle">
       <input type="checkbox" .checked=${on} @change=${(e: Event) => this.set(key, (e.target as HTMLInputElement).checked)} />
@@ -105,6 +108,13 @@ export class Floorplan3dCardEditor extends LitElement {
           </select>
         </label>
         <label class="field"
+          >${this.t("card_size")}
+          <select @change=${(e: Event) => this.set("fill", (e.target as HTMLSelectElement).value === "fill")}>
+            <option value="fixed" ?selected=${!v.fill}>${this.t("card_size_fixed")}</option>
+            <option value="fill" ?selected=${v.fill}>${this.t("card_size_fill")}</option>
+          </select>
+        </label>
+        <label class="field" ?hidden=${v.fill}
           >${this.t("card_height")}
           <input
             type="number"
@@ -122,6 +132,7 @@ export class Floorplan3dCardEditor extends LitElement {
         ${this.select("walls", "card_walls", [["auto", "walls_auto"], ["cut", "walls_cut"]], v.walls)}
         ${this.select("quality", "quality", [["auto", "quality_auto"], ["low", "quality_low"], ["high", "quality_high"]], v.quality)}
       </div>
+      ${v.fill ? html`<p class="hint">${this.t("card_fill_hint")}</p>` : nothing}
       <p class="hint">${this.t("card_quality_hint")}</p>
 
       <h3>${this.t("card_section_show")}</h3>
@@ -140,7 +151,9 @@ export class Floorplan3dCardEditor extends LitElement {
           </select>
         </label>
       </div>
+      ${this.toggle("controls", "card_controls", "card_controls_hint")}
       ${this.toggle("energy", "card_energy")} ${this.toggle("room_panel", "card_room_panel", "card_room_panel_hint")}
+      ${this.toggle("fullscreen_button", "card_fullscreen_button", "card_fullscreen_button_hint")}
       ${this.toggle("explode", "card_explode")} ${this.toggle("stats", "card_stats", "card_stats_hint")}
     `;
   }
@@ -165,6 +178,9 @@ export class Floorplan3dCardEditor extends LitElement {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px 12px;
+    }
+    [hidden] {
+      display: none;
     }
     .wide {
       grid-column: 1 / -1;
@@ -197,6 +213,7 @@ export class Floorplan3dCardEditor extends LitElement {
       cursor: pointer;
     }
     .toggle input {
+      flex: none;
       width: 18px;
       height: 18px;
       margin: 1px 0 0;
