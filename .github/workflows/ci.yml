@@ -46,6 +46,8 @@ jobs:
       - uses: home-assistant/actions/hassfest@master
 
   hacs:
+    # HACS reads the repository from outside, which fails while it is private
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     steps:
       - uses: hacs/action@main
