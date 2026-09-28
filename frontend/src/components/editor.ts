@@ -25,13 +25,14 @@ import {
   type Furniture,
   type FurnitureType,
   type Opening,
+  type OpeningType,
   type Room,
   type Vec2,
 } from "../model.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
 
-type Tool = "select" | "rect" | "polygon" | "door" | "window" | "meter";
+type Tool = "select" | "rect" | "polygon" | "door" | "window" | "garage" | "meter";
 
 type Drag =
   | { kind: "pan"; last: [number, number] }
@@ -372,7 +373,7 @@ export class Fp3dEditor extends LitElement {
       this.drag = { kind: "tap", startScreen: local, last: local, panning: false };
       return;
     }
-    if (this._tool === "door" || this._tool === "window") {
+    if (this._tool === "door" || this._tool === "window" || this._tool === "garage") {
       if (!this.placeOpening(this._tool, local)) this.drag = { kind: "pan", last: local };
       return;
     }
@@ -819,7 +820,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   /** Add a door or window on the room edge nearest to a screen point. */
-  private placeOpening(type: "door" | "window", screen: [number, number]): boolean {
+  private placeOpening(type: OpeningType, screen: [number, number]): boolean {
     const floor = this.floor;
     if (!floor || !this.isAdmin) return false;
     let best: { room: Room; edge: number; d: number } | null = null;
@@ -1025,7 +1026,7 @@ export class Fp3dEditor extends LitElement {
         <div class="fp3d-main">
           <div class="fp3d-toolbar">
             <div class="fp3d-seg" role="group" aria-label=${this.t("tool_select")}>
-              ${(["select", "rect", "polygon", "door", "window"] as Tool[]).map(
+              ${(["select", "rect", "polygon", "door", "window", "garage"] as Tool[]).map(
                 (tool) => html`<button
                   aria-pressed=${this._tool === tool}
                   ?disabled=${!floor || (!this.isAdmin && tool !== "select")}
@@ -1182,9 +1183,17 @@ export class Fp3dEditor extends LitElement {
       const q = (p: Vec2, k: number) => this.toScreen([p[0] + n[0] * k, p[1] + n[1] * k]);
       const gap = [q(p0, across[0] + 0.01), q(p1, across[0] + 0.01), q(p1, -across[1] - 0.01), q(p0, -across[1] - 0.01)];
       const sel = o.id === this._openingId;
-      const cls = `fp3d-open ${o.type === "door" ? "fp3d-open-door" : "fp3d-open-window"}${sel ? " fp3d-open-sel" : ""}`;
+      const cls = `fp3d-open fp3d-open-${o.type}${sel ? " fp3d-open-sel" : ""}`;
       let symbol;
-      if (o.type === "door") {
+      if (o.type === "garage") {
+        // door panel just inside the room, with its track under the ceiling drawn dashed
+        const a0 = q(p0, across[0] - 0.04);
+        const a1 = q(p1, across[0] - 0.04);
+        const b0 = q(p0, across[0] + Math.min(2, o.height));
+        const b1 = q(p1, across[0] + Math.min(2, o.height));
+        symbol = svg`<line x1=${a0[0]} y1=${a0[1]} x2=${a1[0]} y2=${a1[1]} />
+          <path class="fp3d-open-track" d="M${a0[0]} ${a0[1]}L${b0[0]} ${b0[1]}M${a1[0]} ${a1[1]}L${b1[0]} ${b1[1]}" />`;
+      } else if (o.type === "door") {
         // leaf and swing into the room from the hinge side
         const hingeAtP0 = o.hinge === "left";
         const hinge = hingeAtP0 ? p0 : p1;
@@ -1471,6 +1480,7 @@ export class Fp3dEditor extends LitElement {
   private renderOpeningForm(o: Opening) {
     const admin = this.isAdmin;
     const window = o.type === "window";
+    const garage = o.type === "garage";
     // what "automatic" would pick: resolve with the opening's own links cleared
     const autoPick = (key: "cover" | "contact") => {
       if (!this.hass) return null;
@@ -1482,37 +1492,39 @@ export class Fp3dEditor extends LitElement {
     const covers = this.entityOptions((id) => id.startsWith("cover."));
     const contacts = this.entityOptions((id) => id.startsWith("binary_sensor.") && ["door", "window", "opening", "garage_door"].includes(dc(id) ?? ""));
     return html`<section>
-      <h3>${this.t(window ? "opening_window" : "opening_door")}</h3>
+      <h3>${this.t(`opening_${o.type}`)}</h3>
       <div class="fp3d-form">
         <label class="fp3d-field fp3d-wide"
           >${this.t("opening_type")}
           <select
             ?disabled=${!admin}
             @change=${(e: Event) => {
-              const type = (e.target as HTMLSelectElement).value as "door" | "window";
-              this.updateOpening({ type, sill: OPENING_DEFAULTS[type].sill, height: OPENING_DEFAULTS[type].height });
+              const type = (e.target as HTMLSelectElement).value as OpeningType;
+              const d = OPENING_DEFAULTS[type];
+              this.updateOpening({ type, sill: d.sill, height: d.height, width: type === "garage" || o.type === "garage" ? d.width : o.width });
             }}
           >
-            <option value="door" ?selected=${!window}>${this.t("opening_door")}</option>
-            <option value="window" ?selected=${window}>${this.t("opening_window")}</option>
+            ${(["door", "window", "garage"] as const).map((t) => html`<option value=${t} ?selected=${o.type === t}>${this.t(`opening_${t}`)}</option>`)}
           </select></label
         >
         ${this.num(this.t("width"), o.width, (v) => this.updateOpening({ width: Math.max(0.3, v) }), 0.01, 0.3)}
         ${this.num(this.t("opening_position"), o.offset, (v) => this.updateOpening({ offset: Math.max(0, v) }), 0.01, 0)}
         ${window ? this.num(this.t("sill"), o.sill, (v) => this.updateOpening({ sill: Math.max(0, v) }), 0.01, 0) : nothing}
         ${this.num(this.t("opening_height"), o.height, (v) => this.updateOpening({ height: Math.max(0.3, v) }), 0.01, 0.3)}
-        <label class="fp3d-field fp3d-wide"
+        ${garage
+          ? nothing
+          : html`<label class="fp3d-field fp3d-wide"
           >${this.t("hinge")}
           <select ?disabled=${!admin} @change=${(e: Event) => this.updateOpening({ hinge: (e.target as HTMLSelectElement).value as "left" | "right" })}>
             <option value="left" ?selected=${o.hinge === "left"}>${this.t("hinge_left")}</option>
             <option value="right" ?selected=${o.hinge === "right"}>${this.t("hinge_right")}</option>
           </select></label
-        >
-        ${window ? this.entitySelect(this.t("cover_entity"), o.cover, autoPick("cover"), covers, (v) => this.updateOpening({ cover: v })) : nothing}
+        >`}
+        ${window || garage ? this.entitySelect(this.t("cover_entity"), o.cover, autoPick("cover"), covers, (v) => this.updateOpening({ cover: v })) : nothing}
         ${this.entitySelect(this.t("contact_entity"), o.contact, autoPick("contact"), contacts, (v) => this.updateOpening({ contact: v }))}
         ${window ? this.entitySelect(this.t("tilt_entity"), o.tilt, undefined, contacts, (v) => this.updateOpening({ tilt: v === "none" ? null : v })) : nothing}
       </div>
-      <p class="fp3d-sub">${this.t("opening_hint")}</p>
+      <p class="fp3d-sub">${this.t(window ? "opening_hint" : garage ? "garage_hint" : "door_hint")}</p>
       ${admin
         ? html`<div class="fp3d-actions"><button class="fp3d-btn fp3d-danger" @click=${() => this.deleteOpening()}>${this.t("delete")}</button></div>`
         : nothing}
@@ -2032,6 +2044,15 @@ export class Fp3dEditor extends LitElement {
       .fp3d-open-door path {
         stroke: var(--fp3d-warm);
         stroke-dasharray: 3 3;
+      }
+      .fp3d-open-garage line {
+        stroke: var(--fp3d-warm);
+        stroke-width: 3;
+      }
+      .fp3d-open-track {
+        stroke: var(--fp3d-warm);
+        stroke-dasharray: 4 4;
+        opacity: 0.6;
       }
       .fp3d-open-window line {
         stroke: var(--fp3d-accent);

@@ -1,7 +1,7 @@
 // Presence and floor summaries: which room a person is in (from a room sensor such as ESPresense or
 // Bermuda, whose state names a room or area), and the counts shown on the floor labels.
 
-import { areaEntities, kindOf, type OpeningEntities } from "./devices.ts";
+import { areaEntities, kindOf, openingState, type OpeningEntities } from "./devices.ts";
 import { translate } from "./i18n.ts";
 import type { Building, Room } from "./model.ts";
 import { centroid } from "./model.ts";
@@ -90,7 +90,10 @@ export function floorCounts(hass: HomeAssistant, building: Building, links: Map<
     for (const pl of floor.placements) if (kindOf(pl.entity_id) === "light") lights.add(pl.entity_id);
     const open = floor.openings.filter((o) => {
       const l = links.get(o.id);
-      return !!l && (on(l.contact) || on(l.tilt));
+      if (!l) return false;
+      // a garage door counts as open while its cover is not (almost) down
+      if (o.type === "garage") return (openingState(hass, l, "garage").cover ?? 1) < 0.95;
+      return on(l.contact) || on(l.tilt);
     }).length;
     out.set(floor.id, {
       rooms: floor.rooms.length,

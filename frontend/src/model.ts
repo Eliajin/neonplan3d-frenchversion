@@ -11,6 +11,8 @@ export interface Room {
   floor_material: string;
 }
 
+export type OpeningType = "door" | "window" | "garage";
+
 /** Entity link of an opening: null = assigned automatically by area, "none" = no entity. */
 export type EntityRef = string | null;
 
@@ -22,8 +24,8 @@ export interface Opening {
   /** Distance of the opening's centre from points[edge] (metres). */
   offset: number;
   width: number;
-  type: "door" | "window";
-  /** Height of the bottom above the floor; 0 for doors and terrace doors. */
+  type: OpeningType;
+  /** Height of the bottom above the floor; 0 for doors, garage doors and terrace doors. */
   sill: number;
   height: number;
   /** Window sash hinge as seen from the room. */
@@ -193,6 +195,7 @@ export const FURNITURE_SIZE: Record<FurnitureType, [number, number, number]> = {
 export const OPENING_DEFAULTS = {
   door: { width: 0.9, sill: 0, height: 2.05 },
   window: { width: 1.2, sill: 0.9, height: 1.3 },
+  garage: { width: 2.5, sill: 0, height: 2.1 },
 } as const;
 
 /** Fill fields added in later versions so older saved buildings keep working. */

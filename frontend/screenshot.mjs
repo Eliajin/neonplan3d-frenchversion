@@ -39,6 +39,8 @@ const shots = [
   { name: "view-floor-og", query: "", width: 1280, height: 800, click: "Obergeschoss" },
   { name: "view-floor-eg", query: "?fp3d_stats", width: 1280, height: 800, click: "Erdgeschoss" },
   { name: "view-room", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Küche" },
+  { name: "view-garage", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Garage" },
+  { name: "view-hall", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Flur" },
   { name: "view-cut", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Schnitt" },
   { name: "view-room-panel", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Wohnzimmer" },
   { name: "tablet-room", query: "", width: 800, height: 1280, click: "Erdgeschoss", then: "Wohnzimmer" },

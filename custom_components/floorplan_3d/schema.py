@@ -34,7 +34,7 @@ OPENING_SCHEMA = vol.Schema(
         vol.Required("edge"): vol.All(int, vol.Range(min=0, max=MAX_POINTS)),
         vol.Required("offset"): _LENGTH,
         vol.Required("width"): _LENGTH,
-        vol.Required("type"): vol.In(["door", "window"]),
+        vol.Required("type"): vol.In(["door", "window", "garage"]),
         vol.Required("sill"): _LENGTH,
         vol.Required("height"): _LENGTH,
         # window sash hinge as seen from the room; entities: None = assign automatically by area,

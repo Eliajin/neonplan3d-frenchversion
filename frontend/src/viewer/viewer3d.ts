@@ -600,7 +600,7 @@ export class FloorplanViewer {
         new MeshBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false, side: DoubleSide }),
         mask,
       ),
-      blinds: makeFoldable(new MeshBasicMaterial({ map: this.blindTexture, side: DoubleSide }), mask),
+      blinds: makeFoldable(new MeshBasicMaterial({ map: this.blindTexture, vertexColors: true, side: DoubleSide }), mask),
       flow: flowMaterial(this.flowTime),
     };
   }

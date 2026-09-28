@@ -14,7 +14,7 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
   - Undo and redo, duplicate, delete.
   - Mouse and touch: pinch to zoom, pan with two fingers.
 - **Automatic walls**: each shared edge becomes an interior wall, outer edges become exterior walls. Corners and T-junctions are mitred. Wall thickness is configurable.
-- **Doors and windows**: tap a wall with the door or window tool, then drag them along the wall. Width, sill, height and hinge side are adjustable; a window with sill 0 is a terrace door.
+- **Doors, windows and garage doors**: tap a wall with the door, window or garage door tool, then drag them along the wall. Width, sill, height and hinge side are adjustable; a window with sill 0 is a terrace door.
 - **Furniture library**: sofa, armchair, table, chair, bed, nightstand, wardrobe, shelf, kitchen unit, fridge, stove, sink, bathtub, shower, WC, washbasin, desk, TV board, plant, rug and stairs, as detailed low-poly models. Move, rotate, resize, duplicate.
 - **Stairs** open the ceiling of the floor above.
 - **Floor materials** (wood, oak, tiles, carpet, stone, concrete) show as subtle patterns in 3D.
@@ -27,6 +27,7 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
   - Three levels: the whole house (floors pulled apart or stacked, with a label per floor), one floor (floors above fly away, floors below stay dimmed) and one room.
   - Tap a floor label or a room to go in; double tap, Esc or *Back* goes one level up.
   - Windows with frames and glass, door frames, window sills.
+  - Door leaves swing open with a door contact (half open without one); garage doors follow a garage cover or contact, the open part lying under the ceiling.
   - Blinds are drawn in front of their windows and follow the cover position; window contacts open or tilt the sash (a second sensor can mark "tilted"); open windows glow warm. Blinds and contacts are matched with windows automatically by area and can be set by hand.
   - Device markers with their state; lights that are on cast a glow on the floor that follows brightness and colour.
   - Tap a light or switch to toggle it; a long press opens Home Assistant's details dialog.

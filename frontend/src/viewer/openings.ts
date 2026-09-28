@@ -8,11 +8,11 @@ import type { OpeningInfo } from "./build.ts";
 import { ALWAYS, GeoBuffer, shade } from "./geo.ts";
 
 export interface OpeningState {
-  /** 0 = closed, 1 = swung open. */
+  /** Window sash or door leaf: 0 = closed, 1 = swung open. */
   open: number;
   /** 0 = closed, 1 = tilted. */
   tilt: number;
-  /** Closed fraction of the blind (0 = up, 1 = down); null = no blind. */
+  /** Closed fraction of the blind or garage door (0 = up, 1 = down); null = no blind. */
   cover: number | null;
 }
 
@@ -26,6 +26,9 @@ const BLIND_BOX = 0x16223a;
 const OPEN_WARM = 0xffb547;
 
 const OPEN_ANGLE = 1.2;
+const DOOR_ANGLE = 1.5;
+const LEAF = 0x1c2c4d;
+const LEAF_TOP = 0x27406b;
 const TILT_ANGLE = 0.2;
 
 type Tf = (x: number, n: number, y: number) => number[];
@@ -74,6 +77,18 @@ function panel(buf: GeoBuffer, tf: Tf, x0: number, x1: number, n: number, y0: nu
   }
 }
 
+/** Horizontal quad in local coordinates (x along the opening, n towards the room) at height y. */
+function flatPanel(buf: GeoBuffer, tf: Tf, x0: number, x1: number, n0: number, n1: number, y: number, color: Color, fold: number, vScale: number): void {
+  const a = tf(x0, n0, y);
+  const b = tf(x1, n0, y);
+  const c = tf(x1, n1, y);
+  const d = tf(x0, n1, y);
+  const v0 = 0;
+  const v1 = (n1 - n0) / vScale;
+  buf.tri(a, b, c, color, color, color, [0, v0, 1, v0, 1, v1], fold);
+  buf.tri(a, c, d, color, color, color, [0, v0, 1, v1, 0, v1], fold);
+}
+
 export interface OpeningParts {
   frames: BufferGeometry;
   glass: BufferGeometry;
@@ -93,13 +108,44 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
     // local frame: x from the opening start along the wall, n from the wall axis towards the room
     const tf: Tf = (x, n, y) => [info.start[0] + info.axis[0] * x + info.toRoom[0] * n, y, info.start[1] + info.axis[1] * x + info.toRoom[1] * n];
     const mid = (info.faceRoom - info.faceOut) / 2;
-    if (info.opening.type === "door") {
-      // door frame (Zarge) around the opening, covering the reveal on both faces
+    if (info.opening.type === "door" || info.opening.type === "garage") {
+      // door frame (Zarge) around the opening, covering the reveal on both faces; an open garage door glows warm
       const n0 = -info.faceOut - 0.012;
       const n1 = info.faceRoom + 0.012;
+      const garageOpen = info.opening.type === "garage" && (st.cover ?? 1) < 0.95;
+      const frameC = garageOpen ? shade(OPEN_WARM, 0.8) : new Color(FRAME);
+      const frameTop = garageOpen ? shade(OPEN_WARM, 1) : new Color(FRAME_TOP);
       splitBox(frames, tf, -0.045, 0.02, n0, n1, 0, T + 0.045, frameC, frameTop, cut, bucket);
       splitBox(frames, tf, W - 0.02, W + 0.045, n0, n1, 0, T + 0.045, frameC, frameTop, cut, bucket);
       splitBox(frames, tf, 0.02, W - 0.02, n0, n1, T - 0.02, T + 0.045, frameC, frameTop, cut, bucket);
+    }
+    if (info.opening.type === "door") {
+      // leaf flush with the room side, swinging into the room around the hinge
+      const open = Math.min(1, Math.max(0, st.open));
+      const theta = open * DOOR_ANGLE;
+      const lw = W - 0.04;
+      const leafTf: Tf = (u, n, y) => {
+        const along = u * Math.cos(theta) - n * Math.sin(theta);
+        const nn = info.faceRoom + n * Math.cos(theta) + u * Math.sin(theta);
+        return tf(info.hingeAtStart ? 0.02 + along : W - 0.02 - along, nn, y);
+      };
+      const warm = open > 0.9;
+      const leafC = warm ? shade(OPEN_WARM, 0.7) : new Color(LEAF);
+      const leafTop = warm ? shade(OPEN_WARM, 0.9) : new Color(LEAF_TOP);
+      splitBox(frames, leafTf, 0, lw, -0.04, 0, 0.01, T - 0.01, leafC, leafTop, cut, bucket);
+      // handle on both sides
+      const hy = Math.min(1.05, T * 0.5);
+      splitBox(frames, leafTf, lw - 0.16, lw - 0.05, 0.004, 0.05, hy - 0.012, hy + 0.012, new Color(0x5b7cff), new Color(0x8aa2ff), cut, bucket);
+      splitBox(frames, leafTf, lw - 0.16, lw - 0.05, -0.09, -0.044, hy - 0.012, hy + 0.012, new Color(0x5b7cff), new Color(0x8aa2ff), cut, bucket);
+    } else if (info.opening.type === "garage") {
+      // sectional door: the closed part hangs in the opening, the open part lies under the ceiling
+      const closed = Math.min(1, Math.max(0, st.cover ?? 1));
+      const panelC = new Color(0xd4e0ff);
+      const plane = info.faceRoom - 0.03;
+      const bottom = T * (1 - closed);
+      if (closed > 0.01) panel(blinds, tf, 0.02, W - 0.02, plane, bottom, T, panelC, cut, bucket, 0.5);
+      const up = (1 - closed) * T;
+      if (up > 0.01) flatPanel(blinds, tf, 0.02, W - 0.02, plane, plane + up, T + 0.03, panelC, bucket, 0.5);
     } else {
       const fw = 0.06;
       const fd = 0.035;

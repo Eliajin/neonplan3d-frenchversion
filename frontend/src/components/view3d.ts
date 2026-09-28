@@ -158,7 +158,8 @@ export class Fp3dView3d extends LitElement {
         return { ...m, power, powerText: power === null ? undefined : formatPower(hass, power) };
       }),
     );
-    v.setOpeningStates(new Map([...this.openingLinks!].map(([id, e]) => [id, openingState(hass, e)])));
+    const types = new Map(b.floors.flatMap((f) => f.openings.map((o) => [o.id, o.type] as const)));
+    v.setOpeningStates(new Map([...this.openingLinks!].map(([id, e]) => [id, openingState(hass, e, types.get(id))])));
     const batteryPlaced = b.energy.battery ? b.floors.flatMap((f) => f.placements.filter((p) => p.entity_id === b.energy.battery).map((p) => ({ floorId: f.id, x: p.x, z: p.z })))[0] : null;
     v.setFlows(
       flowSegments({ building: b, consumers, summary, battery: batteryPlaced ?? null }).map((f) => ({

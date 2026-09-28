@@ -247,6 +247,7 @@ export function autoPlace(room: Room, entityIds: readonly string[], taken: reado
 // ------------------------------------------------------------------ doors and windows
 
 const COVER_CLASSES = new Set([undefined, "shutter", "blind", "awning", "shade", "curtain", "window"]);
+const GARAGE_COVERS = new Set(["garage", "gate"]);
 const WINDOW_CONTACTS = new Set(["window", "opening"]);
 
 export interface OpeningEntities {
@@ -281,15 +282,20 @@ export function openingEntities(hass: HomeAssistant, floors: readonly Floor[]): 
       const covers = ids.filter((id) => kindOf(id) === "cover" && COVER_CLASSES.has(cls(id)));
       const windows = own.filter((o) => o.type === "window");
       const doors = own.filter((o) => o.type === "door");
+      const garages = own.filter((o) => o.type === "garage");
       // one blind for the whole room (e.g. a group) serves every window; a sensor belongs to one window
       const autoCover = pair(windows, covers, true);
       const autoWindow = pair(windows, ids.filter((id) => kindOf(id) === "binary" && WINDOW_CONTACTS.has(cls(id)!)));
       const autoDoor = pair(doors, ids.filter((id) => kindOf(id) === "binary" && cls(id) === "door"));
+      const autoGarageCover = pair(garages, ids.filter((id) => kindOf(id) === "cover" && GARAGE_COVERS.has(cls(id) ?? "")));
+      const autoGarageContact = pair(garages, ids.filter((id) => kindOf(id) === "binary" && cls(id) === "garage_door"));
       const pick = (ref: string | null, auto: string | undefined) => (ref === "none" ? null : (ref ?? auto ?? null));
       for (const o of own) {
+        const autoC = o.type === "window" ? autoCover : o.type === "garage" ? autoGarageCover : null;
+        const autoK = o.type === "window" ? autoWindow : o.type === "garage" ? autoGarageContact : autoDoor;
         out.set(o.id, {
-          cover: o.type === "window" ? pick(o.cover, autoCover.get(o.id)) : pick(o.cover, undefined),
-          contact: pick(o.contact, (o.type === "window" ? autoWindow : autoDoor).get(o.id)),
+          cover: pick(o.cover, autoC?.get(o.id)),
+          contact: pick(o.contact, autoK.get(o.id)),
           tilt: o.tilt === "none" ? null : o.tilt,
         });
       }
@@ -298,16 +304,30 @@ export function openingEntities(hass: HomeAssistant, floors: readonly Floor[]): 
   return out;
 }
 
-/** Visual state of an opening from its entities: sash open or tilted, blind closed fraction. */
-export function openingState(hass: HomeAssistant, e: OpeningEntities): { open: number; tilt: number; cover: number | null } {
+/** Door leaves without a contact sensor stand half open, so the doorway stays readable. */
+export const DOOR_DEFAULT_OPEN = 0.5;
+
+/**
+ * Visual state of an opening from its entities. Windows: sash open or tilted, blind closed fraction.
+ * Doors: leaf open (contact) or half open. Garage doors: closed fraction from the cover or contact.
+ */
+export function openingState(hass: HomeAssistant, e: OpeningEntities, type: Opening["type"] = "window"): { open: number; tilt: number; cover: number | null } {
   const on = (id: string | null) => !!id && hass.states[id]?.state === "on";
+  const known = (id: string | null) => !!id && !!hass.states[id] && !isUnavailable(hass.states[id]);
+  if (type === "door") return { open: known(e.contact) ? (on(e.contact) ? 1 : 0) : DOOR_DEFAULT_OPEN, tilt: 0, cover: null };
   const tilted = on(e.tilt);
   const open = on(e.contact) && !tilted ? 1 : 0;
   let cover: number | null = null;
   const c = e.cover ? hass.states[e.cover] : undefined;
   if (c && !isUnavailable(c)) {
     const pos = c.attributes.current_position;
-    cover = typeof pos === "number" ? 1 - Math.min(100, Math.max(0, pos)) / 100 : c.state === "closed" ? 1 : 0;
+    if (typeof pos === "number") cover = 1 - Math.min(100, Math.max(0, pos)) / 100;
+    else cover = c.state === "closed" ? 1 : c.state === "opening" || c.state === "closing" ? 0.5 : 0;
   } else if (e.cover) cover = 0;
+  if (type === "garage") {
+    // a garage door without a cover shows its contact: open or closed
+    if (cover === null) cover = known(e.contact) ? (on(e.contact) ? 0 : 1) : 1;
+    return { open: 0, tilt: 0, cover };
+  }
   return { open, tilt: tilted ? 1 : 0, cover };
 }

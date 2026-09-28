@@ -128,3 +128,27 @@ test("opening states: open, tilted and blind position", () => {
   assert.deepEqual(openingState(hass, { cover: "cover.p", contact: "binary_sensor.k", tilt: "binary_sensor.t" }), { open: 0, tilt: 1, cover: 0.75 });
   assert.deepEqual(openingState(hass, { cover: "cover.rollo", contact: null, tilt: null }), { open: 0, tilt: 0, cover: 0 });
 });
+
+test("garage doors use garage covers and contacts; door leaves follow their contact or stand half open", () => {
+  const hass = hassWith();
+  const add = (id: string, state: string, attributes: Record<string, unknown>) => {
+    hass.entities![id] = { entity_id: id, area_id: "wohnen" };
+    hass.states[id] = { entity_id: id, state, attributes };
+  };
+  add("cover.tor", "open", { device_class: "garage" });
+  add("binary_sensor.tuer", "on", { device_class: "door" });
+  const o = (id: string, type: Opening["type"], edge: number): Opening => ({
+    id, room_id: "r", edge, offset: 1, width: 1, type, sill: 0, height: 2, hinge: "left", cover: null, contact: null, tilt: null,
+  });
+  const floor: Floor = { ...newFloor("f", "F", 0), rooms: [{ ...room, area_id: "wohnen" }], openings: [o("g", "garage", 0), o("w", "window", 1), o("d", "door", 2)] };
+  const links = openingEntities(hass, [floor]);
+  // the garage cover goes to the garage door only; the window keeps the ordinary blind
+  assert.equal(links.get("g")!.cover, "cover.tor");
+  assert.equal(links.get("w")!.cover, "cover.rollo");
+  assert.equal(links.get("d")!.contact, "binary_sensor.tuer");
+  assert.deepEqual(openingState(hass, links.get("g")!, "garage"), { open: 0, tilt: 0, cover: 0 });
+  hass.states["cover.tor"] = { entity_id: "cover.tor", state: "closing", attributes: { device_class: "garage" } };
+  assert.equal(openingState(hass, links.get("g")!, "garage").cover, 0.5);
+  assert.equal(openingState(hass, links.get("d")!, "door").open, 1);
+  assert.equal(openingState(hass, { cover: null, contact: null, tilt: null }, "door").open, 0.5);
+});

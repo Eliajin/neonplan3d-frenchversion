@@ -34,6 +34,7 @@ export const DEMO_AREAS = {
   flur: { area_id: "flur", name: "Flur" },
   kinderzimmer: { area_id: "kinderzimmer", name: "Kinderzimmer" },
   arbeitszimmer: { area_id: "arbeitszimmer", name: "Arbeitszimmer" },
+  garage: { area_id: "garage", name: "Garage" },
 };
 
 export const DEMO_BUILDING = {
@@ -59,6 +60,7 @@ export const DEMO_BUILDING = {
         ],
         floor_material: "oak",
       },
+      rect("garage", "Garage", "garage", 10, 0, 13.6, 5.2, "concrete"),
     ]),
     floor("og", "Obergeschoss", 2.75, [
       rect("kind", "Kinderzimmer", "kinderzimmer", 0, 0, 4.4, 4.2, "carpet"),
@@ -125,6 +127,8 @@ const DEVICES = [
   entity("sensor.wohnzimmer_feuchte", "wohnzimmer", "48", { friendly_name: "Wohnzimmer Luftfeuchtigkeit", device_class: "humidity", unit_of_measurement: "%" }),
   entity("binary_sensor.kueche_fenster", "kueche", "on", { friendly_name: "Küche Fenster", device_class: "window" }),
   entity("binary_sensor.flur_bewegung", "flur", "off", { friendly_name: "Flur Bewegung", device_class: "motion" }),
+  entity("binary_sensor.haustuer", "flur", "off", { friendly_name: "Haustür", device_class: "door" }),
+  entity("cover.garagentor", "garage", "open", { friendly_name: "Garagentor", device_class: "garage", current_position: 60, supported_features: 15 }),
   entity("binary_sensor.wohnzimmer_terrasse", "wohnzimmer", "on", { friendly_name: "Terrassentür", device_class: "opening" }),
   entity("binary_sensor.schlafzimmer_fenster", "schlafzimmer", "on", { friendly_name: "Schlafzimmer Fenster", device_class: "window" }),
   entity("binary_sensor.schlafzimmer_kipp", "schlafzimmer", "on", { friendly_name: "Schlafzimmer Fenster gekippt", device_class: "window" }),
@@ -225,7 +229,8 @@ DEMO_BUILDING.floors[0].openings = [
   hole("door", "wohnen", 1, 3.4, 0.9),
   hole("door", "wohnen", 2, 4.2, 0.9),
   hole("window", "kueche", 0, 2.4, 1.2),
-  hole("window", "kueche", 1, 2.6, 1.0),
+  hole("door", "kueche", 1, 3.6, 0.9, { hinge: "right" }),
+  hole("garage", "garage", 1, 2.6, 2.5, { sill: 0, height: 2.1 }),
   hole("door", "kueche", 2, 1.6, 0.9),
   hole("window", "schlafen", 2, 2.2, 1.4, { contact: "binary_sensor.schlafzimmer_fenster", tilt: "binary_sensor.schlafzimmer_kipp" }),
   hole("window", "schlafen", 3, 1.7, 1.0, { contact: "none" }),
