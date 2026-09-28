@@ -28,6 +28,9 @@ import {
   type Direction,
   signedArea,
   newFloor,
+  floorElevation,
+  resizeFurniture,
+  roomTiles,
   pointInPolygon,
   polygonArea,
   uid,
@@ -46,7 +49,7 @@ import {
   type Vec2,
 } from "../model.ts";
 import { controls, tokens } from "../styles.ts";
-import type { HomeAssistant } from "../types.ts";
+import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
 
 type Tool = "select" | "rect" | "polygon" | "measure" | "door" | "window" | "garage" | "outdoor" | "meter";
 
@@ -57,6 +60,7 @@ type Drag =
   | { kind: "opening"; id: string; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "furniture"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "rotate"; id: string; base: Building; moved: boolean }
+  | { kind: "resize"; id: string; corner: [1 | -1, 1 | -1]; base: Building; moved: boolean }
   | { kind: "room"; roomId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "rect"; start: Vec2; end: Vec2; outdoor?: boolean }
   | { kind: "outdoor"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
@@ -69,7 +73,7 @@ interface Guides {
 }
 
 /** Drags that change the document live (restored when cancelled, recorded in the history when done). */
-const EDIT_DRAGS = new Set(["vertex", "room", "device", "opening", "furniture", "rotate", "outdoor"]);
+const EDIT_DRAGS = new Set(["vertex", "room", "device", "opening", "furniture", "rotate", "resize", "outdoor"]);
 
 const HISTORY = 100;
 const SNAP_PX = 10;
@@ -93,6 +97,7 @@ export class Fp3dEditor extends LitElement {
     _history: { state: true },
     _spots: { state: true },
     _outdoorId: { state: true },
+    _floorMenu: { state: true },
     _measureLen: { state: true },
     _packages: { state: true },
     _rectSize: { state: true },
@@ -126,6 +131,8 @@ export class Fp3dEditor extends LitElement {
   private declare _history: Snapshot[] | null;
   /** Open "place spots" form of the selected room. */
   private declare _outdoorId: string | null;
+  /** The "add floor" menu with the floors of Home Assistant is open. */
+  private declare _floorMenu: boolean;
   /** Length typed for the next wall when drawing by measure, and the size for "rectangle by size". */
   private declare _measureLen: number;
   /** The package list of the selected room is open. */
@@ -166,6 +173,7 @@ export class Fp3dEditor extends LitElement {
     this._history = null;
     this._spots = null;
     this._outdoorId = null;
+    this._floorMenu = false;
     this._measureLen = 3;
     this._packages = false;
     this._rectSize = [4, 3];
@@ -452,6 +460,12 @@ export class Fp3dEditor extends LitElement {
       this.drag = this.isAdmin ? { kind: "opening", id, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
       return;
     }
+    const resizeEl = target.closest("[data-resize]");
+    if (resizeEl && this.isAdmin) {
+      const [id, sx, sz] = resizeEl.getAttribute("data-resize")!.split(":");
+      this.drag = { kind: "resize", id, corner: [sx === "1" ? 1 : -1, sz === "1" ? 1 : -1], base: this._doc, moved: false };
+      return;
+    }
     const rotateEl = target.closest("[data-rotate]");
     if (rotateEl && this.isAdmin) {
       this.drag = { kind: "rotate", id: rotateEl.getAttribute("data-rotate")!, base: this._doc, moved: false };
@@ -629,6 +643,14 @@ export class Fp3dEditor extends LitElement {
         );
         break;
       }
+      case "resize": {
+        drag.moved = true;
+        const f = drag.base.floors.find((x) => x.id === this._floorId)?.furniture.find((x) => x.id === drag.id);
+        if (!f) return;
+        const size = resizeFurniture(f, drag.corner, world, e.altKey ? 0.01 : this._doc.settings.grid);
+        this.change((_, floor) => Object.assign(floor.furniture.find((q) => q.id === drag.id)!, size), drag.base, false);
+        break;
+      }
       case "rotate": {
         drag.moved = true;
         const f = drag.base.floors.find((x) => x.id === this._floorId)?.furniture.find((x) => x.id === drag.id);
@@ -690,6 +712,7 @@ export class Fp3dEditor extends LitElement {
       case "opening":
       case "furniture":
       case "rotate":
+      case "resize":
       case "outdoor":
         if (drag.moved) this.pushHistory(drag.base);
         break;
@@ -955,17 +978,46 @@ export class Fp3dEditor extends LitElement {
 
   // ------------------------------------------------------------------ actions
 
-  private addFloor(): void {
+  /** Floors of Home Assistant's floor registry that no floor of the plan stands for yet, lowest first. */
+  private get freeHaFloors(): HassFloor[] {
+    const used = new Set(this._doc.floors.map((f) => f.ha_floor));
+    return Object.values(this.hass?.floors ?? {})
+      .filter((f) => !used.has(f.floor_id))
+      .sort((a, b) => (a.level ?? 99) - (b.level ?? 99) || a.name.localeCompare(b.name));
+  }
+
+  /** Areas of a floor's Home Assistant floor that have no room in the plan yet. */
+  private unplacedAreas(floor: Floor): HassArea[] {
+    if (!floor.ha_floor) return [];
+    const used = new Set(this._doc.floors.flatMap((f) => f.rooms.map((r) => r.area_id)));
+    return Object.values(this.hass?.areas ?? {})
+      .filter((a) => a.floor_id === floor.ha_floor && !used.has(a.area_id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  private addFloor(ha: HassFloor | null = null): void {
     const floors = this._doc.floors;
-    const top = floors[floors.length - 1];
     const id = uid("floor");
-    const name = floors.length === 0 ? this.t("default_floor") : this.t("new_floor", { n: floors.length });
-    const elevation = top ? round(top.elevation + top.height + 0.25) : 0;
+    const name = ha?.name ?? (floors.length === 0 ? this.t("default_floor") : this.t("new_floor", { n: floors.length }));
+    const floor = { ...newFloor(id, name, floorElevation(floors, ha?.level)), ha_floor: ha?.floor_id ?? null };
     const next = structuredClone(this._doc);
-    next.floors.push(newFloor(id, name, elevation));
+    // floors are kept from bottom to top
+    const at = next.floors.findIndex((f) => f.elevation > floor.elevation);
+    next.floors.splice(at < 0 ? next.floors.length : at, 0, floor);
     this.setDoc(next);
     this._floorId = id;
     this._roomId = null;
+    this._floorMenu = false;
+    this.fit();
+  }
+
+  /** One room tile per unplaced area of the floor's Home Assistant floor, to drag into place. */
+  private addAreaRooms(floor: Floor): void {
+    const areas = this.unplacedAreas(floor);
+    if (!areas.length) return;
+    const rooms = roomTiles(floor, areas, () => uid("room"));
+    this.change((_, f) => f.rooms.push(...rooms));
+    this.fit();
   }
 
   private moveFloor(dir: -1 | 1): void {
@@ -1531,6 +1583,22 @@ export class Fp3dEditor extends LitElement {
         ${big ? svg`<text x=${cx} y=${cy + 4}>${this.t(`furn_${f.type}` as I18nKey)}</text>` : nothing}
       </g>
       ${sel && this.isAdmin
+        ? ([[-1, -1], [1, -1], [1, 1], [-1, 1]] as const).map(([sx, sz]) => {
+            const [x, y] = this.toScreen([f.x + (sx * f.w * Math.cos(a)) / 2 - (sz * f.d * Math.sin(a)) / 2, f.z + (sx * f.w * Math.sin(a)) / 2 + (sz * f.d * Math.cos(a)) / 2]);
+            return svg`<g class="fp3d-resize" data-resize=${`${f.id}:${sx}:${sz}`}>
+              <circle cx=${x} cy=${y} r="14" class="fp3d-hit" />
+              <rect x=${x - 5} y=${y - 5} width="10" height="10" rx="2" />
+            </g>`;
+          })
+        : nothing}
+      ${sel
+        ? (() => {
+            // behind the item, away from the turn handle in front
+            const [lx, ly] = this.toScreen([f.x + Math.sin(a) * (f.d / 2 + 18 / k), f.z - Math.cos(a) * (f.d / 2 + 18 / k)]);
+            return svg`<text class="fp3d-dim" x=${lx} y=${ly + 4}>${formatNumber(this.hass, f.w, 2)} × ${formatNumber(this.hass, f.d, 2)} m</text>`;
+          })()
+        : nothing}
+      ${sel && this.isAdmin
         ? svg`<g class="fp3d-rotate" data-rotate=${f.id}>
             <line x1=${fx} y1=${fy} x2=${hx} y2=${hy} />
             <circle cx=${hx} cy=${hy} r="16" class="fp3d-hit" />
@@ -1728,8 +1796,27 @@ export class Fp3dEditor extends LitElement {
               ${f.name}
             </button>`,
           )}
-          ${admin ? html`<button class="fp3d-btn" @click=${() => this.addFloor()}>+ ${this.t("add_floor")}</button>` : nothing}
+          ${admin
+            ? html`<button
+                class="fp3d-btn"
+                aria-expanded=${this._floorMenu}
+                @click=${() => (this.freeHaFloors.length ? (this._floorMenu = !this._floorMenu) : this.addFloor())}
+              >
+                + ${this.t("add_floor")}
+              </button>`
+            : nothing}
         </div>
+        ${admin && this._floorMenu
+          ? html`<div class="fp3d-floor-menu">
+              <p class="fp3d-sub">${this.t("floor_from_ha")}</p>
+              ${this.freeHaFloors.map(
+                (f) => html`<button class="fp3d-btn" @click=${() => this.addFloor(f)}>
+                  ${f.name}${f.level != null ? html` <span class="fp3d-sub">· ${this.t("level", { n: f.level })}</span>` : nothing}
+                </button>`,
+              )}
+              <button class="fp3d-btn" @click=${() => this.addFloor()}>${this.t("floor_empty")}</button>
+            </div>`
+          : nothing}
         ${floor
           ? html`<div class="fp3d-form">
               <label class="fp3d-field fp3d-wide"
@@ -1738,6 +1825,24 @@ export class Fp3dEditor extends LitElement {
               /></label>
               ${this.num(this.t("elevation"), floor.elevation, (v) => this.updateFloor({ elevation: v }))}
               ${this.num(this.t("height"), floor.height, (v) => this.updateFloor({ height: Math.max(1, v) }), 0.05, 1)}
+              ${Object.keys(this.hass?.floors ?? {}).length
+                ? html`<label class="fp3d-field fp3d-wide"
+                    >${this.t("ha_floor")}
+                    <select ?disabled=${!admin} @change=${(e: Event) => this.updateFloor({ ha_floor: (e.target as HTMLSelectElement).value || null })}>
+                      <option value="" ?selected=${!floor.ha_floor}>${this.t("no_ha_floor")}</option>
+                      ${Object.values(this.hass?.floors ?? {})
+                        .filter((f) => f.floor_id === floor.ha_floor || !floors.some((x) => x.ha_floor === f.floor_id))
+                        .map((f) => html`<option value=${f.floor_id} ?selected=${f.floor_id === floor.ha_floor}>${f.name}</option>`)}
+                    </select></label
+                  >`
+                : nothing}
+              ${admin && this.unplacedAreas(floor).length
+                ? html`<div class="fp3d-actions fp3d-wide">
+                    <button class="fp3d-btn fp3d-primary" title=${this.t("area_rooms_hint")} @click=${() => this.addAreaRooms(floor)}>
+                      ${this.t("area_rooms", { n: this.unplacedAreas(floor).length })}
+                    </button>
+                  </div>`
+                : nothing}
               ${admin
                 ? html`<div class="fp3d-actions fp3d-wide">
                     <button class="fp3d-btn" @click=${() => this.moveFloor(1)}>${this.t("move_up")}</button>
@@ -2811,6 +2916,26 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-rotate {
         cursor: grab;
+      }
+      .fp3d-resize {
+        cursor: nwse-resize;
+      }
+      .fp3d-resize rect {
+        fill: var(--fp3d-accent);
+        stroke: #0b1222;
+        stroke-width: 1.5;
+      }
+      .fp3d-floor-menu {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 8px 0;
+        padding: 10px;
+        border-radius: 12px;
+        background: rgba(127, 127, 127, 0.1);
+      }
+      .fp3d-floor-menu .fp3d-btn {
+        text-align: left;
       }
       .fp3d-rotate line {
         stroke: var(--fp3d-accent);

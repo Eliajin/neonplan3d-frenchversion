@@ -26,15 +26,26 @@ const floor = (id, name, elevation, rooms) => ({
   background: null,
 });
 
+export const DEMO_FLOORS = {
+  keller: { floor_id: "keller", name: "Keller", level: -1 },
+  erdgeschoss: { floor_id: "erdgeschoss", name: "Erdgeschoss", level: 0 },
+  obergeschoss: { floor_id: "obergeschoss", name: "Obergeschoss", level: 1 },
+  dachgeschoss: { floor_id: "dachgeschoss", name: "Dachgeschoss", level: 2 },
+};
+
 export const DEMO_AREAS = {
-  wohnzimmer: { area_id: "wohnzimmer", name: "Wohnzimmer" },
-  kueche: { area_id: "kueche", name: "Küche" },
-  schlafzimmer: { area_id: "schlafzimmer", name: "Schlafzimmer" },
-  bad: { area_id: "bad", name: "Bad" },
-  flur: { area_id: "flur", name: "Flur" },
-  kinderzimmer: { area_id: "kinderzimmer", name: "Kinderzimmer" },
-  arbeitszimmer: { area_id: "arbeitszimmer", name: "Arbeitszimmer" },
-  garage: { area_id: "garage", name: "Garage" },
+  wohnzimmer: { area_id: "wohnzimmer", name: "Wohnzimmer", floor_id: "erdgeschoss" },
+  kueche: { area_id: "kueche", name: "Küche", floor_id: "erdgeschoss" },
+  schlafzimmer: { area_id: "schlafzimmer", name: "Schlafzimmer", floor_id: "erdgeschoss" },
+  bad: { area_id: "bad", name: "Bad", floor_id: "erdgeschoss" },
+  flur: { area_id: "flur", name: "Flur", floor_id: "erdgeschoss" },
+  kinderzimmer: { area_id: "kinderzimmer", name: "Kinderzimmer", floor_id: "obergeschoss" },
+  arbeitszimmer: { area_id: "arbeitszimmer", name: "Arbeitszimmer", floor_id: "obergeschoss" },
+  garage: { area_id: "garage", name: "Garage", floor_id: "erdgeschoss" },
+  waschkueche: { area_id: "waschkueche", name: "Waschküche", floor_id: "keller" },
+  heizung: { area_id: "heizung", name: "Heizungsraum", floor_id: "keller" },
+  vorrat: { area_id: "vorrat", name: "Vorratsraum", floor_id: "keller" },
+  hobby: { area_id: "hobby", name: "Hobbyraum", floor_id: "keller" },
 };
 
 export const DEMO_BUILDING = {

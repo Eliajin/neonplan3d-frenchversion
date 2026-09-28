@@ -16,7 +16,7 @@
     <floorplan-3d-panel></floorplan-3d-panel>
     <script type="module">
       // Mock of the Home Assistant frontend object with invented demo data.
-      import { DEMO_AREAS, DEMO_BUILDING, DEMO_ENTITIES, DEMO_STATES } from "./demo-data.js";
+      import { DEMO_AREAS, DEMO_BUILDING, DEMO_FLOORS, DEMO_ENTITIES, DEMO_STATES } from "./demo-data.js";
 
       const params = new URLSearchParams(location.search);
       let building = params.has("empty") ? { version: 1, floors: [], settings: { wall_exterior: 0.24, wall_interior: 0.12, grid: 0.05 } } : DEMO_BUILDING;
@@ -30,6 +30,7 @@
         language: params.get("lang") || "de",
         user: { is_admin: !params.has("user"), name: "Demo" },
         areas: DEMO_AREAS,
+        floors: DEMO_FLOORS,
         entities: DEMO_ENTITIES,
         devices: {},
         states: structuredClone(DEMO_STATES),

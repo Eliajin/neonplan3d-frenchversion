@@ -83,6 +83,8 @@ export interface Floor {
   placements: Placement[];
   background: Background | null;
   outdoor: OutdoorArea[];
+  /** Linked floor of Home Assistant's floor registry. */
+  ha_floor: string | null;
 }
 
 export type RoofType = "none" | "flat" | "gable";
@@ -197,7 +199,55 @@ export function newFloor(id: string, name: string, elevation: number): Floor {
     placements: [],
     background: null,
     outdoor: [],
+    ha_floor: null,
   };
+}
+
+/** Storey height used to place floors created from Home Assistant levels. */
+export const LEVEL_HEIGHT = 2.75;
+
+/** Where a new floor goes: at its Home Assistant level if known, otherwise on top. */
+export function floorElevation(floors: Floor[], level: number | null | undefined): number {
+  if (level != null && Number.isFinite(level)) return Math.round(level * LEVEL_HEIGHT * 100) / 100;
+  const top = floors.reduce<Floor | null>((t, f) => (!t || f.elevation > t.elevation ? f : t), null);
+  return top ? Math.round((top.elevation + top.height + 0.25) * 100) / 100 : 0;
+}
+
+/**
+ * Rooms for areas as 4 × 3 m tiles in rows beside a floor's existing rooms, to be dragged into place
+ * and resized.
+ */
+export function roomTiles(floor: Floor, areas: { area_id: string; name: string }[], id: () => string): Room[] {
+  const xs = floor.rooms.flatMap((r) => r.points.map((p) => p[0]));
+  const zs = floor.rooms.flatMap((r) => r.points.map((p) => p[1]));
+  const x0 = xs.length ? Math.ceil(Math.max(...xs)) + 1 : 0;
+  const z0 = zs.length ? Math.floor(Math.min(...zs)) : 0;
+  return areas.map((a, i) => {
+    const x = x0 + (i % 3) * 4.5;
+    const z = z0 + Math.floor(i / 3) * 3.5;
+    return { id: id(), name: a.name, area_id: a.area_id, points: [[x, z], [x + 4, z], [x + 4, z + 3], [x, z + 3]] as Vec2[], floor_material: "wood" };
+  });
+}
+
+/**
+ * Resizes a furniture item by dragging one corner (`corner`: signs of the corner in the item's own
+ * frame) to a plan point; the opposite corner stays in place. Sizes snap to `grid`.
+ */
+export function resizeFurniture(f: Furniture, corner: [1 | -1, 1 | -1], p: Vec2, grid: number): Pick<Furniture, "x" | "z" | "w" | "d"> {
+  const a = (f.rotation * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  const [sx, sz] = corner;
+  // item axes in the plan: local x → (c, s), local z → (-s, c)
+  const ax = f.x - sx * (f.w / 2) * c + sz * (f.d / 2) * s;
+  const az = f.z - sx * (f.w / 2) * s - sz * (f.d / 2) * c;
+  const dx = p[0] - ax;
+  const dz = p[1] - az;
+  const snapSize = (v: number) => Math.max(0.1, Math.round(v / grid) * grid);
+  const w = snapSize((dx * c + dz * s) * sx);
+  const d = snapSize((-dx * s + dz * c) * sz);
+  const r = (v: number) => Math.round(v * 1000) / 1000;
+  return { x: r(ax + sx * (w / 2) * c - sz * (d / 2) * s), z: r(az + sx * (w / 2) * s + sz * (d / 2) * c), w: r(w), d: r(d) };
 }
 
 export const FURNITURE_TYPES = [
@@ -431,6 +481,7 @@ export function normalizeBuilding(b: Building): Building {
   b.settings = { ...DEFAULT_SETTINGS, ...b.settings, roof: { ...DEFAULT_ROOF, ...(b.settings?.roof ?? {}) } };
   for (const f of b.floors) {
     f.outdoor = f.outdoor ?? [];
+    f.ha_floor = f.ha_floor ?? null;
     f.placements = f.placements.map((p) => ({ ...p, mount: p.mount ?? null }));
     f.furniture = f.furniture.map((m) => ({ ...m, entity: m.entity ?? null, power: m.power ?? null }));
     // lights placed as devices (before lamps existed) become lamps of their mount type

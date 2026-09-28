@@ -165,6 +165,26 @@ export class Floorplan3dPanel extends LitElement {
     });
   }
 
+  /** Width, depth and height of the selected item, editable in the furnish bar. */
+  private renderSizeFields(id: string) {
+    const f = this.data.building?.floors.flatMap((fl) => fl.furniture).find((m) => m.id === id);
+    if (!f) return nothing;
+    const field = (key: "w" | "d" | "h", label: string) => html`<label class="fp3d-size" title=${this.t(`size_${key}` as I18nKey)}
+      >${label}
+      <input
+        type="number"
+        inputmode="decimal"
+        step="0.05"
+        min="0.05"
+        .value=${String(Math.round(f[key] * 100) / 100)}
+        @change=${(e: Event) => {
+          const v = parseFloat((e.target as HTMLInputElement).value.replace(",", "."));
+          if (Number.isFinite(v) && v > 0) this.editFurniture(id, (m) => (m[key] = Math.round(v * 1000) / 1000));
+        }}
+    /></label>`;
+    return html`${field("w", "B")}${field("d", "T")}${field("h", "H")}`;
+  }
+
   private turnFurniture(delta: number): void {
     if (!this._selFurniture) return;
     this.editFurniture(this._selFurniture, (f) => (f.rotation = (((f.rotation + delta) % 360) + 360) % 360));
@@ -432,6 +452,7 @@ export class Floorplan3dPanel extends LitElement {
           ? html`<div class="fp3d-furnish-bar">
               ${this._selFurniture
                 ? html`<span>${this.furnitureName(this._selFurniture)}</span>
+                    ${this.renderSizeFields(this._selFurniture)}
                     <button class="fp3d-chip" @click=${() => this.turnFurniture(-45)}>↺ 45°</button>
                     <button class="fp3d-chip" @click=${() => this.turnFurniture(45)}>↻ 45°</button>
                     <button class="fp3d-chip fp3d-danger-chip" @click=${() => this.deleteFurniture()}>${this.t("delete")}</button>`
@@ -530,6 +551,23 @@ export class Floorplan3dPanel extends LitElement {
         background: var(--fp3d-chrome);
         box-shadow: var(--fp3d-shadow);
         font-size: 13.5px;
+      }
+      .fp3d-size {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 12px;
+        color: var(--fp3d-muted);
+      }
+      .fp3d-size input {
+        width: 58px;
+        padding: 5px 6px;
+        border: 1px solid rgba(127, 127, 127, 0.35);
+        border-radius: 8px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        font-size: 13px;
       }
       .fp3d-danger-chip {
         color: var(--fp3d-danger);

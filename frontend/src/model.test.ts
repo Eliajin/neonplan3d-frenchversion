@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { emptyBuilding, newFloor, normalizeBuilding, outdoorGround, spotGrid, surfaceHeight, type Furniture } from "./model.ts";
+import { emptyBuilding, floorElevation, newFloor, normalizeBuilding, outdoorGround, resizeFurniture, roomTiles, spotGrid, surfaceHeight, type Furniture } from "./model.ts";
 
 const item = (type: string, x: number, z: number, h: number, extra: Partial<Furniture> = {}): Furniture => ({
   id: `${type}_${x}`,
@@ -66,4 +66,37 @@ test("outdoor lamps stand on the ground, or on a terrace", () => {
   assert.equal(outdoorGround(floor, 10, 10), -0.2);
   assert.ok(Math.abs(outdoorGround(floor, 2, 1) - (-0.2 + 0.12)) < 1e-9);
   assert.equal(outdoorGround({ ...newFloor("og", "OG", 2.75), outdoor: [] }, 1, 1), 0);
+});
+
+test("resizing drags one corner while the opposite corner stays", () => {
+  const f: Furniture = { id: "f", type: "table", x: 1, z: 1, rotation: 0, w: 1, d: 1, h: 0.75, variant: null, entity: null, power: null };
+  // pull the front-right corner from (1.5, 1.5) to (2.5, 2)
+  assert.deepEqual(resizeFurniture(f, [1, 1], [2.5, 2], 0.05), { x: 1.5, z: 1.25, w: 2, d: 1.5 });
+  // turned by 90°: local x points along +z in the plan, so dragging along +z makes it wider
+  const turned = resizeFurniture({ ...f, rotation: 90 }, [1, 1], [0.5, 2.5], 0.05);
+  assert.equal(turned.w, 2);
+  assert.equal(turned.d, 1);
+  // never smaller than 10 cm
+  assert.equal(resizeFurniture(f, [1, 1], [0, 0], 0.05).w, 0.1);
+});
+
+test("floors from Home Assistant levels are stacked by level", () => {
+  assert.equal(floorElevation([], 0), 0);
+  assert.equal(floorElevation([], 1), 2.75);
+  assert.equal(floorElevation([], -1), -2.75);
+  // without a level, the new floor goes on top
+  assert.equal(floorElevation([newFloor("eg", "EG", 0)], null), 2.75);
+});
+
+test("rooms for areas are laid out beside the existing rooms", () => {
+  const floor = newFloor("eg", "EG", 0);
+  floor.rooms = [{ id: "r", name: "R", area_id: null, points: [[0, 0], [5, 0], [5, 4], [0, 4]], floor_material: "wood" }];
+  let n = 0;
+  const rooms = roomTiles(floor, [{ area_id: "a", name: "Küche" }, { area_id: "b", name: "Bad" }, { area_id: "c", name: "Flur" }, { area_id: "d", name: "Büro" }], () => `t${n++}`);
+  assert.equal(rooms.length, 4);
+  assert.equal(rooms[0].name, "Küche");
+  assert.equal(rooms[0].area_id, "a");
+  assert.deepEqual(rooms[0].points[0], [6, 0]);
+  // three per row
+  assert.deepEqual(rooms[3].points[0], [6, 3.5]);
 });

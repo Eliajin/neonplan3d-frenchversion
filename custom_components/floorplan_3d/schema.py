@@ -126,6 +126,8 @@ FLOOR_SCHEMA = vol.Schema(
         vol.Required("placements"): vol.All([PLACEMENT_SCHEMA], vol.Length(max=MAX_ITEMS)),
         vol.Required("background"): vol.Any(None, BACKGROUND_SCHEMA),
         vol.Optional("outdoor", default=list): vol.All([OUTDOOR_SCHEMA], vol.Length(max=MAX_ITEMS)),
+        # floor of Home Assistant's floor registry this floor stands for
+        vol.Optional("ha_floor", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
     },
     extra=vol.ALLOW_EXTRA,
 )

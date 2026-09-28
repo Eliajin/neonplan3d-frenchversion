@@ -64,6 +64,10 @@ const shots = [
   { name: "editor-backup", query: "", width: 1280, height: 1600, editor: true, openDetails: true, scrollSide: true },
   { name: "editor-spots", query: "", width: 1280, height: 1000, editor: true, editorState: { _roomId: "wohnen", _spots: { type: "lamp_downlight", rows: 3, cols: 4, entity: "light.wohnzimmer_decke" } } },
   { name: "editor-measure", query: "", width: 1280, height: 900, editor: true, editorState: { _tool: "measure", _draft: [[14, 6], [18, 6], [18, 9.5]], _measureLen: 4 } },
+  { name: "editor-ha-floors", query: "", width: 1280, height: 900, editor: true, editorScript: "e._doc.floors[0].ha_floor = 'erdgeschoss'; e._doc.floors[1].ha_floor = 'obergeschoss'; e._floorMenu = true;" },
+  { name: "editor-area-rooms", query: "", width: 1280, height: 900, editor: true, editorScript: "e._doc.floors[0].ha_floor = 'erdgeschoss'; e._doc.floors[1].ha_floor = 'obergeschoss'; e.addFloor(e.freeHaFloors[0]); e.addAreaRooms(e.floor);" },
+  { name: "editor-resize", query: "", width: 1280, height: 800, editor: true, editorState: { _furnitureId: "m2" } },
+  { name: "view-size-bar", query: "", width: 1280, height: 800, click: "Erdgeschoss", furnishDrag: { id: "m2", dx: 0, dy: 0 } },
   { name: "editor-package", query: "", width: 1280, height: 900, editor: true, editorScript: "const f = e._doc.floors[1]; e._floorId = f.id; e.applyPackage(f.rooms.find((r) => r.id === 'gast'), 'bedroom'); e.applyPackage(f.rooms.find((r) => r.id === 'kind'), 'kids');" },
   { name: "view-package", query: "", width: 1280, height: 800, editor: true, editorScript: "const f = e._doc.floors[1]; e.applyPackage(f.rooms.find((r) => r.id === 'gast'), 'bedroom');", then3d: "Obergeschoss" },
   { name: "view-furnish", query: "", width: 1280, height: 800, click: "Erdgeschoss", furnishDrag: { id: "m2", dx: -160, dy: 60 } },
@@ -73,7 +77,8 @@ const shots = [
 ];
 
 const errors = [];
-for (const shot of shots) {
+const only = process.env.SHOTS?.split(",");
+for (const shot of shots.filter((s) => !only || only.includes(s.name))) {
   const page = await browser.newPage();
   page.on("pageerror", (e) => errors.push(`${shot.name}: ${e.message}`));
   page.on("console", (m) => m.type() === "error" && !m.location()?.url?.endsWith("favicon.ico") && errors.push(`${shot.name}: ${m.text()}`));

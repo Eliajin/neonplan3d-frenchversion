@@ -1,5 +1,12 @@
 // The parts of the Home Assistant frontend object this integration uses.
 
+/** Floor of Home Assistant's floor registry (hass.floors). */
+export interface HassFloor {
+  floor_id: string;
+  name: string;
+  level?: number | null;
+}
+
 export interface HassArea {
   area_id: string;
   name: string;
@@ -38,6 +45,7 @@ export interface HomeAssistant {
   language: string;
   user?: { is_admin: boolean; name: string };
   areas?: Record<string, HassArea>;
+  floors?: Record<string, HassFloor>;
   entities?: Record<string, HassEntityEntry>;
   devices?: Record<string, HassDevice>;
   states: Record<string, HassEntity>;
