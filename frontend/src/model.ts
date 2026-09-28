@@ -82,12 +82,59 @@ export interface Floor {
   furniture: Furniture[];
   placements: Placement[];
   background: Background | null;
+  outdoor: OutdoorArea[];
+}
+
+export type RoofType = "none" | "flat" | "gable";
+
+export interface RoofSettings {
+  type: RoofType;
+  /** Slope of a gable roof in degrees. */
+  pitch: number;
+  /** How far the roof reaches beyond the outer walls (metres). */
+  overhang: number;
 }
 
 export interface BuildingSettings {
   wall_exterior: number;
   wall_interior: number;
   grid: number;
+  /** Direction of north in the plan, degrees clockwise from "up" (for the sun). */
+  north: number;
+  roof: RoofSettings;
+}
+
+export const OUTDOOR_TYPES = ["lawn", "terrace", "path", "driveway", "pool", "bed", "hedge", "fence"] as const;
+export type OutdoorType = (typeof OUTDOOR_TYPES)[number];
+
+/** Top of each kind of outdoor area above ground level (pool: its water, below). */
+export const OUTDOOR_TOP: Record<OutdoorType, number> = {
+  lawn: 0.012,
+  terrace: 0.12,
+  path: 0.02,
+  driveway: 0.02,
+  pool: -0.25,
+  bed: 0.15,
+  hedge: 1.2,
+  fence: 1.0,
+};
+
+/** Ground level in floor coordinates: below the ground floor slab (0.2 m), the floor itself further up. */
+export function groundLevel(floor: Floor): number {
+  return floor.elevation > 0.3 ? 0 : -0.2;
+}
+
+/** Height outdoor lamps stand on at a point: ground level, or the top of a terrace or bed there. */
+export function outdoorGround(floor: Floor, x: number, z: number): number {
+  const a = (floor.outdoor ?? []).find((o) => o.type !== "hedge" && o.type !== "fence" && o.type !== "pool" && pointInPolygon([x, z], o.points));
+  return groundLevel(floor) + (a ? OUTDOOR_TOP[a.type] : 0);
+}
+
+/** Area outside the house (lawn, terrace, pool, hedge …), drawn like a room. */
+export interface OutdoorArea {
+  id: string;
+  type: OutdoorType;
+  points: Vec2[];
 }
 
 /** Energy flow: meter position and power sensors (W). Grid positive = import, battery positive = discharging. */
@@ -129,7 +176,9 @@ export const DEFAULT_ENERGY: EnergySettings = {
 
 export const FLOOR_MATERIALS = ["wood", "oak", "tiles", "carpet", "stone", "concrete"] as const;
 
-export const DEFAULT_SETTINGS: BuildingSettings = { wall_exterior: 0.24, wall_interior: 0.12, grid: 0.05 };
+export const DEFAULT_ROOF: RoofSettings = { type: "none", pitch: 35, overhang: 0.4 };
+
+export const DEFAULT_SETTINGS: BuildingSettings = { wall_exterior: 0.24, wall_interior: 0.12, grid: 0.05, north: 0, roof: { ...DEFAULT_ROOF } };
 
 export function emptyBuilding(): Building {
   return { version: 1, floors: [], settings: { ...DEFAULT_SETTINGS }, energy: { ...DEFAULT_ENERGY }, presence: [] };
@@ -147,6 +196,7 @@ export function newFloor(id: string, name: string, elevation: number): Floor {
     furniture: [],
     placements: [],
     background: null,
+    outdoor: [],
   };
 }
 
@@ -161,6 +211,9 @@ export const FURNITURE_TYPES = [
   "lamp_wall",
   "led_strip",
   "lamp_uplight",
+  "lamp_bollard",
+  "lamp_garden",
+  "radiator",
   "sofa",
   "armchair",
   "stool",
@@ -205,13 +258,13 @@ export const FURNITURE_TYPES = [
 
 /** Furniture library sections (the editor lists them in this order). */
 export const FURNITURE_GROUPS: Record<string, FurnitureType[]> = {
-  lights: ["lamp_ceiling", "lamp_downlight", "lamp_spot", "lamp_panel", "lamp_pendant", "lamp_floor", "lamp_uplight", "lamp_table", "lamp_wall", "led_strip"],
+  lights: ["lamp_ceiling", "lamp_downlight", "lamp_spot", "lamp_panel", "lamp_pendant", "lamp_floor", "lamp_uplight", "lamp_table", "lamp_wall", "led_strip", "lamp_bollard", "lamp_garden"],
   living: ["sofa", "armchair", "stool", "coffee_table", "tv_board", "tv_wall", "sideboard", "shelf", "plant", "rug"],
   dining: ["table", "table_round", "chair", "bench", "corner_bench", "bar_stool"],
   kitchen: ["kitchen", "kitchen_wall", "kitchen_tall", "island", "sink", "stove", "dishwasher", "fridge"],
   sleeping: ["bed", "bunk_bed", "nightstand", "wardrobe", "dresser"],
   bath: ["bathtub", "shower", "wc", "washbasin", "washer", "dryer"],
-  work: ["desk", "office_chair", "tall_cabinet", "coat_rack", "stairs"],
+  work: ["desk", "office_chair", "tall_cabinet", "coat_rack", "radiator", "stairs"],
 };
 
 /** Furniture that can show a linked entity (TV state, power, …). */
@@ -227,6 +280,8 @@ export const LAMP_TYPES = new Set<string>([
   "lamp_table",
   "lamp_wall",
   "led_strip",
+  "lamp_bollard",
+  "lamp_garden",
 ]);
 
 export function isLamp(type: string): boolean {
@@ -280,6 +335,7 @@ export function surfaceHeight(floor: Floor, x: number, z: number): number {
 
 export const ELECTRIC_FURNITURE = new Set<string>([
   ...LAMP_TYPES,
+  "radiator",
   "tv_board",
   "tv_wall",
   "desk",
@@ -325,6 +381,9 @@ export const FURNITURE_SIZE: Record<FurnitureType, [number, number, number]> = {
   lamp_spot: [0.1, 0.1, 0.14],
   lamp_panel: [0.6, 0.6, 0.03],
   lamp_uplight: [0.35, 0.35, 1.8],
+  lamp_bollard: [0.16, 0.16, 0.8],
+  lamp_garden: [0.12, 0.12, 0.3],
+  radiator: [1.0, 0.1, 0.6],
   lamp_pendant: [0.4, 0.4, 0.8],
   lamp_floor: [0.4, 0.4, 1.7],
   lamp_table: [0.28, 0.28, 0.45],
@@ -360,7 +419,9 @@ export const OPENING_DEFAULTS = {
 export function normalizeBuilding(b: Building): Building {
   b.energy = { ...DEFAULT_ENERGY, ...(b.energy ?? {}) };
   b.presence = b.presence ?? [];
+  b.settings = { ...DEFAULT_SETTINGS, ...b.settings, roof: { ...DEFAULT_ROOF, ...(b.settings?.roof ?? {}) } };
   for (const f of b.floors) {
+    f.outdoor = f.outdoor ?? [];
     f.placements = f.placements.map((p) => ({ ...p, mount: p.mount ?? null }));
     f.furniture = f.furniture.map((m) => ({ ...m, entity: m.entity ?? null, power: m.power ?? null }));
     // lights placed as devices (before lamps existed) become lamps of their mount type

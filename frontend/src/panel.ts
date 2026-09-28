@@ -10,6 +10,7 @@ import type { Building } from "./model.ts";
 import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
 import type { MarkerMode } from "./components/view3d.ts";
+import type { HeatMode } from "./heatmap.ts";
 import type { Quality, WallMode } from "./viewer/viewer3d.ts";
 
 type Mode = "view" | "editor";
@@ -46,6 +47,7 @@ export class Floorplan3dPanel extends LitElement {
     _quality: { state: true },
     _stats: { state: true },
     _markers: { state: true },
+    _heat: { state: true },
   };
 
   declare hass: HomeAssistant;
@@ -61,6 +63,7 @@ export class Floorplan3dPanel extends LitElement {
   /** Performance display (per device; also switched on by ?fp3d_stats in the URL). */
   private declare _stats: boolean;
   private declare _markers: MarkerMode;
+  private declare _heat: HeatMode;
 
   private readonly data = new BuildingController(this);
 
@@ -78,6 +81,8 @@ export class Floorplan3dPanel extends LitElement {
     this._stats = prefs.get("stats") === "1" || new URLSearchParams(location.search).has("fp3d_stats");
     const markers = prefs.get("markers");
     this._markers = markers === "none" || markers === "all" ? markers : "important";
+    const heat = prefs.get("heat");
+    this._heat = heat === "temperature" || heat === "humidity" || heat === "co2" ? heat : "none";
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
@@ -289,6 +294,7 @@ export class Floorplan3dPanel extends LitElement {
           .wallMode=${this._wallMode}
           .explode=${this._explode}
           .markerMode=${this._markers}
+          .heatMode=${this._heat}
           .quality=${this._quality}
           ?showStats=${this._stats}
           @room-tap=${this.onRoomTap}
@@ -317,6 +323,20 @@ export class Floorplan3dPanel extends LitElement {
                 <button aria-pressed=${!this._explode} @click=${() => this.setExplode(false)}>${this.t("floors_stacked")}</button>
               </div>`
             : nothing}
+          <div class="fp3d-seg" role="group" aria-label=${this.t("heatmap")}>
+            ${(["none", "temperature", "humidity", "co2"] as HeatMode[]).map(
+              (m) =>
+                html`<button
+                  aria-pressed=${this._heat === m}
+                  @click=${() => {
+                    this._heat = m;
+                    prefs.set("heat", m);
+                  }}
+                >
+                  ${this.t(m === "none" ? "heat_off" : (`heat_short_${m}` as I18nKey))}
+                </button>`,
+            )}
+          </div>
           ${this._roomId || (this._floorId && b.floors.length > 1)
             ? html`<button class="fp3d-chip" @click=${() => this.back()}>${this.t("back")}</button>`
             : nothing}

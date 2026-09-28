@@ -42,6 +42,7 @@ import { buildFloorGeometry, SLAB, stairHoles, type FloorGeometry } from "./buil
 import { OrbitControls } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
 import { screenRect } from "./furniture.ts";
+import { buildRoof } from "./roof.ts";
 import { GeoBuffer, pushPrism } from "./geo.ts";
 import { buildLightSurface, lightColors, roomIndexAt, type LightKind, type LightSource, type LightSurface } from "./lighting.ts";
 import { buildOpeningParts, CLOSED, type OpeningState } from "./openings.ts";
@@ -106,7 +107,7 @@ export interface DeviceMarker {
   powerText?: string;
 }
 
-export type LampModel = "ceiling" | "downlight" | "spot" | "panel" | "pendant" | "floor" | "uplight" | "table" | "wall" | "strip";
+export type LampModel = "ceiling" | "downlight" | "spot" | "panel" | "pendant" | "floor" | "uplight" | "table" | "wall" | "strip" | "bollard" | "garden";
 
 /** Piece of energy cable (floor-local coordinates); the flow runs from a to b. */
 export interface FlowPiece {
@@ -125,6 +126,12 @@ export interface ScreenState {
   level: number;
   /** Picture of what is running (app icon or cover art from the media player), if any. */
   picture?: string | null;
+}
+
+/** Position of the sun (from sun.sun): degrees above the horizon and clockwise from north. */
+export interface SunState {
+  elevation: number;
+  azimuth: number;
 }
 
 export interface PersonPin {
@@ -182,6 +189,8 @@ const LAMP_SIZE: Record<LampModel, [number, number, number]> = {
   spot: [0.1, 0.1, 0.14],
   panel: [0.6, 0.6, 0.03],
   uplight: [0.35, 0.35, 1.8],
+  bollard: [0.16, 0.16, 0.8],
+  garden: [0.12, 0.12, 0.3],
   pendant: [0.4, 0.4, 0.8],
   floor: [0.42, 0.42, 1.7],
   table: [0.26, 0.26, 0.45],
@@ -224,6 +233,9 @@ interface FloorView {
   blindsMesh: Mesh;
   flowMesh: Mesh;
   lampMesh: Mesh;
+  /** Sunlight falling through the windows onto the floor. */
+  sunMesh: Mesh;
+  sunSig: string;
   /** Soft glow around lit lamps, and light cones under spots (quality "High"). */
   haloMesh: Points;
   coneMesh: Mesh;
@@ -316,6 +328,13 @@ export class FloorplanViewer {
   private effectTime = 0;
   private effectTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly haloTexture: CanvasTexture;
+  /** Roof over the top floor (house view only), its opacity and the camera distance of the house view. */
+  private roof: { group: Group; floorId: string; solid: MeshBasicMaterial; lines: LineBasicMaterial } | null = null;
+  private roofO = 0;
+  private sun: SunState | null = null;
+  /** Heatmap colour per room id (null: normal floors). */
+  private roomTint: Map<string, [number, number, number]> | null = null;
+  private houseRadius = 20;
   private fpsStart = 0;
 
   constructor(host: HTMLElement, options: ViewerOptions = {}) {
@@ -509,6 +528,26 @@ export class FloorplanViewer {
     this.pickOpenings = openings;
   }
 
+  /** Position of the sun; sunlight falls through windows facing it. */
+  setSun(sun: SunState | null): void {
+    this.sun = sun;
+    for (const fv of this.floors) this.buildSun(fv);
+    this.invalidate();
+  }
+
+  /** Heatmap: floor colour per room id, or null for the normal look. */
+  setRoomTint(tint: Map<string, [number, number, number]> | null): void {
+    const changed = !!tint !== !!this.roomTint;
+    this.roomTint = tint;
+    this.applyHighlight();
+    if (changed) {
+      for (const fv of this.floors) {
+        fv.glowSig = "";
+        this.buildGlow(fv);
+      }
+    }
+  }
+
   /** Screens of TVs and monitors that are on (by furniture id). */
   setScreens(screens: Map<string, ScreenState>): void {
     this.screens = screens;
@@ -549,6 +588,8 @@ export class FloorplanViewer {
     document.removeEventListener("visibilitychange", this.onVisibility);
     this.controls.dispose();
     this.clear();
+    this.building = null;
+    this.buildRoofMesh();
     this.ground.geometry.dispose();
     (this.ground.material as Material).dispose();
     this.patternTexture.dispose();
@@ -687,7 +728,6 @@ export class FloorplanViewer {
       const glow = this.glowOf(d);
       if (d.floorId !== fv.floor.id || !glow) continue;
       const room = roomIndexAt(fv.floor, d.x, d.z);
-      if (room < 0) continue;
       const [w, , h] = d.size ?? (d.lamp ? LAMP_SIZE[d.lamp] : [0.3, 0.3, 0.3]);
       const base = d.base ?? 0;
       const kinds: Record<LampModel, [number, LightKind]> = {
@@ -701,6 +741,8 @@ export class FloorplanViewer {
         table: [base + h - 0.1, "omni"],
         wall: [WALL_LAMP_Y + 0.1, "wall"],
         strip: [H - 0.05, "ceiling"],
+        bollard: [base + h - 0.08, "ceiling"],
+        garden: [base + h, "up"],
       };
       const [y, kind] = d.lamp ? kinds[d.lamp] : [d.y, "omni" as LightKind];
       const color = glow.color;
@@ -728,7 +770,8 @@ export class FloorplanViewer {
     if (sig === fv.glowSig) return;
     fv.glowSig = sig;
     const attr = fv.glowMesh.geometry.getAttribute("color") as Float32BufferAttribute;
-    if (!sources.length) {
+    // the heatmap is an analysis view: room light would wash out its colours
+    if (!sources.length || this.roomTint) {
       fv.glowMesh.visible = false;
       return;
     }
@@ -826,6 +869,9 @@ export class FloorplanViewer {
       glassMesh.renderOrder = 4;
       const lampMesh = new Mesh(new Geometry(), materials.lamps);
       lampMesh.visible = false;
+      const sunMesh = new Mesh(new Geometry(), materials.cones);
+      sunMesh.visible = false;
+      sunMesh.renderOrder = 3;
       const haloMesh = new Points(new Geometry(), materials.halos);
       haloMesh.visible = false;
       haloMesh.renderOrder = 7;
@@ -856,6 +902,7 @@ export class FloorplanViewer {
         glassMesh,
         flowMesh,
         lampMesh,
+        sunMesh,
         haloMesh,
         coneMesh,
         screenMesh,
@@ -890,6 +937,8 @@ export class FloorplanViewer {
         blindsMesh,
         flowMesh,
         lampMesh,
+        sunMesh,
+        sunSig: "",
         haloMesh,
         coneMesh,
         lampTris: [],
@@ -932,10 +981,55 @@ export class FloorplanViewer {
       this.buildOpenings(fv);
       this.buildFlows(fv);
       this.buildLightSurface(fv);
+      this.buildSun(fv);
     }
     this.applyTargets(previous.size === 0);
     this.applyHighlight();
     this.applyDetail();
+    this.buildRoofMesh();
+  }
+
+  private buildRoofMesh(): void {
+    if (this.roof) {
+      this.roof.group.traverse((o) => ((o as Mesh).geometry as BufferGeometry | undefined)?.dispose());
+      this.roof.solid.dispose();
+      this.roof.lines.dispose();
+      this.scene.remove(this.roof.group);
+      this.roof = null;
+    }
+    const geo = this.building ? buildRoof(this.building) : null;
+    if (!geo) return;
+    const group = new Group();
+    const solid = new MeshBasicMaterial({ vertexColors: true, transparent: true, side: DoubleSide });
+    const lines = new LineBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false });
+    group.add(new Mesh(geo.solid.geometry(), solid), new LineSegments(geo.lines.geometry(), lines));
+    group.renderOrder = 8;
+    this.scene.add(group);
+    this.roof = { group, floorId: geo.floor.id, solid, lines };
+    this.placeRoof();
+  }
+
+  /**
+   * The roof shows in the house view and sits on its floor; zooming in lifts and fades it, so the top
+   * floor opens up. Returns true while it still moves.
+   */
+  private placeRoof(dt = 1000): boolean {
+    const roof = this.roof;
+    if (!roof) return false;
+    const fv = this.floors.find((f) => f.floor.id === roof.floorId);
+    if (!fv) return false;
+    const zoom = Math.min(1, Math.max(0, (this.controls.view.radius / this.houseRadius - 0.62) / 0.3));
+    const target = this.floorId === null && this.wallMode !== "cut" ? 0.94 * zoom : 0;
+    const k = 1 - Math.exp(-dt / FLOOR_TAU);
+    const before = this.roofO;
+    this.roofO += (target - this.roofO) * k;
+    if (Math.abs(target - this.roofO) < 0.004) this.roofO = target;
+    roof.group.visible = this.roofO > 0.02;
+    roof.group.position.y = fv.floor.elevation + fv.y + fv.floor.height + (1 - this.roofO) * 2.2;
+    roof.solid.opacity = this.roofO;
+    roof.solid.depthWrite = this.roofO > 0.9;
+    roof.lines.opacity = this.roofO;
+    return this.roofO !== before && this.roofO !== target;
   }
 
   /**
@@ -1080,6 +1174,7 @@ export class FloorplanViewer {
       if (changed) {
         this.buildOpenings(fv);
         this.buildGlow(fv);
+        this.buildSun(fv);
       }
     }
     return moving;
@@ -1198,6 +1293,18 @@ export class FloorplanViewer {
           cyl(r, h - 0.14, h - 0.02, LAMP_BODY, LAMP_BODY);
           cyl(r * 0.92, h - 0.02, h, shadeCol, shadeCol);
           break;
+        case "bollard":
+          // path light: post with a glowing band under its cap
+          cyl(r, base, base + h - 0.14, LAMP_BODY, LAMP_BODY, 10);
+          cyl(r * 0.9, base + h - 0.14, base + h - 0.03, shadeCol, shadeCol, 10);
+          cyl(r * 1.1, base + h - 0.03, base + h, LAMP_BODY, LAMP_BODY, 10);
+          break;
+        case "garden":
+          // spike in the ground, head pointing up
+          cyl(0.012, base, base + h - 0.08, LAMP_BODY, LAMP_BODY, 5);
+          cyl(r, base + h - 0.08, base + h - 0.01, LAMP_BODY, LAMP_BODY, 10);
+          cyl(r * 0.8, base + h - 0.01, base + h, shadeCol, shadeCol, 10);
+          break;
         case "floor":
           cyl(Math.max(0.1, r * 0.7), 0, 0.03, LAMP_BODY, LAMP_BODY);
           cyl(0.014, 0.03, h - 0.28, LAMP_BODY, LAMP_BODY, 6);
@@ -1231,6 +1338,56 @@ export class FloorplanViewer {
     this.buildHalos(fv);
   }
 
+  /**
+   * Sunlight through windows that face the sun: each window's opening (reduced by its blind) is
+   * projected along the sun's rays onto the floor as a warm, soft patch.
+   */
+  private buildSun(fv: FloorView): void {
+    const sun = this.sun;
+    const north = ((this.building?.settings.north ?? 0) * Math.PI) / 180;
+    const sig = sun ? `${sun.elevation.toFixed(1)},${sun.azimuth.toFixed(1)},${north},${[...fv.openings.values()].map((o) => (o.cover ?? 0).toFixed(2)).join(",")}` : "";
+    if (sig === fv.sunSig) return;
+    fv.sunSig = sig;
+    const buf = new GeoBuffer();
+    if (sun && sun.elevation > 2) {
+      const day = Math.min(1, sun.elevation / 12);
+      const el = (sun.elevation * Math.PI) / 180;
+      const az = (sun.azimuth * Math.PI) / 180;
+      // horizontal direction towards the sun in plan coordinates (x right, z down, "up" = -z)
+      const toSun: [number, number] = [Math.sin(north + az), -Math.cos(north + az)];
+      const reach = 1 / Math.tan(el);
+      for (const info of fv.geo.openings) {
+        if (info.opening.type !== "window" || !info.exterior) continue;
+        const out: [number, number] = [-info.toRoom[0], -info.toRoom[1]];
+        const facing = out[0] * toSun[0] + out[1] * toSun[1];
+        if (facing < 0.05) continue;
+        const st = fv.openings.get(info.opening.id);
+        const top = info.top - (st?.cover ?? 0) * (info.top - info.sill);
+        if (top - info.sill < 0.05) continue;
+        const at = (s: number, y: number) => {
+          const d = Math.min(7, y * reach);
+          return [
+            info.start[0] + info.axis[0] * s + info.toRoom[0] * info.faceRoom - toSun[0] * d,
+            0.02,
+            info.start[1] + info.axis[1] * s + info.toRoom[1] * info.faceRoom - toSun[1] * d,
+          ];
+        };
+        const k = 0.14 * day * Math.min(1, facing * 1.5);
+        const near = new Color(1 * k, 0.82 * k, 0.55 * k);
+        const far = near.clone().multiplyScalar(0.45);
+        const a = at(0, info.sill);
+        const b = at(info.width, info.sill);
+        const c = at(info.width, top);
+        const d = at(0, top);
+        buf.tri(a, b, c, near, near, far);
+        buf.tri(a, c, d, near, far, far);
+      }
+    }
+    fv.sunMesh.geometry.dispose();
+    fv.sunMesh.geometry = buf.geometry();
+    fv.sunMesh.visible = buf.count > 0;
+  }
+
   /** Glow points at lit shades (not at the tablet level) and light cones under spots (level "High"). */
   private buildHalos(fv: FloorView): void {
     const H = fv.floor.height;
@@ -1255,6 +1412,8 @@ export class FloorplanViewer {
         table: base + h - 0.09,
         wall: WALL_LAMP_Y + h / 2,
         strip: H - 0.05,
+        bollard: base + h - 0.08,
+        garden: base + h - 0.03,
       }[d.lamp];
       // a wall light glows in front of the wall
       const push = (x: number, z: number, k = 1) => {
@@ -1507,7 +1666,10 @@ export class FloorplanViewer {
       const colors = fv.geo.floor.getAttribute("color");
       for (const r of fv.geo.roomTris) {
         const c = new Color(r.color);
-        if (r.roomId === this.roomId) c.lerp(ACTIVE_FLOOR, 0.75);
+        const tint = this.roomTint?.get(r.roomId);
+        // heatmap: a clear, saturated floor colour (the room light is dimmed meanwhile)
+        if (tint) c.lerp(new Color(...tint).multiplyScalar(0.6), 0.9);
+        if (r.roomId === this.roomId) c.lerp(ACTIVE_FLOOR, tint ? 0.3 : 0.75);
         for (let v = r.start * 3; v < r.end * 3; v++) colors.setXYZ(v, c.r, c.g, c.b);
       }
       colors.needsUpdate = true;
@@ -1537,6 +1699,7 @@ export class FloorplanViewer {
     const radius = Math.max(8, this.distanceFor(size) * (this.camera.aspect < 1 ? 1.16 : 1.02));
     this.controls.maxRadius = Math.max(40, radius * 3);
     center.y = box.min.y + size.y * (this.houseView ? 0.45 : 0.3);
+    if (this.floorId === null) this.houseRadius = radius;
     this.controls.flyTo({ target: center, radius, phi: 0.85, theta: -0.6 }, duration);
   }
 
@@ -1547,6 +1710,7 @@ export class FloorplanViewer {
     for (const fv of this.floors) {
       y = Math.min(y, fv.floor.elevation + Math.min(0, fv.ty));
       for (const room of fv.floor.rooms) for (const [x, z] of room.points) box.expandByPoint(new Vector3(x, 0, z));
+      for (const a of fv.floor.outdoor ?? []) for (const [x, z] of a.points) box.expandByPoint(new Vector3(x, 0, z));
     }
     this.ground.visible = !box.isEmpty() && !this.lowQuality;
     if (box.isEmpty()) return;
@@ -1628,7 +1792,8 @@ export class FloorplanViewer {
       flashing = this.flashes.size > 0;
       for (const fv of this.floors) this.buildLamps(fv);
     }
-    const moving = cameraMoving || floorsMoving || openingsMoving || flashing;
+    const roofMoving = this.placeRoof(dt);
+    const moving = cameraMoving || floorsMoving || openingsMoving || flashing || roofMoving;
     this.lastFrame = moving ? now : 0;
     this.flowTime.value = this.flowSeconds();
     this.updateWalls();

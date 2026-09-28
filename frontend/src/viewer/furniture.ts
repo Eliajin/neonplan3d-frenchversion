@@ -534,6 +534,22 @@ function tvWall(b: Builder, w: number, d: number, h: number): void {
   b.box(-w / 2, w / 2, y0, y0 + h, -d / 2 + 0.03, d / 2, C.dark, C.dark, EDGE_GLOW);
 }
 
+/** Radiator on the wall (back at -z): panel with vertical fins, standing on short brackets. */
+function radiator(b: Builder, w: number, d: number, h: number): void {
+  const y0 = RADIATOR_Y;
+  b.box(-w / 2 + 0.05, -w / 2 + 0.08, 0, y0, -d / 2, -d / 2 + 0.03, C.metal);
+  b.box(w / 2 - 0.08, w / 2 - 0.05, 0, y0, -d / 2, -d / 2 + 0.03, C.metal);
+  b.box(-w / 2, w / 2, y0, y0 + h, -d / 2 + 0.02, d / 2, C.white, C.whiteTop, EDGE_FURN);
+  const n = Math.max(3, Math.round(w / 0.1));
+  for (let i = 1; i < n; i++) {
+    const x = -w / 2 + (w / n) * i;
+    b.seg(x, y0 + 0.03, d / 2 + 0.002, x, y0 + h - 0.03, d / 2 + 0.002, EDGE_FAINT);
+  }
+}
+
+/** Height of the underside of a radiator. */
+export const RADIATOR_Y = 0.12;
+
 /**
  * Screen of a TV or monitor in local coordinates (x across, y up, z = its front face), for the glow
  * shown while the linked device is on. Null for furniture without a screen.
@@ -552,6 +568,14 @@ export function screenRect(f: Furniture): { x0: number; x1: number; y0: number; 
     return { x0: -w / 2 + 0.02, x1: w / 2 - 0.02, y0: y0 + 0.02, y1: y0 + h - 0.02, z: d / 2 + 0.003 };
   }
   if (f.type === "desk") return { x0: -0.28, x1: 0.28, y0: h + 0.1, y1: h + 0.4, z: -d / 2 + 0.115 };
+  // glowing fronts of appliances that run and of a radiator that heats
+  if (f.type === "radiator") return { x0: -w / 2 + 0.02, x1: w / 2 - 0.02, y0: RADIATOR_Y + 0.02, y1: RADIATOR_Y + h - 0.02, z: d / 2 + 0.004 };
+  if (f.type === "washer" || f.type === "dryer") {
+    const cy = (h - 0.14) / 2 + 0.04;
+    const r = Math.min(w * 0.36, (h - 0.2) * 0.42) * 0.8;
+    return { x0: -r, x1: r, y0: cy - r, y1: cy + r, z: d / 2 - 0.004 };
+  }
+  if (f.type === "dishwasher") return { x0: -w / 2 + 0.06, x1: w / 2 - 0.06, y0: h - 0.16, y1: h - 0.08, z: d / 2 - 0.004 };
   return null;
 }
 
@@ -704,6 +728,9 @@ export function pushFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuff
     case "tv_wall":
       tvWall(b, w, d, h);
       return;
+    case "radiator":
+      radiator(b, w, d, h);
+      return; // on the wall, no shadow on the floor
     default:
       b.box(-w / 2, w / 2, 0, h, -d / 2, d / 2, C.body, C.bodyTop, EDGE_FURN);
   }

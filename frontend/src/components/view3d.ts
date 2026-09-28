@@ -18,10 +18,11 @@ import {
 } from "../devices.ts";
 import { iconSvg } from "../icons.ts";
 import { energySummary, findConsumers, flowColor, flowSegments, powerSensorFor, readPower, type Consumer, type EnergySummary } from "../energy.ts";
+import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from "../heatmap.ts";
 import { formatNumber, translate } from "../i18n.ts";
 import { load3d } from "../load3d.ts";
 import { buildMarkers, openMoreInfo, placedEntities, stateText, toggleEntity } from "../markers.ts";
-import { isLamp, pointInPolygon, surfaceHeight, type Building, type Furniture } from "../model.ts";
+import { isLamp, outdoorGround, pointInPolygon, surfaceHeight, type Building, type Furniture } from "../model.ts";
 import { floorCounts, floorInfoText, personsInRooms } from "../presence.ts";
 import { tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
@@ -36,6 +37,8 @@ const LAMP_MODEL: Record<string, LampModel> = {
   lamp_spot: "spot",
   lamp_panel: "panel",
   lamp_uplight: "uplight",
+  lamp_bollard: "bollard",
+  lamp_garden: "garden",
   lamp_pendant: "pendant",
   lamp_floor: "floor",
   lamp_table: "table",
@@ -52,6 +55,8 @@ export class Fp3dView3d extends LitElement {
     wallMode: { attribute: false },
     explode: { type: Boolean },
     markerMode: { attribute: false },
+    heatMode: { attribute: false },
+    _sky: { state: true },
     quality: { attribute: false },
     showStats: { type: Boolean },
     _stats: { state: true },
@@ -66,6 +71,9 @@ export class Fp3dView3d extends LitElement {
   declare wallMode: WallMode;
   declare explode: boolean;
   declare markerMode: MarkerMode;
+  declare heatMode: HeatMode;
+  /** How much daylight there is (0 = night, 1 = day), from sun.sun. */
+  private declare _sky: number;
   declare quality: Quality;
   declare showStats: boolean;
   private declare _stats: ViewerStats | null;
@@ -81,6 +89,8 @@ export class Fp3dView3d extends LitElement {
   private linkedRegistry: HomeAssistant["entities"] | undefined;
   /** Entities of electric furniture (TV, fridge, …). */
   private furnitureLinks = new Map<string, FurnitureLinks>();
+  /** Room values of the current heatmap (for the legend). */
+  private heatValues = new Map<string, number>();
   /** Entities whose state changes redraw markers, cables, people and floor labels. */
   private watched: string[] = [];
 
@@ -92,6 +102,8 @@ export class Fp3dView3d extends LitElement {
     this.wallMode = "auto";
     this.explode = true;
     this.markerMode = "important";
+    this.heatMode = "none";
+    this._sky = 0;
     this.quality = "auto";
     this.showStats = false;
     this._stats = null;
@@ -152,7 +164,9 @@ export class Fp3dView3d extends LitElement {
     const v = this.viewer;
     if (!v) return;
     if (changed.has("building") && this.building) v.setBuilding(this.building);
-    if (changed.has("building") || changed.has("hass") || changed.has("markerMode")) this.syncDevices(changed.has("building") || changed.has("markerMode"));
+    if (changed.has("building") || changed.has("hass") || changed.has("markerMode") || changed.has("heatMode")) {
+      this.syncDevices(changed.has("building") || changed.has("markerMode") || changed.has("heatMode"));
+    }
     if (changed.has("floorId")) v.setFloor(this.floorId);
     if (changed.has("roomId") && (this.roomId || changed.get("roomId"))) v.selectRoom(this.roomId);
     if (changed.has("wallMode")) v.setWallMode(this.wallMode);
@@ -181,7 +195,11 @@ export class Fp3dView3d extends LitElement {
       const presence = b.presence.flatMap((p) => [p.person, p.sensor]);
       const lights = b.floors.flatMap((f) => f.rooms.flatMap((r) => areaEntities(hass, r.area_id).filter((id) => kindOf(id) === "light")));
       const furniture = [...this.furnitureLinks.values()].flatMap((l) => [l.entity, l.power]);
-      const all = [...placed, ...links, ...power, ...furniture, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights];
+      const heat =
+        this.heatMode === "none"
+          ? []
+          : b.floors.flatMap((f) => f.rooms.flatMap((r) => areaEntities(hass, r.area_id).filter((id) => id.startsWith("sensor."))));
+      const all = [...placed, ...links, ...power, ...furniture, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights, ...heat, "sun.sun"];
       this.watched = [...new Set(all.filter((id): id is string => !!id))];
       force = true;
     }
@@ -222,6 +240,19 @@ export class Fp3dView3d extends LitElement {
     v.setPersons(persons);
     const counts = floorCounts(hass, b, this.openingLinks!, persons);
     v.setFloorInfo(new Map([...counts].map(([id, c]) => [id, floorInfoText(hass, c)])));
+    // daylight: sun through the windows and a lighter sky
+    const sun = hass.states["sun.sun"]?.attributes;
+    const elevation = typeof sun?.elevation === "number" ? sun.elevation : null;
+    v.setSun(elevation !== null && typeof sun?.azimuth === "number" ? { elevation, azimuth: sun.azimuth } : null);
+    this._sky = elevation === null ? 0 : Math.min(1, Math.max(0, (elevation + 4) / 16));
+    // heatmap
+    if (this.heatMode === "none") v.setRoomTint(null);
+    else {
+      const mode = this.heatMode;
+      const values = roomValues(hass, b, mode);
+      this.heatValues = values;
+      v.setRoomTint(new Map([...values].map(([id, value]) => [id, heatColor(mode, value)])));
+    }
     const hasEnergy = summary.grid !== null || summary.solar !== null || summary.battery !== null || summary.tariff !== null;
     this._energy = hasEnergy ? summary : null;
   }
@@ -256,6 +287,17 @@ export class Fp3dView3d extends LitElement {
           consumerSensors.add(link.power);
           consumers.push({ id, powerEntity: link.power, floorId: floor.id, x: f.x, z: f.z, power: Math.max(0, power) });
         }
+        const running = (power ?? 0) > 10 || st?.state === "on" || st?.state === "running";
+        if (f.type === "radiator" && st && kindOf(st.entity_id) === "climate") {
+          // glows while it heats; brighter the further the room is below its target
+          const a = st.attributes;
+          if (a.hvac_action === "heating") {
+            const gap = typeof a.temperature === "number" && typeof a.current_temperature === "number" ? a.temperature - a.current_temperature : 1;
+            screens.set(f.id, { color: [1, 0.42, 0.1], level: Math.min(1, 0.45 + 0.25 * Math.max(0, gap)) });
+          }
+        } else if ((f.type === "washer" || f.type === "dryer" || f.type === "dishwasher") && running) {
+          screens.set(f.id, { color: [0.3, 0.85, 1], level: 0.8 });
+        }
         if (st && (f.type === "tv_board" || f.type === "tv_wall" || f.type === "desk")) {
           const color = kindOf(st.entity_id) === "media" ? appColor(st) : isActive(st) ? ([0.22, 0.88, 1] as [number, number, number]) : null;
           const picture = kindOf(st.entity_id) === "media" ? ((st.attributes.entity_picture as string | undefined) ?? null) : null;
@@ -289,7 +331,7 @@ export class Fp3dView3d extends LitElement {
   private lampMarker(hass: HomeAssistant, floor: Building["floors"][number], f: Furniture, entity: string | null): DeviceMarker & { fromFurniture: boolean } {
     const st = entity ? hass.states[entity] : undefined;
     const model = LAMP_MODEL[f.type];
-    const base = model === "table" ? surfaceHeight(floor, f.x, f.z) : 0;
+    const base = model === "table" ? surfaceHeight(floor, f.x, f.z) : model === "bollard" || model === "garden" ? outdoorGround(floor, f.x, f.z) : 0;
     const room = floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon([f.x, f.z], r.points));
     const H = floor.height;
     const y = {
@@ -303,6 +345,8 @@ export class Fp3dView3d extends LitElement {
       table: base + f.h + 0.2,
       wall: 2.1,
       strip: H - 0.25,
+      bollard: base + f.h + 0.25,
+      garden: base + f.h + 0.25,
     }[model];
     return {
       // a lamp without a light keeps a key of its own (it is drawn, but not tappable)
@@ -388,9 +432,27 @@ export class Fp3dView3d extends LitElement {
     </div>`;
   }
 
+  private renderLegend() {
+    if (this.heatMode === "none") return nothing;
+    const scale = HEAT_SCALES[this.heatMode];
+    const lo = scale.stops[0][0];
+    const hi = scale.stops[scale.stops.length - 1][0];
+    const t = (k: Parameters<typeof translate>[1]) => translate(this.hass, k);
+    return html`<div class="fp3d-legend">
+      <b>${t(`heat_${this.heatMode}`)}</b>
+      <span class="fp3d-legend-bar" style="background:${heatGradient(this.heatMode)}"></span>
+      <span class="fp3d-legend-range"><span>${formatNumber(this.hass, lo, 0)} ${scale.unit}</span><span>${formatNumber(this.hass, hi, 0)} ${scale.unit}</span></span>
+      ${this.heatValues.size ? nothing : html`<span class="fp3d-legend-none">${t("heat_none_found")}</span>`}
+    </div>`;
+  }
+
   protected render() {
-    return html`<div class="fp3d-stage">
-      ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.renderEnergy()}
+    // night: deep blue-black; day: a lighter, bluer sky behind the house
+    const sky = this._sky;
+    const mix = (a: number[], b: number[]) => `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * sky)).join(",")})`;
+    const style = `--fp3d-sky:${mix([11, 17, 32], [26, 44, 78])};--fp3d-ground:${mix([7, 11, 20], [12, 20, 36])}`;
+    return html`<div class="fp3d-stage" style=${style}>
+      ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.renderEnergy()} ${this.renderLegend()}
       ${this.showStats && this._stats
         ? html`<span class="fp3d-stats"
             ><b>${this._stats.fps ? translate(this.hass, "stats_fps", { fps: this._stats.fps, ms: this._stats.worstMs }) : translate(this.hass, "stats_idle")}</b> ·
@@ -413,7 +475,8 @@ export class Fp3dView3d extends LitElement {
         position: absolute;
         inset: 0;
         overflow: hidden;
-        background: radial-gradient(ellipse at 50% 35%, var(--fp3d-bg2), var(--fp3d-bg) 72%);
+        background: radial-gradient(ellipse at 50% 35%, var(--fp3d-sky, var(--fp3d-bg2)), var(--fp3d-ground, var(--fp3d-bg)) 72%);
+        transition: background 2s ease;
       }
       .fp3d-canvas {
         position: absolute;
@@ -543,6 +606,33 @@ export class Fp3dView3d extends LitElement {
       }
       .fp3d-person[hidden] {
         display: none;
+      }
+      .fp3d-legend {
+        position: absolute;
+        left: 12px;
+        bottom: 10px;
+        display: grid;
+        gap: 4px;
+        min-width: 180px;
+        padding: 8px 11px;
+        border-radius: 12px;
+        background: var(--fp3d-chrome);
+        box-shadow: var(--fp3d-shadow);
+        font-size: 12px;
+        pointer-events: none;
+      }
+      .fp3d-legend-bar {
+        height: 8px;
+        border-radius: 4px;
+      }
+      .fp3d-legend-range {
+        display: flex;
+        justify-content: space-between;
+        color: var(--fp3d-muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .fp3d-legend-none {
+        color: var(--fp3d-warm);
       }
       .fp3d-energy {
         position: absolute;

@@ -93,6 +93,26 @@ BACKGROUND_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
+OUTDOOR_TYPES = ["lawn", "terrace", "path", "driveway", "pool", "bed", "hedge", "fence"]
+
+OUTDOOR_SCHEMA = vol.Schema(
+    {
+        vol.Required("id"): _ID,
+        vol.Required("type"): vol.In(OUTDOOR_TYPES),
+        vol.Required("points"): vol.All([_POINT], vol.Length(min=3, max=MAX_POINTS)),
+    },
+    extra=vol.ALLOW_EXTRA,
+)
+
+ROOF_SCHEMA = vol.Schema(
+    {
+        vol.Optional("type", default="none"): vol.In(["none", "flat", "gable"]),
+        vol.Optional("pitch", default=35): vol.All(vol.Coerce(float), vol.Range(min=5, max=60)),
+        vol.Optional("overhang", default=0.4): vol.All(vol.Coerce(float), vol.Range(min=0, max=2)),
+    },
+    extra=vol.ALLOW_EXTRA,
+)
+
 FLOOR_SCHEMA = vol.Schema(
     {
         vol.Required("id"): _ID,
@@ -105,6 +125,7 @@ FLOOR_SCHEMA = vol.Schema(
         vol.Required("furniture"): vol.All([FURNITURE_SCHEMA], vol.Length(max=MAX_ITEMS)),
         vol.Required("placements"): vol.All([PLACEMENT_SCHEMA], vol.Length(max=MAX_ITEMS)),
         vol.Required("background"): vol.Any(None, BACKGROUND_SCHEMA),
+        vol.Optional("outdoor", default=list): vol.All([OUTDOOR_SCHEMA], vol.Length(max=MAX_ITEMS)),
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -114,6 +135,9 @@ SETTINGS_SCHEMA = vol.Schema(
         vol.Required("wall_exterior"): vol.All(vol.Coerce(float), vol.Range(min=0.02, max=1)),
         vol.Required("wall_interior"): vol.All(vol.Coerce(float), vol.Range(min=0.02, max=1)),
         vol.Required("grid"): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=1)),
+        # direction of north in the plan, degrees clockwise from "up"
+        vol.Optional("north", default=0): vol.All(vol.Coerce(float), vol.Range(min=-360, max=360)),
+        vol.Optional("roof", default=lambda: {"type": "none", "pitch": 35, "overhang": 0.4}): ROOF_SCHEMA,
     },
     extra=vol.ALLOW_EXTRA,
 )

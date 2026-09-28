@@ -120,6 +120,16 @@ export function furnitureSymbol(type: string, w: number, d: number): Part[] | ty
     case "lamp_downlight":
     case "lamp_spot":
       return [circle(0, 0, Math.min(w, d) * 0.45, "fp3d-sym-fill"), circle(0, 0, Math.min(w, d) * 1.4)];
+    case "lamp_bollard":
+    case "lamp_garden":
+      return [circle(0, 0, Math.min(w, d) * 0.5, "fp3d-sym-fill"), circle(0, 0, Math.min(w, d) * 1.6)];
+    case "radiator": {
+      // fins along the front
+      const out: Part[] = [];
+      const n = Math.max(3, Math.round(w / 0.1));
+      for (let i = 1; i < n; i++) out.push(line(-w / 2 + (w / n) * i, -d / 2, -w / 2 + (w / n) * i, d / 2));
+      return out;
+    }
     case "lamp_panel":
       return [rect(-w / 2 + 0.03, -d / 2 + 0.03, w / 2 - 0.03, d / 2 - 0.03, "fp3d-sym-fill")];
     case "lamp_uplight":

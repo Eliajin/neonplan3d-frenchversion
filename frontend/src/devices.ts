@@ -36,7 +36,7 @@ const DOMAIN_KIND: Record<string, DeviceKind> = {
 };
 
 /** Sensors worth showing: room climate, and power (consumers of the energy flow). */
-const SENSOR_CLASSES = new Set(["temperature", "humidity", "power"]);
+const SENSOR_CLASSES = new Set(["temperature", "humidity", "power", "carbon_dioxide"]);
 const BINARY_CLASSES = new Set(["door", "window", "opening", "garage_door", "motion", "occupancy", "presence", "smoke", "moisture", "gas"]);
 
 /** Order in lists and panels. */
@@ -394,6 +394,7 @@ const FURNITURE_NAMES: Record<string, RegExp> = {
   kitchen: /(kaffee|coffee|wasserkocher|kettle)/i,
   island: /(kochfeld|herd|induktion|cooktop)/i,
   sink: /(spülmaschine|geschirrspül|dishwasher)/i,
+  radiator: /(heiz|radiator|thermostat|climate|hk|trv)/i,
 };
 const MEDIA_FURNITURE = new Set(["tv_board", "tv_wall"]);
 /** Name hints for picking a lamp's light (a light that fits the name wins, otherwise any free one). */
@@ -403,6 +404,8 @@ const LAMP_NAMES: Record<string, RegExp> = {
   lamp_spot: /(spot|strahler)/i,
   lamp_panel: /(panel|decke|ceiling)/i,
   lamp_uplight: /(fluter|uplight|steh)/i,
+  lamp_bollard: /(weg|garten|garden|path|poller|außen|aussen|outdoor)/i,
+  lamp_garden: /(garten|garden|spot|außen|aussen|outdoor|baum|tree)/i,
   lamp_pendant: /(pendel|pendant|hänge|esstisch|dining)/i,
   lamp_floor: /(steh|floor)/i,
   lamp_table: /(tisch|nacht|table|bedside|lese|reading)/i,
@@ -449,6 +452,9 @@ export function furnitureEntities(hass: HomeAssistant, floors: readonly Floor[])
         if (lamp) {
           const lights = free.filter((id) => kindOf(id) === "light");
           entity = lights.find((id) => pattern.test(name(id))) ?? lights[0] ?? null;
+        } else if (f.type === "radiator") {
+          const climates = free.filter((id) => kindOf(id) === "climate");
+          entity = climates.find((id) => pattern.test(name(id))) ?? climates[0] ?? null;
         } else if (MEDIA_FURNITURE.has(f.type)) {
           const media = free.filter((id) => kindOf(id) === "media");
           entity = media.find((id) => hass.states[id]?.attributes.device_class === "tv") ?? media.find((id) => pattern?.test(name(id))) ?? media[0] ?? null;

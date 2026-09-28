@@ -45,8 +45,30 @@ test("the surface covers room floors and the room side of the walls", () => {
   const s = surfaceOf(floor);
   const floorQuads = [...Array(s.room.length / 6).keys()].filter((q) => s.normal[q * 18 + 1] === 1).length;
   assert.equal(floorQuads, 16 * 12);
-  // four walls, three bands each, 16 or 12 cells long
-  assert.equal(s.room.length / 6 - floorQuads, 3 * 2 * (16 + 12));
+  // four walls, three bands each, 16 or 12 cells long, on the room side and (exterior walls) outside
+  assert.equal(s.room.length / 6 - floorQuads, 2 * 3 * 2 * (16 + 12));
+});
+
+test("an outdoor lamp lights the lawn and the facade, not the room behind the wall", () => {
+  const floor = {
+    ...newFloor("f", "F", 0),
+    rooms: [rect("a", 0, 0, 4, 3)],
+    outdoor: [{ id: "l", type: "lawn" as const, points: [[0, 3.3], [4, 3.3], [4, 6], [0, 6]] as [number, number][] }],
+  };
+  const s = surfaceOf(floor);
+  const outside = floor.rooms.length;
+  const c = lightColors(s, [lamp(2, 4, [1, 1, 1], outside, { y: 0.6, kind: "omni" })]);
+  let lawn = 0;
+  let facade = 0;
+  let room = 0;
+  for (let v = 0; v < s.room.length; v++) {
+    const lit = c[v * 3];
+    if (s.room[v] === 0) room = Math.max(room, lit);
+    else if (s.normal[v * 3 + 1] === 1) lawn = Math.max(lawn, lit);
+    else facade = Math.max(facade, lit);
+  }
+  assert.ok(lawn > 0.1 && facade > 0.1, `lawn ${lawn}, facade ${facade}`);
+  assert.equal(room, 0);
 });
 
 test("two RGB ceiling lights mix: red on the left, blue on the right, both in the middle", () => {

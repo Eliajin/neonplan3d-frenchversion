@@ -21,6 +21,8 @@ interface CardConfig {
   stats?: boolean;
   /** HTML markers: none | important (default) | all. */
   markers?: "none" | "important" | "all";
+  /** Heatmap of the rooms: none | temperature | humidity | co2. */
+  heatmap?: "none" | "temperature" | "humidity" | "co2";
 }
 
 export class Floorplan3dCard extends LitElement {
@@ -91,6 +93,7 @@ export class Floorplan3dCard extends LitElement {
               .quality=${this._config?.quality ?? "auto"}
               ?showStats=${this._config?.stats ?? false}
               .markerMode=${this._config?.markers ?? "important"}
+              .heatMode=${this._config?.heatmap ?? "none"}
               @room-tap=${(e: CustomEvent<{ floorId: string; roomId: string | null }>) => {
                 if (!e.detail.roomId) return;
                 if (!floorId && !this._config?.floor) this._floorId = e.detail.floorId;

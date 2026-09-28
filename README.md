@@ -22,6 +22,11 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
   - Electric furniture can be linked to entities (automatically from the room's area, or by hand): a TV shows its media player, with the picture the media player provides (app icon or cover art) on its screen, glowing in the colour of the running app, and the app or title on its label; a power sensor adds watts and an energy cable.
 - **Stairs** open the ceiling of the floor above.
 - **Floor materials** (wood, oak, tiles, carpet, stone, concrete) show as subtle patterns in 3D.
+- **Outdoor areas**: lawn, terrace, path, driveway, pool, flower bed, hedge and fence, drawn with the "Outdoor" tool; path lights, garden spots and outdoor wall lights light the outdoor areas and the facade.
+- **Roof**: flat or gable over the top floor (settings); shown in the house view, it lifts and fades when you zoom in.
+- **Daylight**: with north set in the settings, sunlight from `sun.sun` falls through the windows facing the sun as soft patches on the floor (smaller when blinds are down); the sky behind the house gets lighter by day.
+- **Heatmap**: floors coloured by temperature, humidity or CO₂ of the room's sensors, with a legend.
+- **Living devices**: a radiator linked to a thermostat glows while it heats; washing machine, dryer and dishwasher glow while they run.
 - **Area link**: each room can be linked to a Home Assistant area.
 - **Devices**: the area's lights, switches, covers, thermostats, media players, sensors and cameras can be placed in the room automatically and moved by hand in the plan.
   - Lists are grouped by device: the main entity first, further entities (LED indicators, effects, …) behind "+n more"; with a search field.
@@ -78,6 +83,7 @@ explode: true           # optional: pull floors apart in the house view (default
 quality: auto           # optional: auto | low | high
 stats: false            # optional: show the performance display
 markers: important      # optional: none | important | all
+heatmap: none           # optional: none | temperature | humidity | co2
 ```
 
 ## Development

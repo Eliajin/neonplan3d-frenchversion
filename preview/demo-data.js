@@ -112,6 +112,9 @@ const DEVICES = [
   light("esstisch", "Esstisch Pendel", "kueche", true, { brightness: 140 }),
   light("kueche_links", "Küche links", "kueche", true, { brightness: 230, color_mode: "hs", rgb_color: [255, 70, 40] }),
   light("kueche_rechts", "Küche rechts", "kueche", true, { brightness: 230, color_mode: "hs", rgb_color: [60, 110, 255] }),
+  light("garten", "Garten Wegleuchten", null, true, { brightness: 170 }),
+  light("pool", "Pool Spot", null, true, { brightness: 200, color_mode: "hs", rgb_color: [40, 200, 255] }),
+  light("haustuer", "Haustür Außenlicht", "flur", true, { brightness: 200 }),
   light("led_band", "LED Band", "wohnzimmer", true, { brightness: 160, color_mode: "hs", rgb_color: [120, 90, 255], effect: "colorloop", effect_list: ["colorloop", "none"] }),
   entity("cover.wohnzimmer", "wohnzimmer", "open", { friendly_name: "Wohnzimmer Rollladen", current_position: 70, supported_features: 15 }),
   entity("cover.kueche", "kueche", "open", { friendly_name: "Rollladen Küche", current_position: 40, supported_features: 15 }),
@@ -138,6 +141,11 @@ const DEVICES = [
   entity("switch.kaffeemaschine", "kueche", "on", { friendly_name: "Kaffeemaschine" }),
   entity("camera.wohnzimmer", "wohnzimmer", "idle", { friendly_name: "Wohnzimmer Kamera", entity_picture: CAMERA_STILL }),
   entity("sensor.wohnzimmer_temperatur", "wohnzimmer", "21.4", { friendly_name: "Wohnzimmer Temperatur", device_class: "temperature", unit_of_measurement: "°C" }),
+  entity("sensor.kueche_temperatur", "kueche", "23.4", { friendly_name: "Küche Temperatur", device_class: "temperature", unit_of_measurement: "°C" }),
+  entity("sensor.schlafzimmer_temperatur", "schlafzimmer", "18.1", { friendly_name: "Schlafzimmer Temperatur", device_class: "temperature", unit_of_measurement: "°C" }),
+  entity("sensor.bad_temperatur", "bad", "24.6", { friendly_name: "Bad Temperatur", device_class: "temperature", unit_of_measurement: "°C" }),
+  entity("sensor.flur_temperatur", "flur", "19.6", { friendly_name: "Flur Temperatur", device_class: "temperature", unit_of_measurement: "°C" }),
+  entity("sun.sun", null, "above_horizon", { friendly_name: "Sonne", elevation: 32, azimuth: 205 }),
   entity("sensor.wohnzimmer_feuchte", "wohnzimmer", "48", { friendly_name: "Wohnzimmer Luftfeuchtigkeit", device_class: "humidity", unit_of_measurement: "%" }),
   entity("binary_sensor.kueche_fenster", "kueche", "on", { friendly_name: "Küche Fenster", device_class: "window" }),
   entity("binary_sensor.flur_bewegung", "flur", "off", { friendly_name: "Flur Bewegung", device_class: "motion" }),
@@ -292,6 +300,13 @@ DEMO_BUILDING.floors[0].furniture = [
   item("corner_bench", 7.1, 3.55, 2.0, 1.6, 0.9, 270),
   item("table", 8.0, 2.9, 1.3, 0.85, 0.75),
   { ...item("lamp_pendant", 8.0, 2.9, 0.3, 0.3, 0.95), entity: "light.esstisch", variant: "globe" },
+  { ...item("radiator", 0.08, 2.3, 1.0, 0.1, 0.6, 270), entity: "climate.wohnzimmer" },
+  ...[
+    [7.6, 10.4],
+    [7.6, 12.4],
+  ].map(([x, z]) => ({ ...item("lamp_bollard", x, z, 0.16, 0.16, 0.8), entity: "light.garten" })),
+  { ...item("lamp_garden", 12.4, -3.4, 0.12, 0.12, 0.3), entity: "light.pool" },
+  { ...item("lamp_wall", 8.9, 9.5, 0.22, 0.12, 0.2), entity: "light.haustuer" },
   { ...item("lamp_ceiling", 7.0, 2.1, 0.45, 0.45, 0.08), entity: "light.kueche_links" },
   { ...item("lamp_ceiling", 9.0, 2.1, 0.45, 0.45, 0.08), entity: "light.kueche_rechts" },
   ...[
@@ -328,3 +343,18 @@ DEMO_BUILDING.floors[1].furniture = [
   item("bathtub", 0.45, 6.1, 1.7, 0.75, 0.58, 90),
   item("washbasin", 2.1, 4.5, 0.6, 0.46, 0.85),
 ];
+
+// Invented garden and roof.
+const area = (id, type, x0, z0, x1, z1) => ({ id, type, points: [[x0, z0], [x1, z0], [x1, z1], [x0, z1]] });
+DEMO_BUILDING.floors[0].outdoor = [
+  area("a1", "lawn", -3, -8, 17, -0.3),
+  area("a2", "lawn", -3, 9.5, 6.5, 14),
+  area("a3", "terrace", 1.5, -2.8, 6.2, -0.3),
+  area("a4", "pool", 8.5, -6.5, 12, -3.5),
+  area("a5", "path", 7.0, 9.5, 8.2, 14),
+  area("a6", "driveway", 13.9, 0.8, 18.5, 4.6),
+  area("a7", "hedge", -3.5, -8.5, -2.9, 14),
+  area("a8", "bed", 1.5, 10.2, 5.5, 11.2),
+  area("a9", "fence", -4, -9, 19, 14.5),
+];
+DEMO_BUILDING.settings = { ...DEMO_BUILDING.settings, north: 0, roof: { type: "gable", pitch: 35, overhang: 0.4 } };

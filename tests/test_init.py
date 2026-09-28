@@ -214,6 +214,25 @@ async def test_restore_points(hass: HomeAssistant, hass_ws_client, hass_storage)
     assert STORAGE_KEY_HISTORY in hass_storage
 
 
+async def test_outdoor_roof_and_north_get_defaults(hass: HomeAssistant, hass_ws_client) -> None:
+    await _setup(hass)
+    client = await hass_ws_client(hass)
+    building = copy.deepcopy(BUILDING)
+    building["floors"][0]["outdoor"] = [{"id": "o1", "type": "lawn", "points": [[0, 0], [1, 0], [1, 1]]}]
+    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": building})
+    assert (await client.receive_json())["success"]
+    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    got = (await client.receive_json())["result"]["building"]
+    assert got["settings"]["north"] == 0
+    assert got["settings"]["roof"] == {"type": "none", "pitch": 35, "overhang": 0.4}
+    assert got["floors"][0]["outdoor"][0]["type"] == "lawn"
+
+    bad = copy.deepcopy(building)
+    bad["floors"][0]["outdoor"][0]["type"] = "volcano"
+    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": bad})
+    assert not (await client.receive_json())["success"]
+
+
 async def test_invalid_building_is_rejected(hass: HomeAssistant, hass_ws_client) -> None:
     await _setup(hass)
     client = await hass_ws_client(hass)

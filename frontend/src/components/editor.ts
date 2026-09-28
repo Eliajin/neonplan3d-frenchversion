@@ -20,6 +20,7 @@ import {
   isLamp,
   isAxisRect,
   OPENING_DEFAULTS,
+  OUTDOOR_TYPES,
   spotGrid,
   signedArea,
   newFloor,
@@ -31,6 +32,9 @@ import {
   type Furniture,
   type FurnitureType,
   type LampMount,
+  type OutdoorArea,
+  type OutdoorType,
+  type RoofType,
   type Placement,
   type Opening,
   type OpeningType,
@@ -40,7 +44,7 @@ import {
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
 
-type Tool = "select" | "rect" | "polygon" | "door" | "window" | "garage" | "meter";
+type Tool = "select" | "rect" | "polygon" | "door" | "window" | "garage" | "outdoor" | "meter";
 
 type Drag =
   | { kind: "pan"; last: [number, number] }
@@ -50,7 +54,8 @@ type Drag =
   | { kind: "furniture"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "rotate"; id: string; base: Building; moved: boolean }
   | { kind: "room"; roomId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
-  | { kind: "rect"; start: Vec2; end: Vec2 }
+  | { kind: "rect"; start: Vec2; end: Vec2; outdoor?: boolean }
+  | { kind: "outdoor"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "tap"; startScreen: [number, number]; last: [number, number]; panning: boolean };
 
 interface Guides {
@@ -60,7 +65,7 @@ interface Guides {
 }
 
 /** Drags that change the document live (restored when cancelled, recorded in the history when done). */
-const EDIT_DRAGS = new Set(["vertex", "room", "device", "opening", "furniture", "rotate"]);
+const EDIT_DRAGS = new Set(["vertex", "room", "device", "opening", "furniture", "rotate", "outdoor"]);
 /** Furniture closer than this to a wall snaps against it (metres). */
 const WALL_SNAP = 0.25;
 
@@ -85,6 +90,7 @@ export class Fp3dEditor extends LitElement {
     _notice: { state: true },
     _history: { state: true },
     _spots: { state: true },
+    _outdoorId: { state: true },
     _tool: { state: true },
     _draft: { state: true },
     _cursor: { state: true },
@@ -114,6 +120,7 @@ export class Fp3dEditor extends LitElement {
   /** Restore points, loaded when the backup section is opened. */
   private declare _history: Snapshot[] | null;
   /** Open "place spots" form of the selected room. */
+  private declare _outdoorId: string | null;
   private declare _spots: { type: FurnitureType; rows: number; cols: number; entity: string | null } | null;
   private declare _tool: Tool;
   private declare _draft: Vec2[];
@@ -148,6 +155,7 @@ export class Fp3dEditor extends LitElement {
     this._notice = null;
     this._history = null;
     this._spots = null;
+    this._outdoorId = null;
     this._tool = "select";
     this._draft = [];
     this._cursor = null;
@@ -397,9 +405,9 @@ export class Fp3dEditor extends LitElement {
     }
     const world = this.toWorld(...local);
     const target = e.target as Element;
-    if (this._tool === "rect") {
+    if (this._tool === "rect" || this._tool === "outdoor") {
       const start = this.snap(world, undefined, e.altKey);
-      this.drag = { kind: "rect", start, end: start };
+      this.drag = { kind: "rect", start, end: start, outdoor: this._tool === "outdoor" };
       return;
     }
     if (this._tool === "polygon") {
@@ -477,6 +485,13 @@ export class Fp3dEditor extends LitElement {
       );
       this._vertex = i + 1;
       this.drag = { kind: "vertex", roomId, index: i + 1, base, moved: true };
+      return;
+    }
+    const outdoorEl = target.closest("[data-outdoor]");
+    if (outdoorEl && !target.closest("[data-room]") && !this.roomAt(world)) {
+      const id = outdoorEl.getAttribute("data-outdoor")!;
+      this.selectItem("outdoor", id);
+      this.drag = this.isAdmin ? { kind: "outdoor", id, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
       return;
     }
     const roomId = target.closest("[data-room]")?.getAttribute("data-room") ?? this.roomAt(world);
@@ -586,6 +601,21 @@ export class Fp3dEditor extends LitElement {
         this.change((_, floor) => Object.assign(floor.furniture.find((q) => q.id === drag.id)!, { x, z, rotation }), drag.base, false);
         break;
       }
+      case "outdoor": {
+        if (!drag.moved && Math.hypot(local[0] - drag.startScreen[0], local[1] - drag.startScreen[1]) < 5) return;
+        drag.moved = true;
+        const area = drag.base.floors.find((f) => f.id === this._floorId)?.outdoor.find((o) => o.id === drag.id);
+        if (!area) return;
+        const g = e.altKey ? 0.01 : this._doc.settings.grid;
+        const dx = Math.round((world[0] - drag.start[0]) / g) * g;
+        const dz = Math.round((world[1] - drag.start[1]) / g) * g;
+        this.change(
+          (_, floor) => (floor.outdoor.find((o) => o.id === drag.id)!.points = area.points.map(([x, z]) => [round(x + dx), round(z + dz)])),
+          drag.base,
+          false,
+        );
+        break;
+      }
       case "rotate": {
         drag.moved = true;
         const f = drag.base.floors.find((x) => x.id === this._floorId)?.furniture.find((x) => x.id === drag.id);
@@ -631,7 +661,9 @@ export class Fp3dEditor extends LitElement {
         if (Math.abs(x1 - x0) >= 0.2 && Math.abs(z1 - z0) >= 0.2) {
           const lo: Vec2 = [Math.min(x0, x1), Math.min(z0, z1)];
           const hi: Vec2 = [Math.max(x0, x1), Math.max(z0, z1)];
-          this.addRoom([lo, [hi[0], lo[1]], hi, [lo[0], hi[1]]]);
+          const pts: Vec2[] = [lo, [hi[0], lo[1]], hi, [lo[0], hi[1]]];
+          if (drag.outdoor) this.addOutdoor(pts);
+          else this.addRoom(pts);
         }
         this._guides = {};
         break;
@@ -642,6 +674,7 @@ export class Fp3dEditor extends LitElement {
       case "opening":
       case "furniture":
       case "rotate":
+      case "outdoor":
         if (drag.moved) this.pushHistory(drag.base);
         break;
       case "device":
@@ -738,6 +771,38 @@ export class Fp3dEditor extends LitElement {
     this._guides = {};
   }
 
+  private addOutdoor(points: Vec2[]): void {
+    if (!this.floor) return;
+    const area: OutdoorArea = { id: uid("outdoor"), type: "lawn", points: points.map(([x, z]) => [round(x), round(z)]) };
+    this.change((_, floor) => floor.outdoor.push(area));
+    this.selectItem("outdoor", area.id);
+    this._tool = "select";
+  }
+
+  private get outdoorArea(): OutdoorArea | undefined {
+    return this._outdoorId ? this.floor?.outdoor.find((o) => o.id === this._outdoorId) : undefined;
+  }
+
+  private updateOutdoor(patch: Partial<OutdoorArea>): void {
+    const id = this._outdoorId;
+    this.change((_, floor) => Object.assign(floor.outdoor.find((o) => o.id === id)!, patch));
+  }
+
+  private deleteOutdoor(): void {
+    const id = this._outdoorId;
+    if (!id || !this.isAdmin) return;
+    this.change((_, floor) => (floor.outdoor = floor.outdoor.filter((o) => o.id !== id)));
+    this._outdoorId = null;
+  }
+
+  private duplicateOutdoor(): void {
+    const a = this.outdoorArea;
+    if (!a || !this.isAdmin) return;
+    const copy: OutdoorArea = { ...a, id: uid("outdoor"), points: a.points.map(([x, z]) => [round(x + 0.5), round(z + 0.5)]) };
+    this.change((_, floor) => floor.outdoor.push(copy));
+    this.selectItem("outdoor", copy.id);
+  }
+
   private addRoom(points: Vec2[]): void {
     if (!this.floor) return;
     const id = uid("room");
@@ -771,7 +836,8 @@ export class Fp3dEditor extends LitElement {
       if (this._deviceId) {
         this.removeDevice(this._deviceId);
         this._deviceId = null;
-      } else if (this._openingId) this.deleteOpening();
+      } else if (this._outdoorId) this.deleteOutdoor();
+      else if (this._openingId) this.deleteOpening();
       else if (this._furnitureId) this.deleteFurniture();
       else if (this._vertex !== null) this.deleteVertex(this._vertex);
       else this.deleteRoom();
@@ -845,8 +911,10 @@ export class Fp3dEditor extends LitElement {
   }
 
   /** Select a room, an opening or a furniture item (only one at a time). */
-  private selectItem(kind: "room" | "opening" | "furniture" | "device", id: string | null): void {
+  private selectItem(kind: "room" | "opening" | "furniture" | "device" | "outdoor", id: string | null): void {
     this._notice = null;
+    this._outdoorId = kind === "outdoor" ? id : null;
+    if (kind === "outdoor") this._roomId = null;
     if (kind !== "room" || id !== this._roomId) this._vertex = null;
     this._roomId = kind === "room" ? id : this._roomId;
     this._openingId = kind === "opening" ? id : null;
@@ -1222,7 +1290,7 @@ export class Fp3dEditor extends LitElement {
         <div class="fp3d-main">
           <div class="fp3d-toolbar">
             <div class="fp3d-seg" role="group" aria-label=${this.t("tool_select")}>
-              ${(["select", "rect", "polygon", "door", "window", "garage"] as Tool[]).map(
+              ${(["select", "rect", "polygon", "door", "window", "garage", "outdoor"] as Tool[]).map(
                 (tool) => html`<button
                   aria-pressed=${this._tool === tool}
                   ?disabled=${!floor || (!this.isAdmin && tool !== "select")}
@@ -1257,7 +1325,7 @@ export class Fp3dEditor extends LitElement {
               @contextmenu=${(e: Event) => e.preventDefault()}
             >
               ${this.renderBackground(floor)} ${this.renderGrid()} ${this.renderGhost()} ${walls ? this.renderWalls(walls.walls) : nothing}
-              ${floor ? this.renderRooms(floor) : nothing} ${floor ? this.renderFurniture(floor) : nothing}
+              ${floor ? this.renderOutdoor(floor) : nothing} ${floor ? this.renderRooms(floor) : nothing} ${floor ? this.renderFurniture(floor) : nothing}
               ${floor && walls ? this.renderOpenings(floor, walls.walls) : nothing} ${floor ? this.renderMeter(floor) : nothing}
               ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
               ${this.room && this.isAdmin && this._tool === "select" && !this._openingId && !this._furnitureId ? this.renderHandles(this.room) : nothing}
@@ -1319,6 +1387,55 @@ export class Fp3dEditor extends LitElement {
     return svg`<g pointer-events="none">${walls.map(
       (w) => svg`<polygon class=${w.exterior ? "fp3d-wall fp3d-wall-ext" : "fp3d-wall"} points=${w.footprint.map((p) => this.toScreen(p).join(",")).join(" ")} />`,
     )}</g>`;
+  }
+
+  private renderOutdoor(floor: Floor) {
+    return svg`<g>${floor.outdoor.map((a) => {
+      const pts = a.points.map((p) => this.toScreen(p).join(",")).join(" ");
+      const [cx, cy] = this.toScreen(centroid(a.points));
+      const b = bounds(a.points);
+      const big = Math.min(b.x1 - b.x0, b.z1 - b.z0) * this._view.scale > 40;
+      return svg`<g data-outdoor=${a.id} class=${`fp3d-out fp3d-out-${a.type}${a.id === this._outdoorId ? " fp3d-out-sel" : ""}`}>
+        <polygon points=${pts} />
+        ${big ? svg`<text x=${cx} y=${cy + 4}>${this.t(`out_${a.type}` as I18nKey)}</text>` : nothing}
+      </g>`;
+    })}</g>`;
+  }
+
+  private renderOutdoorForm(a: OutdoorArea) {
+    const admin = this.isAdmin;
+    const rect = isAxisRect(a.points);
+    const b = bounds(a.points);
+    const setRect = (field: "x" | "z" | "w" | "d", v: number) => {
+      let { x0, z0, x1, z1 } = b;
+      if (field === "x") [x0, x1] = [v, v + (x1 - x0)];
+      if (field === "z") [z0, z1] = [v, v + (z1 - z0)];
+      if (field === "w") x1 = x0 + Math.max(0.1, v);
+      if (field === "d") z1 = z0 + Math.max(0.1, v);
+      this.updateOutdoor({ points: [[x0, z0], [x1, z0], [x1, z1], [x0, z1]].map(([x, z]) => [round(x), round(z)] as Vec2) });
+    };
+    return html`<section>
+      <h3>${this.t("outdoor")}</h3>
+      <div class="fp3d-form">
+        <label class="fp3d-field fp3d-wide"
+          >${this.t("outdoor_type")}
+          <select ?disabled=${!admin} @change=${(e: Event) => this.updateOutdoor({ type: (e.target as HTMLSelectElement).value as OutdoorType })}>
+            ${OUTDOOR_TYPES.map((t) => html`<option value=${t} ?selected=${t === a.type}>${this.t(`out_${t}` as I18nKey)}</option>`)}
+          </select></label
+        >
+        ${rect
+          ? html`${this.num(this.t("x"), b.x0, (v) => setRect("x", v))} ${this.num(this.t("z"), b.z0, (v) => setRect("z", v))}
+            ${this.num(this.t("width"), b.x1 - b.x0, (v) => setRect("w", v), 0.01, 0.1)} ${this.num(this.t("depth"), b.z1 - b.z0, (v) => setRect("d", v), 0.01, 0.1)}`
+          : nothing}
+      </div>
+      <p class="fp3d-sub">${this.t("outdoor_hint")}</p>
+      ${admin
+        ? html`<div class="fp3d-actions">
+            <button class="fp3d-btn" @click=${() => this.duplicateOutdoor()}>${this.t("duplicate")}</button>
+            <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteOutdoor()}>${this.t("delete")}</button>
+          </div>`
+        : nothing}
+    </section>`;
   }
 
   private renderRooms(floor: Floor) {
@@ -1582,7 +1699,9 @@ export class Fp3dEditor extends LitElement {
             </div>`
           : nothing}
       </section>
-      ${this.opening
+      ${this.outdoorArea
+        ? this.renderOutdoorForm(this.outdoorArea)
+        : this.opening
         ? this.renderOpeningForm(this.opening)
         : this.furnitureItem
           ? this.renderFurnitureForm(this.furnitureItem)
@@ -1950,11 +2069,17 @@ export class Fp3dEditor extends LitElement {
     const media = f.type === "tv_board" || f.type === "tv_wall";
     const lamp = isLamp(f.type);
     const entities = this.entityOptions((id) =>
-      lamp ? id.startsWith("light.") : media ? id.startsWith("media_player.") : /^(switch|media_player|fan|input_boolean|climate)\./.test(id),
+      lamp
+        ? id.startsWith("light.")
+        : media
+          ? id.startsWith("media_player.")
+          : f.type === "radiator"
+            ? id.startsWith("climate.")
+            : /^(switch|media_player|fan|input_boolean|climate)\./.test(id),
     );
     const power = this.entityOptions((id) => id.startsWith("sensor.") && hass.states[id]?.attributes.device_class === "power");
     return html`<div class="fp3d-form fp3d-links">
-        ${this.entitySelect(this.t(lamp ? "furn_entity_light" : media ? "furn_entity_tv" : "furn_entity"), f.entity ?? null, autoPick("entity"), entities, (v) =>
+        ${this.entitySelect(this.t(lamp ? "furn_entity_light" : media ? "furn_entity_tv" : f.type === "radiator" ? "furn_entity_climate" : "furn_entity"), f.entity ?? null, autoPick("entity"), entities, (v) =>
           this.updateFurniture({ entity: v }),
         )}
         ${lamp ? nothing : this.entitySelect(this.t("furn_power"), f.power ?? null, autoPick("power"), power, (v) => this.updateFurniture({ power: v }))}
@@ -2220,7 +2345,17 @@ export class Fp3dEditor extends LitElement {
         ${this.num(this.t("wall_exterior"), s.wall_exterior, (v) => set({ wall_exterior: Math.min(1, Math.max(0.02, v)) }), 0.01, 0.02)}
         ${this.num(this.t("wall_interior"), s.wall_interior, (v) => set({ wall_interior: Math.min(1, Math.max(0.02, v)) }), 0.01, 0.02)}
         ${this.num(this.t("grid"), s.grid, (v) => set({ grid: Math.min(1, Math.max(0.01, v)) }), 0.01, 0.01)}
+        ${this.num(this.t("north"), s.north, (v) => set({ north: ((Math.round(v) % 360) + 360) % 360 }), 1)}
+        <label class="fp3d-field fp3d-wide"
+          >${this.t("roof")}
+          <select @change=${(e: Event) => set({ roof: { ...s.roof, type: (e.target as HTMLSelectElement).value as RoofType } })}>
+            ${(["none", "flat", "gable"] as const).map((t) => html`<option value=${t} ?selected=${t === s.roof.type}>${this.t(`roof_${t}`)}</option>`)}
+          </select></label
+        >
+        ${s.roof.type === "gable" ? this.num(this.t("roof_pitch"), s.roof.pitch, (v) => set({ roof: { ...s.roof, pitch: Math.min(60, Math.max(5, v)) } }), 1, 5) : nothing}
+        ${s.roof.type !== "none" ? this.num(this.t("roof_overhang"), s.roof.overhang, (v) => set({ roof: { ...s.roof, overhang: Math.min(2, Math.max(0, v)) } }), 0.05, 0) : nothing}
       </div>
+      <p class="fp3d-sub">${this.t("north_hint")}</p>
     </details>`;
   }
 
@@ -2516,6 +2651,37 @@ export class Fp3dEditor extends LitElement {
       .fp3d-furn-sym .fp3d-sym-strong {
         stroke: var(--fp3d-accent);
         stroke-width: 2;
+      }
+      .fp3d-out polygon {
+        fill: rgba(91, 124, 255, 0.06);
+        stroke: rgba(91, 124, 255, 0.4);
+        stroke-width: 1;
+        stroke-dasharray: 4 3;
+        cursor: grab;
+      }
+      .fp3d-out-lawn polygon,
+      .fp3d-out-bed polygon,
+      .fp3d-out-hedge polygon {
+        fill: rgba(61, 224, 160, 0.1);
+        stroke: rgba(61, 224, 160, 0.5);
+      }
+      .fp3d-out-pool polygon {
+        fill: rgba(55, 224, 255, 0.18);
+        stroke: var(--fp3d-accent);
+      }
+      .fp3d-out-terrace polygon {
+        fill: rgba(150, 130, 255, 0.12);
+      }
+      .fp3d-out-sel polygon {
+        stroke: var(--fp3d-accent);
+        stroke-width: 2;
+        stroke-dasharray: none;
+      }
+      .fp3d-out text {
+        fill: var(--fp3d-muted);
+        font-size: 11px;
+        text-anchor: middle;
+        pointer-events: none;
       }
       .fp3d-furn-lit .fp3d-furn-body {
         fill: rgba(255, 181, 71, 0.35);

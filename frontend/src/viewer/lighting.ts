@@ -5,6 +5,7 @@
 // recomputed when a light changes – a few thousand vertices times a few lamps, well below a millisecond.
 
 import type { Floor, Vec2 } from "../model.ts";
+import { outdoorSurface } from "./outdoor.ts";
 import { pointInPolygon } from "../model.ts";
 import type { Wall } from "../geometry/walls.ts";
 import type { OpeningInfo } from "./build.ts";
@@ -81,6 +82,27 @@ export function buildLightSurface(floor: Floor, walls: Wall[], wallBuckets: numb
     }
   });
 
+  // outside: one zone (index rooms.length) for all outdoor areas and the outer faces of the walls
+  const outside = floor.rooms.length;
+  for (const a of floor.outdoor ?? []) {
+    if (a.points.length < 3 || a.type === "hedge" || a.type === "fence") continue;
+    const y = outdoorSurface(floor, a) + LIFT;
+    const xs = a.points.map((p) => p[0]);
+    const zs = a.points.map((p) => p[1]);
+    const x0 = Math.min(...xs);
+    const z0 = Math.min(...zs);
+    const nx = Math.max(1, Math.ceil((Math.max(...xs) - x0) / cell));
+    const nz = Math.max(1, Math.ceil((Math.max(...zs) - z0) / cell));
+    for (let i = 0; i < nx; i++) {
+      for (let j = 0; j < nz; j++) {
+        if (!pointInPolygon([x0 + (i + 0.5) * cell, z0 + (j + 0.5) * cell], a.points)) continue;
+        const px = x0 + i * cell;
+        const pz = z0 + j * cell;
+        quad([px, y, pz], [px, y, pz + cell], [px + cell, y, pz + cell], [px + cell, y, pz], [0, 1, 0], outside, -1);
+      }
+    }
+  }
+
   // walls: the face towards each room
   const cut = Math.min(floor.cut_height, floor.height);
   const H = floor.height;
@@ -96,7 +118,8 @@ export function buildLightSurface(floor: Floor, walls: Wall[], wallBuckets: numb
     const gaps = openingSpans(w, u, len, openings);
     for (const side of [1, -1] as const) {
       const roomId = side > 0 ? w.roomLeft : w.roomRight;
-      const ri = roomId ? floor.rooms.findIndex((r) => r.id === roomId) : -1;
+      // the outer face of an exterior wall belongs to the outside zone (facade lighting)
+      const ri = roomId ? floor.rooms.findIndex((r) => r.id === roomId) : w.exterior ? outside : -1;
       if (ri < 0) continue;
       const face = (side > 0 ? w.left : w.right) + FACE_GAP;
       const n: Vec2 = [nLeft[0] * side, nLeft[1] * side];
@@ -259,7 +282,8 @@ export function lightColors(surface: LightSurface, sources: LightSource[], stren
   return out;
 }
 
-/** Index of the room a point lies in, or -1. */
+/** Index of the room a point lies in; outside every room: the outside zone (rooms.length). */
 export function roomIndexAt(floor: Floor, x: number, z: number): number {
-  return floor.rooms.findIndex((r) => r.points.length >= 3 && pointInPolygon([x, z], r.points));
+  const i = floor.rooms.findIndex((r) => r.points.length >= 3 && pointInPolygon([x, z], r.points));
+  return i < 0 ? floor.rooms.length : i;
 }
