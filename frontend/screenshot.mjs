@@ -63,6 +63,10 @@ const shots = [
   { name: "editor-devlist", query: "", width: 1280, height: 1100, editor: true, editorState: { _roomId: "wohnen" }, scrollSide: true },
   { name: "editor-backup", query: "", width: 1280, height: 1600, editor: true, openDetails: true, scrollSide: true },
   { name: "editor-spots", query: "", width: 1280, height: 1000, editor: true, editorState: { _roomId: "wohnen", _spots: { type: "lamp_downlight", rows: 3, cols: 4, entity: "light.wohnzimmer_decke" } } },
+  { name: "editor-measure", query: "", width: 1280, height: 900, editor: true, editorState: { _tool: "measure", _draft: [[14, 6], [18, 6], [18, 9.5]], _measureLen: 4 } },
+  { name: "editor-package", query: "", width: 1280, height: 900, editor: true, editorScript: "const f = e._doc.floors[1]; e._floorId = f.id; e.applyPackage(f.rooms.find((r) => r.id === 'gast'), 'bedroom'); e.applyPackage(f.rooms.find((r) => r.id === 'kind'), 'kids');" },
+  { name: "view-package", query: "", width: 1280, height: 800, editor: true, editorScript: "const f = e._doc.floors[1]; e.applyPackage(f.rooms.find((r) => r.id === 'gast'), 'bedroom');", then3d: "Obergeschoss" },
+  { name: "view-furnish", query: "", width: 1280, height: 800, click: "Erdgeschoss", furnishDrag: { id: "m2", dx: -160, dy: 60 } },
   { name: "save-failed", query: "?savefail", width: 1280, height: 800, editor: true, editRoomName: "Wohnen", reload: true },
   { name: "tablet", query: "", width: 800, height: 1280, click: "Obergeschoss" },
   { name: "empty", query: "?empty", width: 1280, height: 800 },
@@ -119,6 +123,35 @@ for (const shot of shots) {
       await page.reload({ waitUntil: "networkidle0" });
       await new Promise((r) => setTimeout(r, 1200));
     }
+  }
+  if (shot.editorScript) {
+    await page.evaluate((code) => {
+      const e = document.querySelector("floorplan-3d-panel").shadowRoot.querySelector("fp3d-editor");
+      new Function("e", code)(e);
+    }, shot.editorScript);
+    await new Promise((r) => setTimeout(r, 1200));
+    if (shot.then3d) {
+      await clickText("3D");
+      await clickText(shot.then3d);
+    }
+  }
+  if (shot.furnishDrag) {
+    await clickText("Einrichten");
+    // screen position of the item: project its centre with the viewer's camera
+    const at = await page.evaluate((id) => {
+      const view = document.querySelector("floorplan-3d-panel").shadowRoot.querySelector("fp3d-view3d");
+      const v = view.viewer;
+      const fv = v.floors.find((f) => f.floor.furniture.some((m) => m.id === id));
+      const f = fv.floor.furniture.find((m) => m.id === id);
+      const p = v.camera.position.clone().set(f.x, fv.floor.elevation + fv.y + f.h * 0.6, f.z).project(v.camera);
+      const r = view.shadowRoot.querySelector("canvas").getBoundingClientRect();
+      return [r.left + ((p.x + 1) / 2) * r.width, r.top + ((1 - p.y) / 2) * r.height];
+    }, shot.furnishDrag.id);
+    await page.mouse.move(at[0], at[1]);
+    await page.mouse.down();
+    for (let i = 1; i <= 10; i++) await page.mouse.move(at[0] + (shot.furnishDrag.dx * i) / 10, at[1] + (shot.furnishDrag.dy * i) / 10);
+    await page.mouse.up();
+    await new Promise((r) => setTimeout(r, 1500));
   }
   if (shot.editorState) {
     await page.evaluate((state) => {

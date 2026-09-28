@@ -6,6 +6,8 @@ import { download, exportFile, parseExport } from "../transfer.ts";
 import { areaEntities, autoPlace, defaultHeight, entityName, furnitureEntities, groupByDevice, isPlaceable, kindOf, openingEntities } from "../devices.ts";
 import { furnitureSymbol } from "./furniture2d.ts";
 import { closeGaps, suggestedThickness } from "../geometry/gaps.ts";
+import { snapToWall } from "../geometry/snap.ts";
+import { furnishRoom, PACKAGES, type PackageId } from "../packages.ts";
 import { generateWalls, locateOnWalls, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { iconPath } from "../icons.ts";
@@ -22,6 +24,8 @@ import {
   OPENING_DEFAULTS,
   OUTDOOR_TYPES,
   spotGrid,
+  step,
+  type Direction,
   signedArea,
   newFloor,
   pointInPolygon,
@@ -44,7 +48,7 @@ import {
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
 
-type Tool = "select" | "rect" | "polygon" | "door" | "window" | "garage" | "outdoor" | "meter";
+type Tool = "select" | "rect" | "polygon" | "measure" | "door" | "window" | "garage" | "outdoor" | "meter";
 
 type Drag =
   | { kind: "pan"; last: [number, number] }
@@ -66,8 +70,6 @@ interface Guides {
 
 /** Drags that change the document live (restored when cancelled, recorded in the history when done). */
 const EDIT_DRAGS = new Set(["vertex", "room", "device", "opening", "furniture", "rotate", "outdoor"]);
-/** Furniture closer than this to a wall snaps against it (metres). */
-const WALL_SNAP = 0.25;
 
 const HISTORY = 100;
 const SNAP_PX = 10;
@@ -91,6 +93,9 @@ export class Fp3dEditor extends LitElement {
     _history: { state: true },
     _spots: { state: true },
     _outdoorId: { state: true },
+    _measureLen: { state: true },
+    _packages: { state: true },
+    _rectSize: { state: true },
     _tool: { state: true },
     _draft: { state: true },
     _cursor: { state: true },
@@ -121,6 +126,11 @@ export class Fp3dEditor extends LitElement {
   private declare _history: Snapshot[] | null;
   /** Open "place spots" form of the selected room. */
   private declare _outdoorId: string | null;
+  /** Length typed for the next wall when drawing by measure, and the size for "rectangle by size". */
+  private declare _measureLen: number;
+  /** The package list of the selected room is open. */
+  private declare _packages: boolean;
+  private declare _rectSize: [number, number];
   private declare _spots: { type: FurnitureType; rows: number; cols: number; entity: string | null } | null;
   private declare _tool: Tool;
   private declare _draft: Vec2[];
@@ -156,6 +166,9 @@ export class Fp3dEditor extends LitElement {
     this._history = null;
     this._spots = null;
     this._outdoorId = null;
+    this._measureLen = 3;
+    this._packages = false;
+    this._rectSize = [4, 3];
     this._tool = "select";
     this._draft = [];
     this._cursor = null;
@@ -410,7 +423,7 @@ export class Fp3dEditor extends LitElement {
       this.drag = { kind: "rect", start, end: start, outdoor: this._tool === "outdoor" };
       return;
     }
-    if (this._tool === "polygon") {
+    if (this._tool === "polygon" || this._tool === "measure") {
       this.drag = { kind: "tap", startScreen: local, last: local, panning: false };
       return;
     }
@@ -669,7 +682,10 @@ export class Fp3dEditor extends LitElement {
         break;
       }
       case "tap":
-        if (!drag.panning) this.addDraftPoint(this.snap(this.toWorld(...local), undefined, e.altKey), local);
+        if (drag.panning) break;
+        // by measure, a tap only sets (or moves) the starting point; the walls are typed in
+        if (this._tool === "measure") this._draft = [this.snap(this.toWorld(...local), undefined, e.altKey)];
+        else this.addDraftPoint(this.snap(this.toWorld(...local), undefined, e.altKey), local);
         break;
       case "opening":
       case "furniture":
@@ -769,6 +785,88 @@ export class Fp3dEditor extends LitElement {
     this._draft = [];
     this._cursor = null;
     this._guides = {};
+  }
+
+  /** Adds a wall of the typed length in a direction (drawing by measure). */
+  private measureStep(dir: Direction): void {
+    const last = this._draft[this._draft.length - 1];
+    if (!last || !(this._measureLen > 0)) return;
+    const next = step(last, this._measureLen, dir);
+    // arriving at the start closes the room
+    const first = this._draft[0];
+    if (this._draft.length >= 3 && Math.hypot(next[0] - first[0], next[1] - first[1]) < 0.01) {
+      this.closeDraft();
+      return;
+    }
+    this._draft = [...this._draft, next];
+  }
+
+  private rectBySize(): void {
+    const start = this._draft[0] ?? [0, 0];
+    const [w, d] = this._rectSize;
+    if (!(w > 0.1 && d > 0.1)) return;
+    this.addRoom([start, step(start, w, "right"), step(step(start, w, "right"), d, "down"), step(start, d, "down")]);
+    this._draft = [];
+  }
+
+  private renderMeasureForm() {
+    const draft = this._draft;
+    const first = draft[0];
+    const last = draft[draft.length - 1];
+    const gap = first && last && draft.length > 1 ? Math.hypot(last[0] - first[0], last[1] - first[1]) : 0;
+    const arrows: [Direction, string][] = [
+      ["up", "↑"],
+      ["left", "←"],
+      ["right", "→"],
+      ["down", "↓"],
+    ];
+    const len = (v: number) => formatNumber(this.hass, v, 2);
+    return html`<section>
+      <h3>${this.t("measure")}</h3>
+      ${!first
+        ? html`<p class="fp3d-sub">${this.t("measure_start")}</p>`
+        : html`<p class="fp3d-sub">${this.t("measure_from", { x: len(first[0]), z: len(first[1]) })}</p>
+            <div class="fp3d-form">
+              <label class="fp3d-field fp3d-wide"
+                >${this.t("measure_length")}
+                <input
+                  class="fp3d-measure-input"
+                  type="number"
+                  inputmode="decimal"
+                  step="0.01"
+                  min="0.05"
+                  .value=${String(this._measureLen)}
+                  @input=${(e: Event) => (this._measureLen = parseFloat((e.target as HTMLInputElement).value.replace(",", ".")) || 0)}
+                  @keydown=${(e: KeyboardEvent) => {
+                    const dir = { ArrowRight: "right", ArrowLeft: "left", ArrowUp: "up", ArrowDown: "down" }[e.key] as Direction | undefined;
+                    if (dir) {
+                      e.preventDefault();
+                      this.measureStep(dir);
+                    } else if (e.key === "Enter") this.closeDraft();
+                  }}
+              /></label>
+              <div class="fp3d-arrows fp3d-wide">
+                ${arrows.map(([dir, label]) => html`<button class="fp3d-btn fp3d-arrow-${dir}" title=${this.t(`dir_${dir}`)} @click=${() => this.measureStep(dir)}>${label}</button>`)}
+              </div>
+            </div>
+            ${draft.length > 1
+              ? html`<ol class="fp3d-measure-list">
+                  ${draft.slice(1).map((p, i) => html`<li>${len(Math.hypot(p[0] - draft[i][0], p[1] - draft[i][1]))} m</li>`)}
+                </ol>`
+              : nothing}
+            <div class="fp3d-actions">
+              <button class="fp3d-btn fp3d-primary" ?disabled=${draft.length < 3} @click=${() => this.closeDraft()}>${this.t("measure_close")}</button>
+              <button class="fp3d-btn" ?disabled=${draft.length < 2} @click=${() => (this._draft = draft.slice(0, -1))}>${this.t("measure_undo")}</button>
+            </div>
+            ${draft.length >= 3 ? html`<p class="fp3d-sub">${this.t("measure_gap", { gap: len(gap) })}</p>` : nothing}`}
+      <h4 class="fp3d-lib-head">${this.t("rect_by_size")}</h4>
+      <div class="fp3d-form">
+        ${this.num(this.t("width"), this._rectSize[0], (v) => (this._rectSize = [Math.max(0.1, v), this._rectSize[1]]), 0.01, 0.1)}
+        ${this.num(this.t("depth"), this._rectSize[1], (v) => (this._rectSize = [this._rectSize[0], Math.max(0.1, v)]), 0.01, 0.1)}
+        <button class="fp3d-btn fp3d-wide" @click=${() => this.rectBySize()}>${this.t("rect_add")}</button>
+      </div>
+      <p class="fp3d-sub">${this.t("measure_hint")}</p>
+    </section>`;
   }
 
   private addOutdoor(points: Vec2[]): void {
@@ -1021,57 +1119,7 @@ export class Fp3dEditor extends LitElement {
    * stands sideways), flush with the wall face. Null when no wall is close enough.
    */
   private snapToWall(f: Furniture): { x: number; z: number; rotation: number } | null {
-    const floor = this.floor;
-    if (!floor) return null;
-    const room = floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon([f.x, f.z], r.points));
-    if (!room) return null;
-    const pts = room.points;
-    const sgn = signedArea(pts) >= 0 ? 1 : -1;
-    const half = this._doc.settings.wall_interior / 2;
-    let best: { x: number; z: number; rotation: number; gap: number } | null = null;
-    for (let i = 0; i < pts.length; i++) {
-      const a = pts[i];
-      const b = pts[(i + 1) % pts.length];
-      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-      if (len < 0.3) continue;
-      const u: Vec2 = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
-      // normal into the room
-      const n: Vec2 = [-u[1] * sgn, u[0] * sgn];
-      const along = (f.x - a[0]) * u[0] + (f.z - a[1]) * u[1];
-      if (along < 0 || along > len) continue;
-      // interior walls stand on the room edge, so their face is half the wall thickness inside
-      const shared = floor.rooms.some(
-        (r) =>
-          r.id !== room.id &&
-          r.points.some((p, k) => {
-            const q = r.points[(k + 1) % r.points.length];
-            const d0 = Math.abs((p[0] - a[0]) * n[0] + (p[1] - a[1]) * n[1]);
-            const d1 = Math.abs((q[0] - a[0]) * n[0] + (q[1] - a[1]) * n[1]);
-            return d0 < 0.02 && d1 < 0.02;
-          }),
-      );
-      const face = shared ? half : 0;
-      const dist = (f.x - a[0]) * n[0] + (f.z - a[1]) * n[1] - face;
-      // rotation that turns the back to the wall (front along n)
-      const back = (Math.atan2(-n[0], n[1]) * 180) / Math.PI;
-      const diff = (r: number) => Math.abs(((f.rotation - r + 540) % 360) - 180);
-      const options = [
-        { rotation: back, extent: f.d / 2 },
-        { rotation: back + 90, extent: f.w / 2 },
-        { rotation: back - 90, extent: f.w / 2 },
-      ];
-      const pick = options.reduce((p, q) => (diff(q.rotation) < diff(p.rotation) ? q : p));
-      if (diff(pick.rotation) > 50) continue;
-      const gap = dist - pick.extent;
-      if (Math.abs(gap) > WALL_SNAP || (best && Math.abs(gap) >= Math.abs(best.gap))) continue;
-      best = {
-        x: round(f.x - n[0] * gap),
-        z: round(f.z - n[1] * gap),
-        rotation: ((Math.round(pick.rotation) % 360) + 360) % 360,
-        gap,
-      };
-    }
-    return best ? { x: best.x, z: best.z, rotation: best.rotation } : null;
+    return this.floor ? snapToWall(this.floor, f, this._doc.settings.wall_interior) : null;
   }
 
   private updateFurniture(patch: Partial<Furniture>): void {
@@ -1290,7 +1338,7 @@ export class Fp3dEditor extends LitElement {
         <div class="fp3d-main">
           <div class="fp3d-toolbar">
             <div class="fp3d-seg" role="group" aria-label=${this.t("tool_select")}>
-              ${(["select", "rect", "polygon", "door", "window", "garage", "outdoor"] as Tool[]).map(
+              ${(["select", "rect", "polygon", "measure", "door", "window", "garage", "outdoor"] as Tool[]).map(
                 (tool) => html`<button
                   aria-pressed=${this._tool === tool}
                   ?disabled=${!floor || (!this.isAdmin && tool !== "select")}
@@ -1609,10 +1657,17 @@ export class Fp3dEditor extends LitElement {
         <text class="fp3d-dim" x=${(x0 + x1) / 2} y=${Math.min(y0, y1) - 8}>${formatNumber(this.hass, w, 2)} × ${formatNumber(this.hass, d, 2)} m</text>
       </g>`;
     }
-    if (this._tool !== "polygon") return nothing;
+    if (this._tool !== "polygon" && this._tool !== "measure") return nothing;
     const pts = [...this._draft, ...(this._cursor ? [this._cursor] : [])].map((p) => this.toScreen(p));
     return svg`<g pointer-events="none">
       ${pts.length > 1 ? svg`<polyline class="fp3d-draft" points=${pts.map((p) => p.join(",")).join(" ")} />` : nothing}
+      ${this._tool === "measure"
+        ? this._draft.slice(1).map((p, i) => {
+            const a = this.toScreen(this._draft[i]);
+            const b = this.toScreen(p);
+            return svg`<text class="fp3d-dim" x=${(a[0] + b[0]) / 2} y=${(a[1] + b[1]) / 2 - 6}>${formatNumber(this.hass, Math.hypot(p[0] - this._draft[i][0], p[1] - this._draft[i][1]), 2)} m</text>`;
+          })
+        : nothing}
       ${this._draft.map((p, i) => {
         const [x, y] = this.toScreen(p);
         return svg`<circle class=${i === 0 && this._draft.length >= 3 ? "fp3d-draft-pt fp3d-draft-first" : "fp3d-draft-pt"} cx=${x} cy=${y} r=${i === 0 && this._draft.length >= 3 ? 9 : 5} />`;
@@ -1699,7 +1754,9 @@ export class Fp3dEditor extends LitElement {
             </div>`
           : nothing}
       </section>
-      ${this.outdoorArea
+      ${this._tool === "measure" && floor
+        ? this.renderMeasureForm()
+        : this.outdoorArea
         ? this.renderOutdoorForm(this.outdoorArea)
         : this.opening
         ? this.renderOpeningForm(this.opening)
@@ -1779,13 +1836,33 @@ export class Fp3dEditor extends LitElement {
       </details>
       ${admin
         ? html`<div class="fp3d-actions">
+            <button class="fp3d-btn fp3d-primary" @click=${() => (this._packages = !this._packages)}>${this.t("pkg_open")}</button>
             <button class="fp3d-btn" @click=${() => this.openSpotForm(room)}>${this.t("spots_place")}</button>
             <button class="fp3d-btn" @click=${() => this.duplicateRoom()}>${this.t("duplicate")}</button>
             <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteRoom()}>${this.t("delete")}</button>
           </div>`
         : nothing}
       ${this._spots ? this.renderSpotForm(room) : nothing}
+      ${this._packages
+        ? html`<div class="fp3d-packages">
+            ${PACKAGES.map(
+              (p) => html`<button class="fp3d-btn" @click=${() => this.applyPackage(room, p)}>
+                <b>${this.t(`pkg_${p}` as I18nKey)}</b><span>${this.t(`pkg_${p}_desc` as I18nKey)}</span>
+              </button>`,
+            )}
+            <p class="fp3d-sub">${this.t("pkg_hint")}</p>
+          </div>`
+        : nothing}
     </section>`;
+  }
+
+  /** Adds the furniture of a room package (lamps link to the room's lights automatically). */
+  private applyPackage(room: Room, pkg: PackageId): void {
+    if (!this.isAdmin) return;
+    const items = furnishRoom(room, pkg, () => uid("furniture"));
+    this.change((_, floor) => floor.furniture.push(...items));
+    this._packages = false;
+    this._notice = this.t("pkg_done", { n: items.length });
   }
 
   /** Suggests about one spot per 1.2 m in each direction, and the room's first light. */
@@ -2620,6 +2697,51 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-meter path {
         fill: #ffc633;
+      }
+      .fp3d-packages {
+        display: grid;
+        gap: 6px;
+        margin-top: 10px;
+      }
+      .fp3d-packages .fp3d-btn {
+        display: grid;
+        text-align: left;
+        gap: 2px;
+      }
+      .fp3d-packages .fp3d-btn span {
+        font-weight: 400;
+        font-size: 12px;
+        color: var(--fp3d-muted);
+      }
+      .fp3d-arrows {
+        display: grid;
+        grid-template-columns: repeat(3, 52px);
+        grid-template-areas: ". up ." "left . right" ". down .";
+        gap: 6px;
+        justify-content: center;
+      }
+      .fp3d-arrows .fp3d-btn {
+        font-size: 20px;
+        padding: 6px 0;
+      }
+      .fp3d-arrow-up {
+        grid-area: up;
+      }
+      .fp3d-arrow-left {
+        grid-area: left;
+      }
+      .fp3d-arrow-right {
+        grid-area: right;
+      }
+      .fp3d-arrow-down {
+        grid-area: down;
+      }
+      .fp3d-measure-list {
+        margin: 8px 0;
+        padding-left: 22px;
+        color: var(--fp3d-muted);
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
       }
       .fp3d-library {
         display: grid;

@@ -323,6 +323,15 @@ export function spotGrid(room: Room, rows: number, cols: number, inset = 0): Vec
   return out;
 }
 
+export type Direction = "right" | "down" | "left" | "up";
+
+/** Point `length` metres from `p` in a plan direction (right = +x, down = +z, as in the editor). */
+export function step(p: Vec2, length: number, dir: Direction): Vec2 {
+  const r = (v: number) => Math.round(v * 1000) / 1000;
+  const [dx, dz] = { right: [1, 0], down: [0, 1], left: [-1, 0], up: [0, -1] }[dir];
+  return [r(p[0] + dx * length), r(p[1] + dz * length)];
+}
+
 /** Height of the highest furniture top under a point (0 = the floor). */
 export function surfaceHeight(floor: Floor, x: number, z: number): number {
   let top = 0;

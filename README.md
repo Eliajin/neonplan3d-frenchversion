@@ -10,6 +10,7 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
   - Floors with name, elevation and ceiling height.
   - Rooms as rectangles or free shapes.
   - Snapping to the grid, to corners and edges of other rooms, and to corner alignments.
+  - "By measure": tap a starting point, then type each wall's length and pick its direction (arrow buttons or arrow keys); "rectangle by size" adds a room from width × depth.
   - "Close gaps" joins rooms drawn up to 60 cm apart (e.g. measured inside dimensions) at one shared wall and takes the gap as interior wall thickness.
   - Exact values can be typed in, in metres.
   - Undo and redo, duplicate, delete.
@@ -20,6 +21,8 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
   - Top-view symbols in the plan show how an item is turned; a handle in front of the selected item rotates it (15° steps).
   - Dragged near a wall, an item turns its back (or side) to the wall and sits flush; Alt moves freely.
   - Electric furniture can be linked to entities (automatically from the room's area, or by hand): a TV shows its media player, with the picture the media player provides (app icon or cover art) on its screen, glowing in the colour of the running app, and the app or title on its label; a power sensor adds watts and an energy cable.
+- **Room packages**: "Furnish …" on a room places a set of furniture against its walls – kitchen row, L-shaped kitchen, bathroom, bedroom, living room, dining room, office, kids' room, hall – including lamps linked to the area's lights.
+- **Furnish in 3D** (admins): drag furniture and lamps in the 3D view; they snap to walls like in the editor; turn by 45° or delete from the bar.
 - **Stairs** open the ceiling of the floor above.
 - **Floor materials** (wood, oak, tiles, carpet, stone, concrete) show as subtle patterns in 3D.
 - **Outdoor areas**: lawn, terrace, path, driveway, pool, flower bed, hedge and fence, drawn with the "Outdoor" tool; path lights, garden spots and outdoor wall lights light the outdoor areas and the facade.

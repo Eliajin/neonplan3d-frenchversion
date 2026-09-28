@@ -18,6 +18,10 @@ export interface ControlEvents {
   doubleTap(x: number, y: number): void;
   /** Press without moving for HOLD_MS; the following release is no tap. */
   hold(x: number, y: number): void;
+  /** Pointer down: return true to take the pointer (drag an object instead of turning the view). */
+  grab?(x: number, y: number): boolean;
+  drag?(x: number, y: number): void;
+  drop?(): void;
 }
 
 const HOLD_MS = 500;
@@ -39,6 +43,8 @@ export class OrbitControls {
   private lastTap = 0;
   private holdTimer: ReturnType<typeof setTimeout> | undefined;
   private held = false;
+  /** An object is being dragged: moves go to events.drag instead of the camera. */
+  private grabbing = false;
   private pinch: { dist: number; mid: [number, number] } | null = null;
   private readonly el: HTMLElement;
   private readonly camera: PerspectiveCamera;
@@ -117,8 +123,20 @@ export class OrbitControls {
     return this.flight !== null || this.pointers.size > 0;
   }
 
+  private local(e: PointerEvent): [number, number] {
+    const rect = this.el.getBoundingClientRect();
+    return [e.clientX - rect.left, e.clientY - rect.top];
+  }
+
   private onDown(e: PointerEvent): void {
     this.el.setPointerCapture(e.pointerId);
+    if (this.pointers.size === 0 && e.button === 0 && this.events.grab?.(...this.local(e))) {
+      this.grabbing = true;
+      this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button, type: e.pointerType });
+      this.flight = null;
+      this.velocity = { theta: 0, phi: 0 };
+      return;
+    }
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button, type: e.pointerType });
     this.flight = null;
     this.velocity = { theta: 0, phi: 0 };
@@ -143,6 +161,10 @@ export class OrbitControls {
   private onMove(e: PointerEvent): void {
     const p = this.pointers.get(e.pointerId);
     if (!p) return;
+    if (this.grabbing) {
+      this.events.drag?.(...this.local(e));
+      return;
+    }
     const dx = e.clientX - p.x;
     const dy = e.clientY - p.y;
     if (this.down && Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 6) {
@@ -182,6 +204,12 @@ export class OrbitControls {
 
   private onUp(e: PointerEvent): void {
     if (!this.pointers.has(e.pointerId)) return;
+    if (this.grabbing) {
+      this.grabbing = false;
+      this.pointers.delete(e.pointerId);
+      this.events.drop?.();
+      return;
+    }
     this.pointers.delete(e.pointerId);
     if (this.pointers.size < 2) this.pinch = null;
     clearTimeout(this.holdTimer);

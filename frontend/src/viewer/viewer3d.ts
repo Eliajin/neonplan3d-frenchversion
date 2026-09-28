@@ -46,7 +46,7 @@ import { buildRoof } from "./roof.ts";
 import { lineBlending, themed, themeIndex, type Theme, type ThemeUniform } from "./theme.ts";
 
 export type { Theme } from "./theme.ts";
-import { GeoBuffer, pushPrism } from "./geo.ts";
+import { GeoBuffer, LineBuffer, pushPrism } from "./geo.ts";
 import { buildLightSurface, lightColors, roomIndexAt, type LightKind, type LightSource, type LightSurface } from "./lighting.ts";
 import { buildOpeningParts, CLOSED, type OpeningState } from "./openings.ts";
 
@@ -66,6 +66,9 @@ export interface ViewerOptions {
   onDeviceTap?: (entityId: string) => void;
   /** Long press on a device marker. */
   onDeviceHold?: (entityId: string) => void;
+  /** Furnishing in 3D: an item was selected (null: none) or dragged to a new place. */
+  onFurnitureSelect?: (furnitureId: string | null) => void;
+  onFurnitureMove?: (furnitureId: string, x: number, z: number) => void;
   onStats?: (stats: ViewerStats) => void;
   /** Text for the floor labels in the house view, e.g. "5 rooms". */
   floorInfo?: (floor: Floor) => string;
@@ -102,6 +105,8 @@ export interface DeviceMarker {
   pin?: boolean;
   /** The 3D lamp can be tapped (it has an entity). */
   pickable?: boolean;
+  /** Furniture item this lamp is (for moving it in 3D). */
+  furnitureId?: string;
   /** A colour effect runs (colour loop …): the colour is animated in 3D. */
   effect?: boolean;
   /** Pendant shape: shade (default), globe, cone or drum. */
@@ -244,6 +249,8 @@ interface FloorView {
   coneMesh: Mesh;
   /** Triangle ranges of lamps (entity ids), furniture walls mesh and openings, for tapping. */
   lampTris: { id: string; start: number; end: number }[];
+  /** The same lamp ranges, keyed by furniture id (for moving lamps). */
+  lampFurnTris: { id: string; start: number; end: number }[];
   frameTris: { id: string; start: number; end: number }[];
   blindTris: { id: string; start: number; end: number }[];
   wallMesh: Mesh;
@@ -334,6 +341,11 @@ export class FloorplanViewer {
   /** Roof over the top floor (house view only), its opacity and the camera distance of the house view. */
   private roof: { group: Group; floorId: string; solid: MeshBasicMaterial; lines: LineBasicMaterial } | null = null;
   private roofO = 0;
+  /** Furnishing in 3D: items can be dragged; the selected one shows a wireframe box. */
+  private furnish = false;
+  private selectedFurniture: string | null = null;
+  private grab: { floorId: string; id: string; offset: [number, number]; x: number; z: number; moved: boolean } | null = null;
+  private ghost: LineSegments | null = null;
   private theme: Theme = "neon";
   private readonly themeUniform: ThemeUniform = { value: 0 };
   private sun: SunState | null = null;
@@ -549,6 +561,20 @@ export class FloorplanViewer {
     this.invalidate();
   }
 
+  /** Furnishing mode: dragging furniture and lamps moves them instead of turning the view. */
+  setFurnishMode(on: boolean): void {
+    this.furnish = on;
+    if (!on) this.selectFurniture(null);
+    this.invalidate();
+  }
+
+  /** Select a furniture item (wireframe box), or none. */
+  selectFurniture(id: string | null): void {
+    this.selectedFurniture = id;
+    this.updateGhost();
+    this.invalidate();
+  }
+
   /** Position of the sun; sunlight falls through windows facing it. */
   setSun(sun: SunState | null): void {
     this.sun = sun;
@@ -647,6 +673,9 @@ export class FloorplanViewer {
       change: () => this.invalidate(),
       tap: (x, y) => this.onTap(x, y),
       hold: (x, y) => this.onHold(x, y),
+      grab: (x, y) => this.grabFurniture(x, y),
+      drag: (x, y) => this.dragFurniture(x, y),
+      drop: () => this.dropFurniture(),
       doubleTap: () => this.options.onBack?.(),
     });
   }
@@ -967,6 +996,7 @@ export class FloorplanViewer {
         haloMesh,
         coneMesh,
         lampTris: [],
+        lampFurnTris: [],
         frameTris: [],
         blindTris: [],
         wallMesh,
@@ -1012,6 +1042,7 @@ export class FloorplanViewer {
     this.applyHighlight();
     this.applyDetail();
     this.buildRoofMesh();
+    this.updateGhost();
   }
 
   private buildRoofMesh(): void {
@@ -1238,6 +1269,7 @@ export class FloorplanViewer {
     fv.lampSig = sig;
     const buf = new GeoBuffer();
     const tris: FloorView["lampTris"] = [];
+    const furnTris: FloorView["lampFurnTris"] = [];
     const H = fv.floor.height;
     for (const d of this.devices) {
       if (d.floorId !== fv.floor.id || !d.lamp) continue;
@@ -1355,8 +1387,10 @@ export class FloorplanViewer {
         }
       }
       if (d.pickable !== false) tris.push({ id: d.id, start, end: buf.count });
+      if (d.furnitureId) furnTris.push({ id: d.furnitureId, start, end: buf.count });
     }
     fv.lampTris = tris;
+    fv.lampFurnTris = furnTris;
     fv.lampMesh.geometry.dispose();
     fv.lampMesh.geometry = buf.geometry();
     fv.lampMesh.visible = buf.count > 0;
@@ -1797,6 +1831,122 @@ export class FloorplanViewer {
       return;
     }
     this.options.onRoomTap?.(hit?.floorId ?? this.floorId ?? "", hit?.roomId ?? null);
+  }
+
+  /** Furniture item (or lamp) under a screen point, with the floor it is on. */
+  private furnitureAt(x: number, y: number): { fv: FloorView; id: string } | null {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ray = new Raycaster();
+    ray.setFromCamera(new Vector2((x / rect.width) * 2 - 1, -(y / rect.height) * 2 + 1), this.camera);
+    const floors = this.activeFloors();
+    const meshes = floors.flatMap((f) => [f.lampMesh, f.wallMesh].filter((m) => m.visible));
+    for (const hit of ray.intersectObjects(meshes, false)) {
+      if (hit.faceIndex == null) continue;
+      const fv = floors.find((f) => f.group === hit.object.parent)!;
+      const list = hit.object === fv.lampMesh ? fv.lampFurnTris : fv.geo.furnitureTris;
+      const id = list.find((r) => hit.faceIndex! >= r.start && hit.faceIndex! < r.end)?.id;
+      if (id) return { fv, id };
+    }
+    return null;
+  }
+
+  /** Point on a floor's plane under a screen point. */
+  private floorPoint(fv: FloorView, x: number, y: number): [number, number] | null {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ray = new Raycaster();
+    ray.setFromCamera(new Vector2((x / rect.width) * 2 - 1, -(y / rect.height) * 2 + 1), this.camera);
+    const h = fv.floor.elevation + fv.y;
+    const dir = ray.ray.direction;
+    if (Math.abs(dir.y) < 1e-4) return null;
+    const t = (h - ray.ray.origin.y) / dir.y;
+    if (t <= 0) return null;
+    return [ray.ray.origin.x + dir.x * t, ray.ray.origin.z + dir.z * t];
+  }
+
+  private grabFurniture(x: number, y: number): boolean {
+    if (!this.furnish) return false;
+    const hit = this.furnitureAt(x, y);
+    if (!hit) {
+      // a tap on empty space clears the selection, a drag still turns the view
+      if (this.selectedFurniture) {
+        this.selectFurniture(null);
+        this.options.onFurnitureSelect?.(null);
+      }
+      return false;
+    }
+    const f = hit.fv.floor.furniture.find((m) => m.id === hit.id);
+    const p = this.floorPoint(hit.fv, x, y);
+    if (!f || !p) return false;
+    this.grab = { floorId: hit.fv.floor.id, id: f.id, offset: [f.x - p[0], f.z - p[1]], x: f.x, z: f.z, moved: false };
+    this.selectFurniture(f.id);
+    this.options.onFurnitureSelect?.(f.id);
+    return true;
+  }
+
+  private dragFurniture(x: number, y: number): void {
+    const g = this.grab;
+    const fv = g && this.floors.find((f) => f.floor.id === g.floorId);
+    if (!g || !fv) return;
+    const p = this.floorPoint(fv, x, y);
+    if (!p) return;
+    const grid = this.building?.settings.grid ?? 0.05;
+    g.x = Math.round((p[0] + g.offset[0]) / grid) * grid;
+    g.z = Math.round((p[1] + g.offset[1]) / grid) * grid;
+    g.moved = true;
+    this.updateGhost();
+    this.invalidate();
+  }
+
+  private dropFurniture(): void {
+    const g = this.grab;
+    this.grab = null;
+    if (g?.moved) this.options.onFurnitureMove?.(g.id, Math.round(g.x * 1000) / 1000, Math.round(g.z * 1000) / 1000);
+    this.updateGhost();
+  }
+
+  /** Wireframe box around the selected item, at its drag position while it is dragged. */
+  private updateGhost(): void {
+    if (this.ghost) {
+      this.ghost.geometry.dispose();
+      (this.ghost.material as Material).dispose();
+      this.scene.remove(this.ghost);
+      this.ghost = null;
+    }
+    const id = this.selectedFurniture;
+    const fv = id ? this.floors.find((f) => f.floor.furniture.some((m) => m.id === id)) : undefined;
+    const f = fv?.floor.furniture.find((m) => m.id === id);
+    if (!fv || !f) return;
+    const x = this.grab?.id === f.id ? this.grab.x : f.x;
+    const z = this.grab?.id === f.id ? this.grab.z : f.z;
+    const H = fv.floor.height;
+    const hanging = ["lamp_ceiling", "lamp_downlight", "lamp_spot", "lamp_panel", "lamp_pendant", "led_strip"].includes(f.type);
+    const h = Math.max(0.1, f.type === "lamp_pendant" ? 0.3 : f.h);
+    const y0 = hanging ? (f.type === "lamp_pendant" ? H - f.h - 0.1 : H - h) : f.type === "radiator" ? 0.12 : f.type === "kitchen_wall" ? 1.45 : 0;
+    const a = (f.rotation * Math.PI) / 180;
+    const c = Math.cos(a);
+    const sn = Math.sin(a);
+    const corner = (lx: number, lz: number, y: number) => [x + lx * c - lz * sn, y, z + lx * sn + lz * c];
+    const lines = new LineBuffer();
+    const pts = [
+      [-f.w / 2, -f.d / 2],
+      [f.w / 2, -f.d / 2],
+      [f.w / 2, f.d / 2],
+      [-f.w / 2, f.d / 2],
+    ];
+    const color = new Color(0.25, 0.9, 1);
+    for (let i = 0; i < 4; i++) {
+      const [ax, az] = pts[i];
+      const [bx, bz] = pts[(i + 1) % 4];
+      lines.seg(corner(ax, az, y0 + 0.01), corner(bx, bz, y0 + 0.01), color);
+      lines.seg(corner(ax, az, y0 + h), corner(bx, bz, y0 + h), color);
+      lines.seg(corner(ax, az, y0 + 0.01), corner(ax, az, y0 + h), color);
+    }
+    // the front edge a little brighter at floor level, so the direction is clear
+    lines.seg(corner(-f.w / 2, f.d / 2 + 0.03, y0 + 0.02), corner(f.w / 2, f.d / 2 + 0.03, y0 + 0.02), new Color(1, 1, 1));
+    this.ghost = new LineSegments(lines.geometry(), new LineBasicMaterial({ vertexColors: true, depthTest: false, transparent: true }));
+    this.ghost.position.y = fv.floor.elevation + fv.y;
+    this.ghost.renderOrder = 20;
+    this.scene.add(this.ghost);
   }
 
   private onHold(x: number, y: number): void {

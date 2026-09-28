@@ -12,6 +12,7 @@ import type { HomeAssistant } from "./types.ts";
 import type { MarkerMode } from "./components/view3d.ts";
 import type { HeatMode } from "./heatmap.ts";
 import { THEMES, type Theme } from "./themes.ts";
+import { snapToWall } from "./geometry/snap.ts";
 import type { Quality, WallMode } from "./viewer/viewer3d.ts";
 
 type Mode = "view" | "editor";
@@ -50,6 +51,8 @@ export class Floorplan3dPanel extends LitElement {
     _markers: { state: true },
     _heat: { state: true },
     _theme: { state: true },
+    _furnish: { state: true },
+    _selFurniture: { state: true },
   };
 
   declare hass: HomeAssistant;
@@ -67,6 +70,8 @@ export class Floorplan3dPanel extends LitElement {
   private declare _markers: MarkerMode;
   private declare _heat: HeatMode;
   private declare _theme: Theme;
+  private declare _furnish: boolean;
+  private declare _selFurniture: string | null;
 
   private readonly data = new BuildingController(this);
 
@@ -88,6 +93,8 @@ export class Floorplan3dPanel extends LitElement {
     this._heat = heat === "temperature" || heat === "humidity" || heat === "co2" ? heat : "none";
     const theme = prefs.get("theme") as Theme | null;
     this._theme = theme && THEMES.includes(theme) ? theme : "neon";
+    this._furnish = false;
+    this._selFurniture = null;
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
@@ -128,6 +135,49 @@ export class Floorplan3dPanel extends LitElement {
   private setQuality(quality: Quality): void {
     this._quality = quality;
     prefs.set("quality", quality);
+  }
+
+  /** Change one furniture item of the building (furnishing in 3D) and save. */
+  private editFurniture(id: string, change: (f: Building["floors"][number]["furniture"][number], floor: Building["floors"][number]) => void): void {
+    const b = this.data.building;
+    if (!b) return;
+    const next = structuredClone(b);
+    for (const floor of next.floors) {
+      const f = floor.furniture.find((m) => m.id === id);
+      if (f) change(f, floor);
+    }
+    this.data.edit(next);
+  }
+
+  private furnitureName(id: string): string {
+    const f = this.data.building?.floors.flatMap((fl) => fl.furniture).find((m) => m.id === id);
+    return f ? this.t(`furn_${f.type}` as I18nKey) : "";
+  }
+
+  private moveFurniture(e: CustomEvent<{ id: string; x: number; z: number }>): void {
+    const { id, x, z } = e.detail;
+    const wall = this.data.building?.settings.wall_interior ?? 0.12;
+    this.editFurniture(id, (f, floor) => {
+      Object.assign(f, { x, z });
+      // near a wall the item turns its back to it and sits flush, as in the editor
+      const snap = snapToWall(floor, f, wall);
+      if (snap) Object.assign(f, snap);
+    });
+  }
+
+  private turnFurniture(delta: number): void {
+    if (!this._selFurniture) return;
+    this.editFurniture(this._selFurniture, (f) => (f.rotation = (((f.rotation + delta) % 360) + 360) % 360));
+  }
+
+  private deleteFurniture(): void {
+    const id = this._selFurniture;
+    const b = this.data.building;
+    if (!id || !b) return;
+    const next = structuredClone(b);
+    for (const floor of next.floors) floor.furniture = floor.furniture.filter((m) => m.id !== id);
+    this.data.edit(next);
+    this._selFurniture = null;
   }
 
   private back(): void {
@@ -315,6 +365,10 @@ export class Floorplan3dPanel extends LitElement {
           .markerMode=${this._markers}
           .heatMode=${this._heat}
           .theme=${this._theme}
+          ?furnish=${this._furnish}
+          .selectedFurniture=${this._selFurniture}
+          @furniture-select=${(e: CustomEvent<{ id: string | null }>) => (this._selFurniture = e.detail.id)}
+          @furniture-move=${this.moveFurniture}
           .quality=${this._quality}
           ?showStats=${this._stats}
           @room-tap=${this.onRoomTap}
@@ -357,10 +411,34 @@ export class Floorplan3dPanel extends LitElement {
                 </button>`,
             )}
           </div>
+          ${this.isAdmin
+            ? html`<button
+                class="fp3d-chip ${this._furnish ? "fp3d-chip-on" : ""}"
+                aria-pressed=${this._furnish}
+                title=${this.t("furnish_hint")}
+                @click=${() => {
+                  this._furnish = !this._furnish;
+                  this._selFurniture = null;
+                }}
+              >
+                ${this.t("furnish")}
+              </button>`
+            : nothing}
           ${this._roomId || (this._floorId && b.floors.length > 1)
             ? html`<button class="fp3d-chip" @click=${() => this.back()}>${this.t("back")}</button>`
             : nothing}
         </div>
+        ${this._furnish
+          ? html`<div class="fp3d-furnish-bar">
+              ${this._selFurniture
+                ? html`<span>${this.furnitureName(this._selFurniture)}</span>
+                    <button class="fp3d-chip" @click=${() => this.turnFurniture(-45)}>↺ 45°</button>
+                    <button class="fp3d-chip" @click=${() => this.turnFurniture(45)}>↻ 45°</button>
+                    <button class="fp3d-chip fp3d-danger-chip" @click=${() => this.deleteFurniture()}>${this.t("delete")}</button>`
+                : html`<span>${this.t("furnish_hint")}</span>`}
+              <button class="fp3d-chip fp3d-chip-on" @click=${() => ((this._furnish = false), (this._selFurniture = null))}>${this.t("done")}</button>
+            </div>`
+          : nothing}
       </div>
     `;
   }
@@ -431,6 +509,30 @@ export class Floorplan3dPanel extends LitElement {
         border-color: rgba(255, 107, 139, 0.6);
         color: var(--fp3d-danger);
         word-break: break-word;
+      }
+      .fp3d-chip-on {
+        background: var(--fp3d-accent);
+        color: var(--fp3d-accent-text);
+      }
+      .fp3d-furnish-bar {
+        position: absolute;
+        left: 50%;
+        bottom: 16px;
+        transform: translateX(-50%);
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        max-width: calc(100% - 24px);
+        padding: 8px 10px 8px 16px;
+        border-radius: 999px;
+        background: var(--fp3d-chrome);
+        box-shadow: var(--fp3d-shadow);
+        font-size: 13.5px;
+      }
+      .fp3d-danger-chip {
+        color: var(--fp3d-danger);
       }
       .fp3d-grow {
         flex: 1;

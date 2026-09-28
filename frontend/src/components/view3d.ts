@@ -58,6 +58,8 @@ export class Fp3dView3d extends LitElement {
     markerMode: { attribute: false },
     heatMode: { attribute: false },
     theme: { attribute: false },
+    furnish: { type: Boolean },
+    selectedFurniture: { attribute: false },
     _sky: { state: true },
     quality: { attribute: false },
     showStats: { type: Boolean },
@@ -75,6 +77,9 @@ export class Fp3dView3d extends LitElement {
   declare markerMode: MarkerMode;
   declare heatMode: HeatMode;
   declare theme: Theme;
+  /** Furnishing: furniture and lamps are dragged in 3D (admins, panel only). */
+  declare furnish: boolean;
+  declare selectedFurniture: string | null;
   /** How much daylight there is (0 = night, 1 = day), from sun.sun. */
   private declare _sky: number;
   declare quality: Quality;
@@ -107,6 +112,8 @@ export class Fp3dView3d extends LitElement {
     this.markerMode = "important";
     this.heatMode = "none";
     this.theme = "neon";
+    this.furnish = false;
+    this.selectedFurniture = null;
     this._sky = 0;
     this.quality = "auto";
     this.showStats = false;
@@ -147,6 +154,8 @@ export class Fp3dView3d extends LitElement {
         onBack: () => this.fire("back", {}),
         onDeviceTap: (id) => this.onDeviceTap(id),
         onDeviceHold: (id) => openMoreInfo(this, id),
+        onFurnitureSelect: (id) => this.fire("furniture-select", { id }),
+        onFurnitureMove: (id, x, z) => this.fire("furniture-move", { id, x, z }),
         // stats can be switched on at any time; they only cause updates while shown
         onStats: (s) => {
           if (this.showStats) this._stats = s;
@@ -154,6 +163,7 @@ export class Fp3dView3d extends LitElement {
       });
       this.viewer.setWallMode(this.wallMode);
       this.viewer.setTheme(this.theme);
+      this.viewer.setFurnishMode(this.furnish);
       if (this.building) this.viewer.setBuilding(this.building);
       this.syncDevices(true);
       this.viewer.setFloor(this.floorId, false);
@@ -177,6 +187,8 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("wallMode")) v.setWallMode(this.wallMode);
     if (changed.has("explode")) v.setExplode(this.explode);
     if (changed.has("theme")) v.setTheme(this.theme);
+    if (changed.has("furnish")) v.setFurnishMode(this.furnish);
+    if (changed.has("selectedFurniture")) v.selectFurniture(this.selectedFurniture);
     if (changed.has("quality") && changed.get("quality") !== undefined) v.setQuality(this.quality);
   }
 
@@ -373,6 +385,7 @@ export class Fp3dView3d extends LitElement {
       size: [f.w, f.d, f.h],
       base,
       pickable: !!entity,
+      furnitureId: f.id,
       effect: !!st && st.state === "on" && typeof st.attributes.effect === "string" && !/^(none|off|solid|static|normal)$/i.test(st.attributes.effect),
       variant: f.variant,
       fromFurniture: true,
