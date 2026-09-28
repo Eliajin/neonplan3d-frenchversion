@@ -1813,6 +1813,23 @@ export class Fp3dEditor extends LitElement {
     if (this._tool === "furniture" && floor && admin) {
       return html`${this.furnitureItem ? this.renderFurnitureForm(this.furnitureItem) : nothing} ${this.renderFurnitureLibrary()}`;
     }
+    // a selected item shows only its own form, with a way back to the floor and room
+    const item =
+      this._tool === "measure"
+        ? null
+        : this.furnitureItem
+          ? this.renderFurnitureForm(this.furnitureItem)
+          : this.opening
+            ? this.renderOpeningForm(this.opening)
+            : this.device
+              ? this.renderDeviceForm(this.device)
+              : this.outdoorArea
+                ? this.renderOutdoorForm(this.outdoorArea)
+                : null;
+    if (item) {
+      return html`<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("room", this._roomId)}>‹ ${this.t(room ? "back_to_room" : "back_to_floor", { room: room?.name ?? "" })}</button>
+        ${item}`;
+    }
     return html`
       ${admin ? nothing : html`<p class="fp3d-note">${this.t("read_only")}</p>`}
       <section>
@@ -2966,6 +2983,9 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-rotate {
         cursor: grab;
+      }
+      .fp3d-back {
+        margin-bottom: 12px;
       }
       .fp3d-presets {
         display: flex;
