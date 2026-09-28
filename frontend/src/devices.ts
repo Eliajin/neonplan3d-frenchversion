@@ -500,3 +500,26 @@ export function appColor(st: HassEntity | undefined): [number, number, number] |
   if (text.includes("zdf") || text.includes("ard") || text.includes("mediathek")) return [1, 0.5, 0.1];
   return [0.22, 0.88, 1];
 }
+
+/**
+ * Entities of a room's panel: what the plan shows in the room (placed devices, lamps and furniture
+ * with their entities, blinds and contacts of its doors and windows) plus the ones picked for the
+ * panel. `more` are the other entities of the room's area, offered on request.
+ */
+export function roomPanelEntities(hass: HomeAssistant, floor: Floor, room: Room): { shown: string[]; more: string[] } {
+  const inRoom = (x: number, z: number) => pointInPolygon([x, z], room.points);
+  const furniture = furnitureEntities(hass, [floor]);
+  const openings = openingEntities(hass, [floor]);
+  const shown = [
+    ...floor.placements.filter((p) => inRoom(p.x, p.z)).map((p) => p.entity_id),
+    ...floor.furniture.filter((f) => inRoom(f.x, f.z)).flatMap((f) => [furniture.get(f.id)?.entity, furniture.get(f.id)?.power]),
+    ...floor.openings.filter((o) => o.room_id === room.id).flatMap((o) => {
+      const e = openings.get(o.id);
+      return e ? [e.cover, e.contact, e.tilt, e.contact2] : [];
+    }),
+    ...(room.panel ?? []),
+  ].filter((id): id is string => !!id && !!hass.states[id]);
+  const unique = [...new Set(shown)];
+  const set = new Set(unique);
+  return { shown: unique, more: areaEntities(hass, room.area_id).filter((id) => !set.has(id)) };
+}

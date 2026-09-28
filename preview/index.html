@@ -91,7 +91,8 @@
             states[id] = next;
           }
           current = { ...current, states };
-          panel.hass = current;
+          if (window.fp3dCard) window.fp3dCard.hass = current;
+          else if (window.fp3dPanel) window.fp3dPanel.hass = current;
         },
         async callWS(msg) {
           switch (msg.type) {

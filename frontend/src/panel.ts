@@ -418,6 +418,7 @@ export class Floorplan3dPanel extends LitElement {
               class="fp3d-room-panel"
               .hass=${this.hass}
               .room=${b.floors.flatMap((f) => f.rooms).find((r) => r.id === this._roomId) ?? null}
+              .floor=${b.floors.find((f) => f.rooms.some((r) => r.id === this._roomId)) ?? null}
               @close=${() => (this._roomId = null)}
             ></fp3d-room-panel>`
           : nothing}

@@ -177,6 +177,7 @@ export class Floorplan3dCard extends LitElement {
               class="fp3d-card-panel"
               .hass=${this.hass}
               .room=${b.floors.flatMap((f) => f.rooms).find((r) => r.id === this._roomId) ?? null}
+              .floor=${b.floors.find((f) => f.rooms.some((r) => r.id === this._roomId)) ?? null}
               @close=${() => (this._roomId = null)}
             ></fp3d-room-panel>`
           : nothing}
@@ -218,7 +219,7 @@ export class Floorplan3dCard extends LitElement {
     css`
       .fp3d-card-controls {
         position: absolute;
-        left: 10px;
+        left: 60px;
         right: 10px;
         bottom: 10px;
         display: flex;

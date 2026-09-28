@@ -22,6 +22,14 @@ export interface ControlEvents {
   grab?(x: number, y: number): boolean;
   drag?(x: number, y: number): void;
   drop?(): void;
+  /**
+   * A one-finger drag starts at (x, y) moving by (dx, dy): return true to take it as a swipe on an
+   * object (dimming a lamp, moving a blind) instead of turning the view. Moves then report the
+   * vertical distance from the start (pixels, down positive).
+   */
+  swipeStart?(x: number, y: number, dx: number, dy: number): boolean;
+  swipeMove?(dy: number): void;
+  swipeEnd?(): void;
 }
 
 const HOLD_MS = 500;
@@ -45,6 +53,8 @@ export class OrbitControls {
   private held = false;
   /** An object is being dragged: moves go to events.drag instead of the camera. */
   private grabbing = false;
+  /** A swipe on an object: vertical moves go to events.swipeMove. */
+  private swiping: { startY: number } | null = null;
   private pinch: { dist: number; mid: [number, number] } | null = null;
   private readonly el: HTMLElement;
   private readonly camera: PerspectiveCamera;
@@ -167,9 +177,25 @@ export class OrbitControls {
     }
     const dx = e.clientX - p.x;
     const dy = e.clientY - p.y;
-    if (this.down && Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 6) {
+    if (this.swiping) {
+      this.events.swipeMove?.(e.clientY - this.swiping.startY);
+      return;
+    }
+    if (this.down && !this.down.moved && Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 6) {
       this.down.moved = true;
       clearTimeout(this.holdTimer);
+      const rect = this.el.getBoundingClientRect();
+      if (
+        this.pointers.size === 1 &&
+        p.button === 0 &&
+        !e.shiftKey &&
+        this.events.swipeStart?.(this.down.x - rect.left, this.down.y - rect.top, e.clientX - this.down.x, e.clientY - this.down.y)
+      ) {
+        this.swiping = { startY: this.down.y };
+        this.velocity = { theta: 0, phi: 0 };
+        this.events.swipeMove?.(e.clientY - this.down.y);
+        return;
+      }
     }
     if (this.pointers.size === 1) {
       if (this.down && !this.down.moved) {
@@ -211,6 +237,12 @@ export class OrbitControls {
       return;
     }
     this.pointers.delete(e.pointerId);
+    if (this.swiping) {
+      this.swiping = null;
+      this.down = null;
+      this.events.swipeEnd?.();
+      return;
+    }
     if (this.pointers.size < 2) this.pinch = null;
     clearTimeout(this.holdTimer);
     if (this.held) {

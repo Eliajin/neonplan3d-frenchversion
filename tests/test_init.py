@@ -249,6 +249,7 @@ async def test_outdoor_roof_and_north_get_defaults(hass: HomeAssistant, hass_ws_
     assert got["settings"]["roof"] == {"type": "none", "pitch": 35, "overhang": 0.4}
     assert got["floors"][0]["outdoor"][0]["type"] == "lawn"
     assert got["floors"][0]["ha_floor"] is None
+    assert got["floors"][0]["rooms"][0]["panel"] == []
 
     bad = copy.deepcopy(building)
     bad["floors"][0]["outdoor"][0]["type"] = "volcano"

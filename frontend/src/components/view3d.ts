@@ -16,13 +16,16 @@ import {
   type FurnitureLinks,
   type OpeningEntities,
 } from "../devices.ts";
-import { iconSvg } from "../icons.ts";
+import { iconPath, iconSvg } from "../icons.ts";
 import { energySummary, findConsumers, flowColor, flowSegments, powerSensorFor, readPower, type Consumer, type EnergySummary } from "../energy.ts";
 import { STAGE, type Theme } from "../themes.ts";
 import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from "../heatmap.ts";
 import { furnitureName } from "../furniture-names.ts";
 import { formatNumber, translate } from "../i18n.ts";
 import { getPacks, packsVersion } from "../packs.ts";
+import { searchIndex, searchItems, type SearchItem } from "../search.ts";
+import { coverPositionable, lightAbilities } from "./quick-menu.ts";
+import "./quick-menu.ts";
 import { load3d } from "../load3d.ts";
 import { buildMarkers, openMoreInfo, placedEntities, stateText, toggleEntity } from "../markers.ts";
 import { isLamp, outdoorGround, pointInPolygon, surfaceHeight, type Building, type Furniture } from "../model.ts";
@@ -72,6 +75,9 @@ export class Fp3dView3d extends LitElement {
     _error: { state: true },
     _energy: { state: true },
     _flows: { state: true },
+    _swipe: { state: true },
+    _menu: { state: true },
+    _find: { state: true },
   };
 
   declare hass: HomeAssistant;
@@ -99,6 +105,14 @@ export class Fp3dView3d extends LitElement {
   private declare _stats: ViewerStats | null;
   private declare _error: string | null;
   private declare _energy: EnergySummary | null;
+  /** A running swipe on a lamp or blind: the value shown next to the finger. */
+  private declare _swipe: { entity: string; kind: "light" | "cover"; start: number; value: number; x: number; y: number } | null;
+  /** Quick menu at a device (long press). */
+  private declare _menu: { entity: string; x: number; y: number } | null;
+  /** Search ("where is …?"): null = closed. */
+  private declare _find: string | null;
+  private swipeSent = 0;
+  private swipeTimer: ReturnType<typeof setTimeout> | undefined;
   /** Energy cables from the meter to the consumers (off unless switched on; kept per browser). */
   private declare _flows: boolean;
 
@@ -137,6 +151,9 @@ export class Fp3dView3d extends LitElement {
     this._stats = null;
     this._error = null;
     this._energy = null;
+    this._swipe = null;
+    this._menu = null;
+    this._find = null;
     try {
       this._flows = localStorage.getItem("floorplan_3d.flows") === "1";
     } catch {
@@ -175,7 +192,8 @@ export class Fp3dView3d extends LitElement {
           floor.rooms.length === 1 ? translate(this.hass, "floor_rooms_one") : translate(this.hass, "floor_rooms", { n: floor.rooms.length }),
         onBack: () => this.fire("back", {}),
         onDeviceTap: (id) => this.onDeviceTap(id),
-        onDeviceHold: (id) => openMoreInfo(this, id),
+        onDeviceHold: (id, x, y) => this.onDeviceHold(id, x, y),
+        onDeviceSwipe: (id, phase, dy, x, y) => this.onDeviceSwipe(id, phase, dy, x, y),
         onFurnitureSelect: (id) => this.fire("furniture-select", { id }),
         onFurnitureMove: (id, x, z) => this.fire("furniture-move", { id, x, z }),
         // stats can be switched on at any time; they only cause updates while shown
@@ -447,6 +465,131 @@ export class Fp3dView3d extends LitElement {
     return out;
   }
 
+  /** Long press: the quick menu at the device, or the details for devices without one. */
+  private onDeviceHold(entityId: string, x: number, y: number): void {
+    const kind = kindOf(entityId);
+    if (kind === "light" || kind === "cover" || kind === "switch" || kind === "fan" || kind === "lock") this._menu = { entity: entityId, x, y };
+    else openMoreInfo(this, entityId);
+  }
+
+  /** Swipe up or down on a lamp (brightness) or a blind (position). */
+  private onDeviceSwipe(entityId: string, phase: "start" | "move" | "end", dy: number, x: number, y: number): boolean {
+    const st = this.hass?.states[entityId];
+    if (phase === "start") {
+      if (!st || isUnavailable(st)) return false;
+      const kind = kindOf(entityId);
+      if (kind === "light" && lightAbilities(st).dim) {
+        const pct = st.state === "on" ? (typeof st.attributes.brightness === "number" ? Math.round((st.attributes.brightness as number) / 2.55) : 100) : 0;
+        this._swipe = { entity: entityId, kind: "light", start: pct, value: pct, x, y };
+        return true;
+      }
+      if (kind === "cover" && coverPositionable(st)) {
+        const pos = st.attributes.current_position as number;
+        this._swipe = { entity: entityId, kind: "cover", start: pos, value: pos, x, y };
+        return true;
+      }
+      return false;
+    }
+    const s = this._swipe;
+    if (!s || s.entity !== entityId) return false;
+    if (phase === "move") {
+      // the whole range over about 220 pixels; up = brighter / blind up
+      const value = Math.round(Math.min(100, Math.max(0, s.start - (dy / 220) * 100)));
+      if (value !== s.value) this._swipe = { ...s, value };
+      // at most a few calls per second while the finger moves
+      const now = performance.now();
+      if (now - this.swipeSent > 350) {
+        this.swipeSent = now;
+        this.applySwipe();
+      }
+    } else {
+      this.applySwipe();
+      clearTimeout(this.swipeTimer);
+      this.swipeTimer = setTimeout(() => (this._swipe = null), 700);
+    }
+    return true;
+  }
+
+  private applySwipe(): void {
+    const s = this._swipe;
+    if (!s || !this.hass) return;
+    if (s.kind === "light") {
+      if (s.value <= 0) void this.hass.callService("light", "turn_off", { entity_id: s.entity });
+      else void this.hass.callService("light", "turn_on", { entity_id: s.entity, brightness_pct: s.value });
+    } else void this.hass.callService("cover", "set_cover_position", { entity_id: s.entity, position: s.value });
+  }
+
+  /** Fly to a search result: rooms are selected, devices shown on their floor and flashing. */
+  private goTo(item: SearchItem): void {
+    this._find = null;
+    if (item.kind === "room") {
+      this.fire("room-tap", { floorId: item.floorId, roomId: item.roomId });
+      return;
+    }
+    if (this.floorId !== item.floorId) this.fire("floor-tap", { floorId: item.floorId });
+    // after the host has switched the floor (its own camera flight starts first)
+    setTimeout(() => this.viewer?.focus(item.floorId, item.x, item.z, item.y, item.entity), 120);
+  }
+
+  private renderFind() {
+    const b = this.building;
+    if (!b || !this.hass) return nothing;
+    if (this._find === null) {
+      return html`<button class="fp3d-find-btn" title=${translate(this.hass, "find")} aria-label=${translate(this.hass, "find")} @click=${() => (this._find = "")}>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4.5 4.5" /></svg>
+      </button>`;
+    }
+    const results = searchItems(searchIndex(this.hass, b), this._find);
+    return html`<div class="fp3d-find">
+      <input
+        type="search"
+        placeholder=${translate(this.hass, "find_placeholder")}
+        .value=${this._find}
+        @input=${(e: Event) => (this._find = (e.target as HTMLInputElement).value)}
+        @keydown=${(e: KeyboardEvent) => {
+          if (e.key === "Escape") this._find = null;
+          if (e.key === "Enter" && results[0]) this.goTo(results[0]);
+        }}
+      />
+      <button class="fp3d-find-close" aria-label=${translate(this.hass, "close")} @click=${() => (this._find = null)}>✕</button>
+      ${this._find.trim()
+        ? html`<div class="fp3d-find-list">
+            ${results.length
+              ? results.map(
+                  (it) => html`<button @click=${() => this.goTo(it)}>
+                    <span class="fp3d-find-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d=${it.icon ? iconPath(it.icon) : "M4 10l8-6 8 6v10H4z"} /></svg></span>
+                    <span><b>${it.name}</b>${it.where ? html`<small>${it.where}</small>` : nothing}</span>
+                  </button>`,
+                )
+              : html`<p>${translate(this.hass, "find_none")}</p>`}
+          </div>`
+        : nothing}
+    </div>`;
+  }
+
+  private renderSwipe() {
+    const s = this._swipe;
+    if (!s || !this.hass) return nothing;
+    const off = s.kind === "light" && s.value <= 0;
+    return html`<div class="fp3d-swipe" style="left:${s.x}px;top:${s.y}px">
+      <span>${entityName(this.hass, s.entity)}</span>
+      <b>${off ? translate(this.hass, "swipe_off") : `${s.value} %`}</b>
+      <i><em style="height:${s.value}%"></em></i>
+    </div>`;
+  }
+
+  private renderMenu() {
+    const m = this._menu;
+    if (!m || !this.hass) return nothing;
+    const stage = this.renderRoot.querySelector(".fp3d-stage") as HTMLElement | null;
+    const w = stage?.clientWidth ?? 800;
+    const h = stage?.clientHeight ?? 600;
+    const left = Math.max(8, Math.min(w - 240, m.x - 116));
+    const top = Math.max(8, Math.min(h - 360, m.y - 170));
+    return html`<div class="fp3d-menu-backdrop" @click=${() => (this._menu = null)}></div>
+      <fp3d-quick-menu style="left:${left}px;top:${top}px" .hass=${this.hass} .entity=${m.entity} @close=${() => (this._menu = null)}></fp3d-quick-menu>`;
+  }
+
   private onDeviceTap(entityId: string): void {
     const kind = kindOf(entityId);
     if (kind && TOGGLE_KINDS.has(kind)) void toggleEntity(this.hass, entityId);
@@ -519,6 +662,7 @@ export class Fp3dView3d extends LitElement {
     const style = `--fp3d-sky:${mix(stage.night[0], stage.day[0])};--fp3d-ground:${mix(stage.night[1], stage.day[1])}`;
     return html`<div class="fp3d-stage" style=${style}>
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.renderEnergy()} ${this.renderLegend()}
+      ${this.renderFind()} ${this.renderSwipe()} ${this.renderMenu()}
       ${this.showStats && this._stats
         ? html`<span class="fp3d-stats"
             ><b>${this._stats.fps ? translate(this.hass, "stats_fps", { fps: this._stats.fps, ms: this._stats.worstMs }) : translate(this.hass, "stats_idle")}</b> ·
@@ -673,10 +817,170 @@ export class Fp3dView3d extends LitElement {
       .fp3d-person[hidden] {
         display: none;
       }
-      .fp3d-legend {
+      .fp3d-find-btn {
         position: absolute;
         left: 12px;
         bottom: 10px;
+        width: 40px;
+        height: 40px;
+        display: grid;
+        place-items: center;
+        border: 0;
+        border-radius: 13px;
+        background: var(--fp3d-chrome);
+        color: var(--fp3d-text);
+        box-shadow: var(--fp3d-shadow);
+        cursor: pointer;
+      }
+      .fp3d-find {
+        position: absolute;
+        left: 12px;
+        bottom: 10px;
+        width: min(340px, calc(100% - 24px));
+        display: flex;
+        flex-direction: column-reverse;
+        gap: 6px;
+        z-index: 3;
+      }
+      .fp3d-find input {
+        box-sizing: border-box;
+        width: 100%;
+        height: 42px;
+        padding: 0 42px 0 14px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 14px;
+        background: var(--fp3d-chrome);
+        color: var(--fp3d-text);
+        font: inherit;
+        font-size: 15px;
+        box-shadow: var(--fp3d-shadow);
+        backdrop-filter: blur(8px);
+      }
+      .fp3d-find-close {
+        position: absolute;
+        right: 6px;
+        bottom: 6px;
+        width: 30px;
+        height: 30px;
+        border: 0;
+        border-radius: 10px;
+        background: none;
+        color: var(--fp3d-muted);
+        cursor: pointer;
+      }
+      .fp3d-find-list {
+        display: grid;
+        padding: 6px;
+        border-radius: 14px;
+        background: var(--fp3d-chrome);
+        box-shadow: var(--fp3d-shadow);
+        backdrop-filter: blur(8px);
+      }
+      .fp3d-find-list button {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        border: 0;
+        border-radius: 10px;
+        background: none;
+        color: var(--fp3d-text);
+        text-align: left;
+        font: inherit;
+        cursor: pointer;
+      }
+      .fp3d-find-list button:hover,
+      .fp3d-find-list button:focus-visible {
+        background: rgba(127, 127, 127, 0.14);
+      }
+      .fp3d-find-list b {
+        display: block;
+        font-weight: 600;
+      }
+      .fp3d-find-list small,
+      .fp3d-find-list p {
+        color: var(--fp3d-muted);
+        font-size: 12px;
+        margin: 0;
+      }
+      .fp3d-find-list p {
+        padding: 8px 10px;
+      }
+      .fp3d-find-icon {
+        display: grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 10px;
+        background: rgba(127, 127, 127, 0.15);
+        flex: none;
+      }
+      .fp3d-find-icon svg {
+        width: 16px;
+        height: 16px;
+      }
+      .fp3d-swipe {
+        position: absolute;
+        transform: translate(-50%, calc(-100% - 28px));
+        display: grid;
+        grid-template-columns: auto auto;
+        align-items: center;
+        gap: 2px 12px;
+        padding: 8px 12px;
+        border-radius: 14px;
+        background: var(--fp3d-chrome);
+        box-shadow: var(--fp3d-shadow);
+        pointer-events: none;
+        white-space: nowrap;
+        z-index: 4;
+      }
+      .fp3d-swipe span {
+        font-size: 12px;
+        color: var(--fp3d-muted);
+      }
+      .fp3d-swipe b {
+        grid-row: 2;
+        font: 700 22px var(--fp3d-title-font);
+      }
+      .fp3d-swipe i {
+        grid-row: 1 / 3;
+        grid-column: 2;
+        position: relative;
+        width: 10px;
+        height: 44px;
+        border-radius: 5px;
+        background: rgba(127, 127, 127, 0.25);
+        overflow: hidden;
+      }
+      .fp3d-swipe em {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: var(--fp3d-warm);
+      }
+      .fp3d-menu-backdrop {
+        position: absolute;
+        inset: 0;
+        z-index: 5;
+      }
+      fp3d-quick-menu {
+        position: absolute;
+        z-index: 6;
+      }
+      .fp3d-dev-found {
+        animation: fp3d-found 0.6s ease-in-out 4;
+      }
+      @keyframes fp3d-found {
+        50% {
+          scale: 1.35;
+          filter: drop-shadow(0 0 12px var(--fp3d-accent));
+        }
+      }
+      .fp3d-legend {
+        position: absolute;
+        left: 12px;
+        bottom: 60px;
         display: grid;
         gap: 4px;
         min-width: 180px;

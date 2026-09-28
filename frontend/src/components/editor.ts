@@ -2492,6 +2492,7 @@ export class Fp3dEditor extends LitElement {
     const ceilingLights = this.floor?.placements.filter(
       (p) => kindOf(p.entity_id) === "light" && (p.mount ?? "ceiling") === "ceiling" && pointInPolygon([p.x, p.z], room.points),
     ).length;
+    const pinned = new Set(room.panel ?? []);
     const row = (id: string, extra = false) => {
       const placed = placedHere.has(id);
       return html`<div class="fp3d-row fp3d-dev-row ${extra ? "fp3d-dev-extra" : ""}">
@@ -2501,6 +2502,16 @@ export class Fp3dEditor extends LitElement {
           </svg>
           <span>${entityName(hass, id, areaName)}</span>
         </button>
+        ${admin && !placed
+          ? html`<button
+              class="fp3d-pin ${pinned.has(id) ? "fp3d-pin-on" : ""}"
+              aria-pressed=${pinned.has(id)}
+              title=${this.t(pinned.has(id) ? "panel_unpin" : "panel_pin")}
+              @click=${() => this.updateRoom({ panel: pinned.has(id) ? [...pinned].filter((x) => x !== id) : [...pinned, id] })}
+            >
+              ${pinned.has(id) ? "★" : "☆"}
+            </button>`
+          : nothing}
         ${admin
           ? placed
             ? html`<button class="fp3d-link" @click=${() => this.removeDevice(id)}>${this.t("devices_remove")}</button>`
@@ -2510,6 +2521,7 @@ export class Fp3dEditor extends LitElement {
     };
     return html`<section>
       <h3>${this.t("devices")}</h3>
+      <p class="fp3d-sub">${this.t("devices_panel_hint")}</p>
       ${!room.area_id
         ? html`<p class="fp3d-sub">${this.t("devices_none_area")}</p>`
         : !ids.length
@@ -3086,6 +3098,18 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-pack-error {
         color: var(--fp3d-danger);
+      }
+      .fp3d-pin {
+        border: 0;
+        background: none;
+        padding: 2px 6px;
+        font-size: 17px;
+        line-height: 1;
+        color: var(--fp3d-muted);
+        cursor: pointer;
+      }
+      .fp3d-pin-on {
+        color: var(--fp3d-warm);
       }
       .fp3d-back {
         margin-bottom: 12px;

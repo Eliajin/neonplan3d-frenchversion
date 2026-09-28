@@ -89,6 +89,11 @@ const shots = [
   { name: "view-packs", query: "", width: 1280, height: 800, editor: true, editorScript: PACK_SCRIPT, then3d: "Wohnzimmer" },
   { name: "editor-packs-plan", query: "", width: 1280, height: 800, editor: true, editorScript: PACK_SCRIPT },
   { name: "card-editor", query: "?card", width: 1400, height: 900 },
+  { name: "view-find", query: "", width: 1280, height: 800, viewScript: "v._find = 'licht';" },
+  { name: "view-find-go", query: "", width: 1280, height: 800, viewScript: "v._find = 'stehlampe'; setTimeout(() => v.renderRoot.querySelector('.fp3d-find-list button').click(), 300);" },
+  { name: "view-quickmenu", query: "", width: 1280, height: 800, click: "Wohnzimmer", viewScript: "v.onDeviceHold('light.wohnzimmer_decke', 520, 420);" },
+  { name: "view-quickmenu-cover", query: "", width: 1280, height: 800, viewScript: "v.onDeviceHold('cover.wohnzimmer', 700, 400);" },
+  { name: "view-swipe", query: "", width: 1280, height: 800, viewScript: "v.onDeviceSwipe('light.wohnzimmer_decke', 'start', 0, 600, 420); v.onDeviceSwipe('light.wohnzimmer_decke', 'move', -40, 600, 420);" },
   { name: "editor-package", query: "", width: 1280, height: 900, editor: true, editorScript: "const f = e._doc.floors[1]; e._floorId = f.id; e.applyPackage(f.rooms.find((r) => r.id === 'gast'), 'bedroom'); e.applyPackage(f.rooms.find((r) => r.id === 'kind'), 'kids');" },
   { name: "view-package", query: "", width: 1280, height: 800, editor: true, editorScript: "const f = e._doc.floors[1]; e.applyPackage(f.rooms.find((r) => r.id === 'gast'), 'bedroom');", then3d: "Obergeschoss" },
   { name: "view-furnish", query: "", width: 1280, height: 800, click: "Erdgeschoss", furnishDrag: { id: "m2", dx: -160, dy: 60 } },
@@ -149,6 +154,14 @@ for (const shot of shots.filter((s) => !only || only.includes(s.name))) {
       await page.reload({ waitUntil: "networkidle0" });
       await new Promise((r) => setTimeout(r, 1200));
     }
+  }
+  if (shot.viewScript) {
+    // runs with v = the 3D view of the panel (search, quick menu, swipe)
+    await page.evaluate((code) => {
+      const v = document.querySelector("floorplan-3d-panel").shadowRoot.querySelector("fp3d-view3d");
+      new Function("v", code)(v);
+    }, shot.viewScript);
+    await new Promise((r) => setTimeout(r, 1500));
   }
   if (shot.editorScript) {
     await page.evaluate((code) => {

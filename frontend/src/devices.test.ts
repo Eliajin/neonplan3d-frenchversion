@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { appColor, areaEntities, autoPlace, entityName, furnitureEntities, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, primaryEntities } from "./devices.ts";
+import { appColor, areaEntities, autoPlace, entityName, furnitureEntities, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, primaryEntities, roomPanelEntities } from "./devices.ts";
 import type { Floor, Opening, Room } from "./model.ts";
 import { centroid, newFloor, pointInPolygon } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -225,4 +225,19 @@ test("double doors and French windows: the second leaf follows a contact of its 
   assert.deepEqual(openingState(hass, e, "door"), { open: 0, open2: 1, tilt: 0, cover: null });
   // without a sensor the second leaf of a double door stays shut
   assert.equal(openingState(hass, { cover: null, contact: null, tilt: null }, "door").open2, 0);
+});
+
+test("the room panel shows what the plan shows in the room, plus picked entities", () => {
+  const hass = hassWith();
+  const floor: Floor = {
+    ...newFloor("f", "F", 0),
+    rooms: [{ ...room, area_id: "wohnen", panel: ["sensor.signal"] }],
+    placements: [{ entity_id: "cover.rollo", x: 1, z: 1, y: null, mount: null }],
+    furniture: [{ id: "l", type: "lamp_ceiling", x: 2, z: 2, rotation: 0, w: 0.4, d: 0.4, h: 0.1, variant: null, entity: "light.decke", power: null }],
+  };
+  const { shown, more } = roomPanelEntities(hass, floor, floor.rooms[0]);
+  assert.deepEqual(shown.sort(), ["cover.rollo", "light.decke", "sensor.signal"]);
+  // the rest of the area is offered, not shown
+  assert.ok(more.includes("sensor.temp"));
+  assert.ok(!more.includes("light.decke"));
 });

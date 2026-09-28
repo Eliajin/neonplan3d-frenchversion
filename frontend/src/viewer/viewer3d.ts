@@ -66,7 +66,12 @@ export interface ViewerOptions {
   /** Short tap on a device marker. */
   onDeviceTap?: (entityId: string) => void;
   /** Long press on a device marker. */
-  onDeviceHold?: (entityId: string) => void;
+  onDeviceHold?: (entityId: string, x: number, y: number) => void;
+  /**
+   * Vertical swipe on a device (dim a lamp, move a blind): "start" returns whether the device takes
+   * it; "move" reports the distance from the start (pixels, down positive).
+   */
+  onDeviceSwipe?: (entityId: string, phase: "start" | "move" | "end", dy: number, x: number, y: number) => boolean | void;
   /** Furnishing in 3D: an item was selected (null: none) or dragged to a new place. */
   onFurnitureSelect?: (furnitureId: string | null) => void;
   onFurnitureMove?: (furnitureId: string, x: number, z: number) => void;
@@ -342,6 +347,8 @@ export class FloorplanViewer {
   /** Roof over the top floor (house view only), its opacity and the camera distance of the house view. */
   private roof: { group: Group; floorId: string; solid: MeshBasicMaterial; lines: LineBasicMaterial } | null = null;
   private roofO = 0;
+  /** The device a running swipe acts on. */
+  private swipe: { entity: string; x: number; y: number } | null = null;
   /** Furnishing in 3D: items can be dragged; the selected one shows a wireframe box. */
   private furnish = false;
   private selectedFurniture: string | null = null;
@@ -683,6 +690,12 @@ export class FloorplanViewer {
       change: () => this.invalidate(),
       tap: (x, y) => this.onTap(x, y),
       hold: (x, y) => this.onHold(x, y),
+      swipeStart: (x, y, dx, dy) => this.swipeStart(x, y, dx, dy),
+      swipeMove: (dy) => this.swipe && this.options.onDeviceSwipe?.(this.swipe.entity, "move", dy, this.swipe.x, this.swipe.y),
+      swipeEnd: () => {
+        if (this.swipe) this.options.onDeviceSwipe?.(this.swipe.entity, "end", 0, this.swipe.x, this.swipe.y);
+        this.swipe = null;
+      },
       grab: (x, y) => this.grabFurniture(x, y),
       drag: (x, y) => this.dragFurniture(x, y),
       drop: () => this.dropFurniture(),
@@ -740,7 +753,9 @@ export class FloorplanViewer {
       clearTimeout(timer);
       timer = setTimeout(() => {
         held = true;
-        this.options.onDeviceHold?.(entityId);
+        const r = pin.getBoundingClientRect();
+        const h = this.host.getBoundingClientRect();
+        this.options.onDeviceHold?.(entityId, r.left + r.width / 2 - h.left, r.top + r.height / 2 - h.top);
       }, HOLD_MS);
     });
     const cancel = () => clearTimeout(timer);
@@ -757,7 +772,9 @@ export class FloorplanViewer {
       // keyboard: Enter acts like a tap; Shift+Enter or the context-menu key opens the details
       if ((e.key === "Enter" && e.shiftKey) || e.key === "ContextMenu") {
         e.preventDefault();
-        this.options.onDeviceHold?.(entityId);
+        const r = pin.getBoundingClientRect();
+        const h = this.host.getBoundingClientRect();
+        this.options.onDeviceHold?.(entityId, r.left + r.width / 2 - h.left, r.top + r.height / 2 - h.top);
       }
     });
     return pin;
@@ -1268,7 +1285,11 @@ export class FloorplanViewer {
     const now = performance.now();
     const flash = (id: string) => {
       const until = this.flashes.get(id);
-      return until && until > now ? Math.round(((until - now) / FLASH_MS) * 10) / 10 : 0;
+      if (!until || until <= now) return 0;
+      // a tap flashes once; a found device (search) pulses until the time is up
+      const left = until - now;
+      const k = left > FLASH_MS ? 0.5 + 0.5 * Math.sin(left / 140) : left / FLASH_MS;
+      return Math.round(k * 10) / 10;
     };
     const sig =
       this.wallMode +
@@ -1966,7 +1987,31 @@ export class FloorplanViewer {
 
   private onHold(x: number, y: number): void {
     const hit = this.pick(x, y);
-    if (hit && "entity" in hit) this.options.onDeviceHold?.(hit.entity);
+    if (hit && "entity" in hit) this.options.onDeviceHold?.(hit.entity, x, y);
+  }
+
+  /** A mostly vertical drag on a lamp or blind becomes a swipe (unless furnishing). */
+  private swipeStart(x: number, y: number, dx: number, dy: number): boolean {
+    if (this.furnish || Math.abs(dy) < Math.abs(dx) * 1.2) return false;
+    const hit = this.pick(x, y);
+    if (!hit || !("entity" in hit)) return false;
+    if (this.options.onDeviceSwipe?.(hit.entity, "start", 0, x, y) !== true) return false;
+    this.swipe = { entity: hit.entity, x, y };
+    return true;
+  }
+
+  /** Fly to a point of a floor (search) and let the device there flash. */
+  focus(floorId: string, x: number, z: number, y: number, entityId: string | null): void {
+    const fv = this.floors.find((f) => f.floor.id === floorId);
+    if (!fv) return;
+    this.controls.flyTo({ target: new Vector3(x, fv.floor.elevation + fv.ty + y, z), radius: 5.5, phi: 0.78 }, 900);
+    if (entityId) {
+      this.flashes.set(entityId, performance.now() + 2400);
+      const pin = this.host.querySelector<HTMLElement>(`.fp3d-dev[data-entity="${CSS.escape(entityId)}"]`);
+      pin?.classList.add("fp3d-dev-found");
+      setTimeout(() => pin?.classList.remove("fp3d-dev-found"), 2600);
+    }
+    this.invalidate();
   }
 
   private render(now: number): void {

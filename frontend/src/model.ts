@@ -9,6 +9,8 @@ export interface Room {
   area_id: string | null;
   points: Vec2[];
   floor_material: string;
+  /** Entities shown in the room's panel although they are not in the plan. */
+  panel?: string[];
 }
 
 export type OpeningType = "door" | "window" | "garage";
@@ -509,6 +511,7 @@ export function normalizeBuilding(b: Building): Building {
   b.settings = { ...DEFAULT_SETTINGS, ...b.settings, roof: { ...DEFAULT_ROOF, ...(b.settings?.roof ?? {}) } };
   for (const f of b.floors) {
     f.outdoor = f.outdoor ?? [];
+    f.rooms = f.rooms.map((r) => ({ ...r, panel: r.panel ?? [] }));
     f.ha_floor = f.ha_floor ?? null;
     f.placements = f.placements.map((p) => ({ ...p, mount: p.mount ?? null }));
     f.furniture = f.furniture.map((m) => ({ ...m, entity: m.entity ?? null, power: m.power ?? null }));

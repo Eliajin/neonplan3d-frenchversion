@@ -2,11 +2,11 @@
 // scenes and scripts). Shown next to the 3D view when a room is selected.
 
 import { css, html, LitElement, nothing, type TemplateResult } from "lit";
-import { areaEntities, entityName, groupByDevice, isUnavailable, kindOf, type DeviceKind } from "../devices.ts";
+import { areaEntities, entityName, groupByDevice, isUnavailable, kindOf, roomPanelEntities, type DeviceKind } from "../devices.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { iconPath } from "../icons.ts";
 import { openMoreInfo, stateText } from "../markers.ts";
-import type { Room } from "../model.ts";
+import type { Floor, Room } from "../model.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
 
@@ -43,13 +43,16 @@ export class Fp3dRoomPanel extends LitElement {
   static properties = {
     hass: { attribute: false },
     room: { attribute: false },
+    floor: { attribute: false },
     _showAll: { state: true },
     _tick: { state: true },
   };
 
   declare hass: HomeAssistant;
   declare room: Room | null;
-  /** Show every entity of the area, not only each device's main entity. */
+  /** Floor of the room: the panel shows what the plan shows in the room. */
+  declare floor: Floor | null;
+  /** Show the other devices of the area as well (their main entities). */
   private declare _showAll: boolean;
   /** Bumped every few seconds while the panel is open, so camera snapshots refresh. */
   private declare _tick: number;
@@ -59,6 +62,7 @@ export class Fp3dRoomPanel extends LitElement {
   constructor() {
     super();
     this.room = null;
+    this.floor = null;
     this._showAll = false;
     this._tick = 0;
   }
@@ -111,10 +115,13 @@ export class Fp3dRoomPanel extends LitElement {
     const room = this.room;
     if (!room || !this.hass) return nothing;
     const all = areaEntities(this.hass, room.area_id);
-    // devices with many entities (LED indicators, effects, …) show their main entity first
-    const groups = groupByDevice(this.hass, all);
-    const hiddenCount = groups.reduce((n, g) => n + g.others.length, 0);
-    const ids = this._showAll ? all : groups.map((g) => g.primary);
+    // what the plan shows in the room; the rest of the area on request (each device's main entity)
+    const { shown, more } = this.floor ? roomPanelEntities(this.hass, this.floor, room) : { shown: all, more: [] };
+    const extra = groupByDevice(this.hass, more).map((g) => g.primary);
+    const hiddenCount = extra.length;
+    const ids = this._showAll ? [...shown, ...extra] : shown;
+    // header facts (temperature, humidity) come from the whole area
+    const areaSensors = all.filter((id) => kindOf(id) === "sensor").map((id) => this.hass.states[id]);
     const by = (kinds: DeviceKind[]) => ids.filter((id) => kinds.includes(kindOf(id)!)).map((id) => this.hass.states[id]);
     const lights = by(["light"]);
     const covers = by(["cover"]);
@@ -125,7 +132,7 @@ export class Fp3dRoomPanel extends LitElement {
     const cameras = by(["camera"]);
     this.hasCameras = cameras.length > 0;
     const scenes = by(["scene", "script"]);
-    const facts = this.facts(sensors, climates);
+    const facts = this.facts([...sensors, ...areaSensors], climates);
     const lightsOn = lights.filter((l) => l.state === "on");
     return html`<section class="fp3d-rp" aria-label=${room.name}>
       <header class="fp3d-rp-head">

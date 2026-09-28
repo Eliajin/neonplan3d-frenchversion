@@ -28,6 +28,8 @@ ROOM_SCHEMA = vol.Schema(
         vol.Required("area_id"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Required("points"): vol.All([_POINT], vol.Length(min=3, max=MAX_POINTS)),
         vol.Required("floor_material"): vol.All(str, vol.Length(max=32)),
+        # entities shown in the room's panel although they are not in the plan
+        vol.Optional("panel", default=list): vol.All([vol.All(str, vol.Length(max=255))], vol.Length(max=100)),
     },
     extra=vol.ALLOW_EXTRA,
 )
