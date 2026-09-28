@@ -64,7 +64,7 @@ export interface ViewerOptions {
   onFloorTap?: (floorId: string) => void;
   onBack?: () => void;
   /** Short tap on a device marker. */
-  onDeviceTap?: (entityId: string) => void;
+  onDeviceTap?: (entityId: string, x: number, y: number) => void;
   /** Long press on a device marker. */
   onDeviceHold?: (entityId: string, x: number, y: number) => void;
   /**
@@ -770,7 +770,9 @@ export class FloorplanViewer {
     pin.addEventListener("click", (e) => {
       e.stopPropagation();
       if (held) return;
-      this.options.onDeviceTap?.(entityId);
+      const r = pin.getBoundingClientRect();
+      const h = this.host.getBoundingClientRect();
+      this.options.onDeviceTap?.(entityId, r.left + r.width / 2 - h.left, r.top + r.height / 2 - h.top);
     });
     pin.addEventListener("keydown", (e) => {
       // keyboard: Enter acts like a tap; Shift+Enter or the context-menu key opens the details
@@ -1769,7 +1771,7 @@ export class FloorplanViewer {
     if (hit && "entity" in hit) {
       this.flashes.set(hit.entity, performance.now() + FLASH_MS);
       this.invalidate();
-      this.options.onDeviceTap?.(hit.entity);
+      this.options.onDeviceTap?.(hit.entity, x, y);
       return;
     }
     this.options.onRoomTap?.(hit?.floorId ?? this.floorId ?? "", hit?.roomId ?? null);

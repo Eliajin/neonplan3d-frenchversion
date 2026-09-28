@@ -177,7 +177,7 @@ export class Fp3dView3d extends LitElement {
         floorInfo: (floor) =>
           floor.rooms.length === 1 ? translate(this.hass, "floor_rooms_one") : translate(this.hass, "floor_rooms", { n: floor.rooms.length }),
         onBack: () => this.fire("back", {}),
-        onDeviceTap: (id) => this.onDeviceTap(id),
+        onDeviceTap: (id, x, y) => this.onDeviceTap(id, x, y),
         onDeviceHold: (id, x, y) => this.onDeviceHold(id, x, y),
         onDeviceSwipe: (id, phase, dy, x, y) => this.onDeviceSwipe(id, phase, dy, x, y),
         onFurnitureSelect: (id) => this.fire("furniture-select", { id }),
@@ -590,8 +590,13 @@ export class Fp3dView3d extends LitElement {
       <fp3d-quick-menu style="left:${left}px;top:${top}px" .hass=${this.hass} .entity=${m.entity} @close=${() => (this._menu = null)}></fp3d-quick-menu>`;
   }
 
-  private onDeviceTap(entityId: string): void {
+  private onDeviceTap(entityId: string, x = 0, y = 0): void {
     const kind = kindOf(entityId);
+    // blinds have no single on/off: a tap opens their quick menu (up, positions, stop, down)
+    if (kind === "cover") {
+      this._menu = { entity: entityId, x, y };
+      return;
+    }
     if (kind && TOGGLE_KINDS.has(kind)) void toggleEntity(this.hass, entityId);
     else openMoreInfo(this, entityId);
   }
