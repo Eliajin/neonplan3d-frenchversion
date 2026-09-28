@@ -16,7 +16,7 @@
     <floorplan-3d-panel></floorplan-3d-panel>
     <script type="module">
       // Mock of the Home Assistant frontend object with invented demo data.
-      import { DEMO_BUILDING, DEMO_AREAS } from "./demo-data.js";
+      import { DEMO_AREAS, DEMO_BUILDING, DEMO_ENTITIES, DEMO_STATES } from "./demo-data.js";
 
       const params = new URLSearchParams(location.search);
       let building = params.has("empty") ? { version: 1, floors: [], settings: { wall_exterior: 0.24, wall_interior: 0.12, grid: 0.05 } } : DEMO_BUILDING;
@@ -28,7 +28,9 @@
         language: params.get("lang") || "de",
         user: { is_admin: !params.has("user"), name: "Demo" },
         areas: DEMO_AREAS,
-        states: {},
+        entities: DEMO_ENTITIES,
+        devices: {},
+        states: structuredClone(DEMO_STATES),
         connection: {
           async subscribeMessage(cb) {
             listeners.add(cb);
@@ -36,7 +38,42 @@
           },
         },
         async callService(domain, service, data) {
-          console.log("callService", domain, service, data);
+          // enough behaviour to see the effect of the room panel and of taps in 3D
+          const states = { ...current.states };
+          for (const id of [].concat(data?.entity_id ?? [])) {
+            const st = states[id];
+            if (!st) continue;
+            const next = { ...st, attributes: { ...st.attributes } };
+            const a = next.attributes;
+            const setOn = (on) => {
+              next.state = on ? "on" : "off";
+              if (domain === "light" && on && a.brightness === undefined) a.brightness = 200;
+              if (domain === "light" && !on) delete a.brightness;
+            };
+            if (service === "toggle") setOn(st.state !== "on");
+            else if (service === "turn_off") setOn(false);
+            else if (service === "turn_on" && domain === "light") {
+              setOn(true);
+              if (data.brightness_pct !== undefined) a.brightness = Math.round((data.brightness_pct / 100) * 255);
+              if (data.color_temp_kelvin !== undefined) Object.assign(a, { color_temp_kelvin: data.color_temp_kelvin, color_mode: "color_temp" });
+              if (data.rgb_color) Object.assign(a, { rgb_color: data.rgb_color, color_mode: "hs" });
+            } else if (service === "open_cover") {
+              next.state = "open";
+              a.current_position = 100;
+            } else if (service === "close_cover") {
+              next.state = "closed";
+              a.current_position = 0;
+            } else if (service === "set_cover_position") {
+              a.current_position = data.position;
+              next.state = data.position > 0 ? "open" : "closed";
+            } else if (service === "set_temperature") a.temperature = data.temperature;
+            else if (service === "set_hvac_mode") next.state = data.hvac_mode;
+            else if (service === "media_play_pause") next.state = st.state === "playing" ? "paused" : "playing";
+            else if (service === "volume_set") a.volume_level = data.volume_level;
+            states[id] = next;
+          }
+          current = { ...current, states };
+          panel.hass = current;
         },
         async callWS(msg) {
           switch (msg.type) {
@@ -59,9 +96,11 @@
         },
       };
 
+      let current = hass;
       await import("../custom_components/floorplan_3d/frontend/floorplan-3d.js");
       const panel = document.querySelector("floorplan-3d-panel");
       panel.hass = hass;
+      window.addEventListener("hass-more-info", (e) => console.log("more-info", e.detail.entityId));
       panel.narrow = window.innerWidth < 870;
       window.fp3dPanel = panel;
     </script>

@@ -1,0 +1,96 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { areaEntities, autoPlace, entityName, isActive, kindOf, lightGlow } from "./devices.ts";
+import type { Room } from "./model.ts";
+import { centroid, pointInPolygon } from "./model.ts";
+import type { HomeAssistant } from "./types.ts";
+
+function hassWith(): HomeAssistant {
+  const st = (entity_id: string, state: string, attributes: Record<string, unknown> = {}) => ({ entity_id, state, attributes });
+  return {
+    language: "de",
+    connection: {} as HomeAssistant["connection"],
+    callWS: async () => undefined as never,
+    callService: async () => undefined,
+    areas: { wohnen: { area_id: "wohnen", name: "Wohnzimmer" } },
+    devices: { d1: { id: "d1", area_id: "wohnen" } },
+    entities: {
+      "light.decke": { entity_id: "light.decke", area_id: "wohnen" },
+      "light.stehlampe": { entity_id: "light.stehlampe", device_id: "d1" },
+      "switch.versteckt": { entity_id: "switch.versteckt", area_id: "wohnen", hidden: true },
+      "switch.firmware": { entity_id: "switch.firmware", area_id: "wohnen", entity_category: "config" },
+      "sensor.temp": { entity_id: "sensor.temp", area_id: "wohnen" },
+      "sensor.signal": { entity_id: "sensor.signal", area_id: "wohnen" },
+      "cover.rollo": { entity_id: "cover.rollo", area_id: "wohnen" },
+      "light.kueche": { entity_id: "light.kueche", area_id: "kueche" },
+      "update.x": { entity_id: "update.x", area_id: "wohnen" },
+    },
+    states: {
+      "light.decke": st("light.decke", "on", { friendly_name: "Wohnzimmer Decke", brightness: 128, color_mode: "color_temp", color_temp_kelvin: 2700 }),
+      "light.stehlampe": st("light.stehlampe", "off", { friendly_name: "Stehlampe" }),
+      "switch.versteckt": st("switch.versteckt", "on"),
+      "switch.firmware": st("switch.firmware", "on"),
+      "sensor.temp": st("sensor.temp", "21.5", { device_class: "temperature", friendly_name: "Temperatur" }),
+      "sensor.signal": st("sensor.signal", "-60", { device_class: "signal_strength" }),
+      "cover.rollo": st("cover.rollo", "open", { friendly_name: "Rollladen" }),
+      "light.kueche": st("light.kueche", "on"),
+      "update.x": st("update.x", "off"),
+    },
+  };
+}
+
+test("area entities include device areas and skip hidden, config and unsupported entities", () => {
+  const ids = areaEntities(hassWith(), "wohnen");
+  assert.deepEqual(ids, ["light.decke", "light.stehlampe", "cover.rollo", "sensor.temp"]);
+  assert.deepEqual(areaEntities(hassWith(), null), []);
+});
+
+test("entity names drop the area prefix", () => {
+  const hass = hassWith();
+  assert.equal(entityName(hass, "light.decke", "Wohnzimmer"), "Decke");
+  assert.equal(entityName(hass, "light.stehlampe", "Wohnzimmer"), "Stehlampe");
+});
+
+test("kinds, active states and light glow", () => {
+  const hass = hassWith();
+  assert.equal(kindOf("media_player.tv"), "media");
+  assert.equal(kindOf("input_boolean.gast"), "switch");
+  assert.equal(kindOf("automation.x"), null);
+  assert.ok(isActive(hass.states["light.decke"]));
+  assert.ok(isActive(hass.states["cover.rollo"]));
+  assert.ok(!isActive(hass.states["light.stehlampe"]));
+  const glow = lightGlow(hass.states["light.decke"])!;
+  assert.ok(Math.abs(glow.level - 128 / 255) < 1e-9);
+  assert.ok(glow.color[0] > glow.color[2], "2700 K is warm");
+  assert.equal(lightGlow(hass.states["light.stehlampe"]), null);
+});
+
+const room: Room = { id: "r", name: "R", area_id: null, points: [[0, 0], [5, 0], [5, 4], [0, 4]], floor_material: "wood" };
+
+test("automatic placement keeps devices inside the room, apart, and off the room label", () => {
+  const ids = ["light.a", "light.b", "switch.c", "sensor.d", "cover.e"];
+  const out = autoPlace(room, ids);
+  assert.equal(out.length, ids.length);
+  const label = centroid(room.points);
+  for (const p of out) {
+    assert.ok(pointInPolygon([p.x, p.z], room.points));
+    assert.ok(Math.hypot(p.x - label[0], p.z - label[1]) >= 0.69, "room label stays free");
+  }
+  for (let i = 0; i < out.length; i++) {
+    for (let j = i + 1; j < out.length; j++) assert.ok(Math.hypot(out[i].x - out[j].x, out[i].z - out[j].z) > 0.8);
+  }
+  assert.deepEqual(autoPlace(room, ids), out, "deterministic");
+});
+
+test("automatic placement avoids markers that are already there", () => {
+  const [first] = autoPlace(room, ["switch.a"]);
+  const [second] = autoPlace(room, ["switch.b"], [[first.x, first.z]]);
+  assert.ok(Math.hypot(first.x - second.x, first.z - second.z) > 1);
+});
+
+test("automatic placement works in a tiny room", () => {
+  const tiny: Room = { ...room, points: [[0, 0], [0.8, 0], [0.8, 0.8], [0, 0.8]] };
+  const out = autoPlace(tiny, ["light.a", "switch.b"]);
+  assert.equal(out.length, 2);
+  for (const p of out) assert.ok(pointInPolygon([p.x, p.z], tiny.points));
+});

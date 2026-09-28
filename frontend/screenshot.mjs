@@ -40,8 +40,11 @@ const shots = [
   { name: "view-floor-eg", query: "?fp3d_stats", width: 1280, height: 800, click: "Erdgeschoss" },
   { name: "view-room", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Küche" },
   { name: "view-cut", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Schnitt" },
+  { name: "view-room-panel", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Wohnzimmer" },
+  { name: "tablet-room", query: "", width: 800, height: 1280, click: "Erdgeschoss", then: "Wohnzimmer" },
   { name: "editor", query: "", width: 1280, height: 800, editor: true },
-  { name: "editor-room", query: "", width: 1280, height: 800, editor: true, select: "Flur" },
+  { name: "editor-room", query: "", width: 1280, height: 800, editor: true, select: "Wohnzimmer" },
+  { name: "editor-devices", query: "", width: 1280, height: 800, editor: true, select: "Küche", scrollSide: true },
   { name: "tablet", query: "", width: 800, height: 1280, click: "Obergeschoss" },
   { name: "empty", query: "?empty", width: 1280, height: 800 },
 ];
@@ -57,7 +60,8 @@ for (const shot of shots) {
   const clickText = async (text) => {
     await page.evaluate((t) => {
       const find = (root) => {
-        for (const el of root.querySelectorAll("button")) if (el.textContent.trim() === t) return el;
+        // exact text, or the first part of a row button ("Flur" in "Flur 12,8 m²")
+        for (const el of root.querySelectorAll("button")) if (el.textContent.trim() === t || el.firstElementChild?.textContent.trim() === t) return el;
         for (const el of root.querySelectorAll("*")) if (el.shadowRoot) {
           const hit = find(el.shadowRoot);
           if (hit) return hit;
@@ -72,6 +76,14 @@ for (const shot of shots) {
   if (shot.select) await clickText(shot.select);
   if (shot.click) await clickText(shot.click);
   if (shot.then) await clickText(shot.then);
+  if (shot.scrollSide) {
+    await page.evaluate(() => {
+      const editor = document.querySelector("floorplan-3d-panel").shadowRoot.querySelector("fp3d-editor");
+      const side = editor.shadowRoot.querySelector(".fp3d-side");
+      side.scrollTop = side.scrollHeight;
+    });
+    await new Promise((r) => setTimeout(r, 300));
+  }
   await page.screenshot({ path: join(outDir, `${shot.name}.png`) });
   await page.close();
   console.log(`saved ${shot.name}.png`);

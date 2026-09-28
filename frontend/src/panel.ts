@@ -3,6 +3,7 @@
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import { BuildingController } from "./building-controller.ts";
 import "./components/editor.ts";
+import "./components/room-panel.ts";
 import "./components/view3d.ts";
 import { translate, type I18nKey } from "./i18n.ts";
 import type { Building } from "./model.ts";
@@ -238,6 +239,14 @@ export class Floorplan3dPanel extends LitElement {
           }}
           @back=${() => this.back()}
         ></fp3d-view3d>
+        ${this._roomId
+          ? html`<fp3d-room-panel
+              class="fp3d-room-panel"
+              .hass=${this.hass}
+              .room=${b.floors.flatMap((f) => f.rooms).find((r) => r.id === this._roomId) ?? null}
+              @close=${() => (this._roomId = null)}
+            ></fp3d-room-panel>`
+          : nothing}
         <div class="fp3d-overlay">
           <div class="fp3d-seg">
             <button aria-pressed=${this._wallMode === "auto"} @click=${() => (this._wallMode = "auto")}>${this.t("walls_auto")}</button>
@@ -335,6 +344,29 @@ export class Floorplan3dPanel extends LitElement {
       }
       .fp3d-stage-wrap fp3d-view3d {
         flex: 1;
+      }
+      .fp3d-room-panel {
+        position: absolute;
+        top: 58px;
+        right: 14px;
+        bottom: 14px;
+        width: min(360px, calc(100% - 28px));
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        pointer-events: none;
+      }
+      /* phones and portrait tablets: panel as a sheet at the bottom */
+      @media (max-width: 700px), (orientation: portrait) and (max-width: 1000px) {
+        .fp3d-room-panel {
+          top: auto;
+          left: 8px;
+          right: 8px;
+          bottom: 8px;
+          width: auto;
+          height: 55%;
+          justify-content: flex-end;
+        }
       }
       .fp3d-overlay {
         position: absolute;

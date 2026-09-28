@@ -2,8 +2,10 @@
 
 import { css, html, LitElement, nothing, svg, type PropertyValues, type TemplateResult } from "lit";
 import { fetchImage, storeImage } from "../api.ts";
+import { areaEntities, autoPlace, entityName, isPlaceable, kindOf } from "../devices.ts";
 import { generateWalls, type Wall } from "../geometry/walls.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
+import { iconPath } from "../icons.ts";
 import {
   bounds,
   centroid,
@@ -26,6 +28,7 @@ type Tool = "select" | "rect" | "polygon";
 type Drag =
   | { kind: "pan"; last: [number, number] }
   | { kind: "vertex"; roomId: string; index: number; base: Building; moved: boolean }
+  | { kind: "device"; entityId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "room"; roomId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "rect"; start: Vec2; end: Vec2 }
   | { kind: "tap"; startScreen: [number, number]; last: [number, number]; panning: boolean };
@@ -329,7 +332,7 @@ export class Fp3dEditor extends LitElement {
     this.pointers.set(e.pointerId, local);
     if (this.pointers.size === 2) {
       // second finger: cancel the current gesture and pinch instead
-      if (this.drag && (this.drag.kind === "vertex" || this.drag.kind === "room") && this.drag.moved) this.restoreLive(this.drag.base);
+      if (this.drag && (this.drag.kind === "vertex" || this.drag.kind === "room" || this.drag.kind === "device") && this.drag.moved) this.restoreLive(this.drag.base);
       this.drag = null;
       this.pinch = this.pinchState();
       return;
@@ -348,6 +351,11 @@ export class Fp3dEditor extends LitElement {
     }
     if (this._tool === "polygon") {
       this.drag = { kind: "tap", startScreen: local, last: local, panning: false };
+      return;
+    }
+    const deviceEl = target.closest("[data-device]");
+    if (deviceEl && this.isAdmin) {
+      this.drag = { kind: "device", entityId: deviceEl.getAttribute("data-device")!, start: world, startScreen: local, base: this._doc, moved: false };
       return;
     }
     const vertexEl = target.closest("[data-vertex]");
@@ -437,14 +445,31 @@ export class Fp3dEditor extends LitElement {
         const room = drag.base.floors.find((f) => f.id === this._floorId)?.rooms.find((r) => r.id === drag.roomId);
         if (!room) return;
         const delta = this.roomDelta(room, [world[0] - drag.start[0], world[1] - drag.start[1]], e.altKey);
+        const baseFloor = drag.base.floors.find((f) => f.id === this._floorId)!;
+        // devices inside the room move with it
+        const inside = new Set(baseFloor.placements.filter((pl) => pointInPolygon([pl.x, pl.z], room.points)).map((pl) => pl.entity_id));
         this.change(
           (_, floor) => {
             const r = floor.rooms.find((x) => x.id === drag.roomId)!;
             r.points = room.points.map(([x, z]) => [round(x + delta[0]), round(z + delta[1])]);
+            floor.placements = baseFloor.placements.map((pl) =>
+              inside.has(pl.entity_id) ? { ...pl, x: round(pl.x + delta[0]), z: round(pl.z + delta[1]) } : pl,
+            );
           },
           drag.base,
           false,
         );
+        break;
+      }
+      case "device": {
+        if (!drag.moved && Math.hypot(local[0] - drag.startScreen[0], local[1] - drag.startScreen[1]) < 5) return;
+        drag.moved = true;
+        const pl = drag.base.floors.find((f) => f.id === this._floorId)?.placements.find((x) => x.entity_id === drag.entityId);
+        if (!pl) return;
+        const g = e.altKey ? 0.01 : this._doc.settings.grid;
+        const x = round(Math.round((pl.x + world[0] - drag.start[0]) / g) * g);
+        const z = round(Math.round((pl.z + world[1] - drag.start[1]) / g) * g);
+        this.change((_, floor) => Object.assign(floor.placements.find((q) => q.entity_id === drag.entityId)!, { x, z }), drag.base, false);
         break;
       }
     }
@@ -459,7 +484,7 @@ export class Fp3dEditor extends LitElement {
     const drag = this.drag;
     this.drag = null;
     if (!drag || e.type === "pointercancel") {
-      if (drag && (drag.kind === "vertex" || drag.kind === "room") && drag.moved) this.restoreLive(drag.base);
+      if (drag && (drag.kind === "vertex" || drag.kind === "room" || drag.kind === "device") && drag.moved) this.restoreLive(drag.base);
       return;
     }
     const local = this.localPoint(e);
@@ -477,6 +502,15 @@ export class Fp3dEditor extends LitElement {
       }
       case "tap":
         if (!drag.panning) this.addDraftPoint(this.snap(this.toWorld(...local), undefined, e.altKey), local);
+        break;
+      case "device":
+        if (drag.moved) this.pushHistory(drag.base);
+        else {
+          // a tap on a device selects the room it stands in
+          const pl = this.floor?.placements.find((x) => x.entity_id === drag.entityId);
+          const roomId = pl ? this.roomAt([pl.x, pl.z]) : null;
+          if (roomId) this._roomId = roomId;
+        }
         break;
       case "vertex":
       case "room":
@@ -652,8 +686,10 @@ export class Fp3dEditor extends LitElement {
     const id = this._roomId;
     if (!id || !this.isAdmin) return;
     this.change((_, floor) => {
+      const room = floor.rooms.find((r) => r.id === id);
       floor.rooms = floor.rooms.filter((r) => r.id !== id);
       floor.openings = floor.openings.filter((o) => o.room_id !== id);
+      if (room) floor.placements = floor.placements.filter((pl) => !pointInPolygon([pl.x, pl.z], room.points));
     });
     this._roomId = null;
     this._vertex = null;
@@ -665,6 +701,23 @@ export class Fp3dEditor extends LitElement {
     const id = uid("room");
     this.change((_, floor) => floor.rooms.push({ ...structuredClone(room), id, points: room.points.map(([x, z]) => [round(x + 0.5), round(z + 0.5)]) }));
     this._roomId = id;
+  }
+
+  /** Place entities in the selected room; an entity already placed elsewhere moves here. */
+  private placeDevices(entityIds: string[]): void {
+    const room = this.room;
+    if (!room || !entityIds.length || !this.isAdmin) return;
+    const ids = new Set(entityIds);
+    this.change((doc, floor) => {
+      for (const f of doc.floors) f.placements = f.placements.filter((pl) => !ids.has(pl.entity_id));
+      floor.placements.push(...autoPlace(room, entityIds, floor.placements.map((pl) => [pl.x, pl.z] as Vec2)));
+    });
+  }
+
+  private removeDevice(entityId: string): void {
+    this.change((doc) => {
+      for (const f of doc.floors) f.placements = f.placements.filter((pl) => pl.entity_id !== entityId);
+    });
   }
 
   private deleteVertex(index: number): void {
@@ -788,7 +841,8 @@ export class Fp3dEditor extends LitElement {
               @contextmenu=${(e: Event) => e.preventDefault()}
             >
               ${this.renderBackground(floor)} ${this.renderGrid()} ${this.renderGhost()} ${walls ? this.renderWalls(walls.walls) : nothing}
-              ${floor ? this.renderRooms(floor) : nothing} ${this.renderDraft()} ${this.renderGuides()}
+              ${floor ? this.renderRooms(floor) : nothing} ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
+              ${this.renderDraft()} ${this.renderGuides()}
             </svg>
             <p class="fp3d-hint">${!floor ? this.t("hint_empty") : this.t(`hint_${this._tool}` as I18nKey)}</p>
           </div>
@@ -862,6 +916,20 @@ export class Fp3dEditor extends LitElement {
       })}</g>
       ${selected && this.isAdmin ? this.renderHandles(selected) : nothing}
     `;
+  }
+
+  private renderDevices(floor: Floor) {
+    return svg`<g>${floor.placements.map((pl) => {
+      const kind = kindOf(pl.entity_id);
+      if (!kind) return nothing;
+      const [x, y] = this.toScreen([pl.x, pl.z]);
+      const on = this.hass?.states[pl.entity_id]?.state === "on";
+      return svg`<g data-device=${pl.entity_id} class=${on ? "fp3d-device fp3d-device-on" : "fp3d-device"} transform="translate(${x} ${y})">
+        <title>${entityName(this.hass, pl.entity_id)}</title>
+        <circle r="18" class="fp3d-hit" /><circle r="12" />
+        <path d=${iconPath(kind)} transform="translate(-7.2 -7.2) scale(0.6)" />
+      </g>`;
+    })}</g>`;
   }
 
   private renderHandles(room: Room) {
@@ -994,7 +1062,7 @@ export class Fp3dEditor extends LitElement {
             </div>`
           : nothing}
       </section>
-      ${room ? this.renderRoomForm(room, areas) : floor ? this.renderRoomList(floor) : nothing}
+      ${room ? html`${this.renderRoomForm(room, areas)} ${this.renderDeviceList(room)}` : floor ? this.renderRoomList(floor) : nothing}
       ${floor && admin ? this.renderBackgroundForm(floor) : nothing} ${admin ? this.renderSettings() : nothing}
     `;
   }
@@ -1063,6 +1131,43 @@ export class Fp3dEditor extends LitElement {
             <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteRoom()}>${this.t("delete")}</button>
           </div>`
         : nothing}
+    </section>`;
+  }
+
+  private renderDeviceList(room: Room) {
+    const admin = this.isAdmin;
+    const areaName = room.area_id ? this.hass?.areas?.[room.area_id]?.name : undefined;
+    const ids = this.hass ? areaEntities(this.hass, room.area_id).filter((id) => isPlaceable(kindOf(id))) : [];
+    const placedHere = new Set(this.floor?.placements.filter((pl) => pointInPolygon([pl.x, pl.z], room.points)).map((pl) => pl.entity_id));
+    const unplaced = ids.filter((id) => !placedHere.has(id));
+    return html`<section>
+      <h3>${this.t("devices")}</h3>
+      ${!room.area_id
+        ? html`<p class="fp3d-sub">${this.t("devices_none_area")}</p>`
+        : !ids.length
+          ? html`<p class="fp3d-sub">${this.t("devices_none")}</p>`
+          : html`${admin && unplaced.length
+                ? html`<button class="fp3d-btn fp3d-primary fp3d-wide-btn" @click=${() => this.placeDevices(unplaced)}>${this.t("devices_place_all")}</button>`
+                : nothing}
+              <div class="fp3d-room-list">
+                ${ids.map((id) => {
+                  const placed = placedHere.has(id);
+                  return html`<div class="fp3d-row fp3d-dev-row">
+                    <span class="fp3d-dev-name ${placed ? "" : "fp3d-muted"}">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d=${iconPath(kindOf(id)!)} />
+                      </svg>
+                      ${entityName(this.hass, id, areaName)}
+                    </span>
+                    ${admin
+                      ? placed
+                        ? html`<button class="fp3d-link" @click=${() => this.removeDevice(id)}>${this.t("devices_remove")}</button>`
+                        : html`<button class="fp3d-link" @click=${() => this.placeDevices([id])}>${this.t("devices_place")}</button>`
+                      : nothing}
+                  </div>`;
+                })}
+              </div>
+              <p class="fp3d-sub">${this.t("devices_hint")}</p>`}
     </section>`;
   }
 
@@ -1355,6 +1460,60 @@ export class Fp3dEditor extends LitElement {
       .fp3d-row:hover {
         color: var(--fp3d-accent);
       }
+      .fp3d-dev-row {
+        align-items: center;
+        cursor: default;
+      }
+      .fp3d-dev-row:hover {
+        color: var(--fp3d-text);
+      }
+      .fp3d-dev-name {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+      .fp3d-dev-name svg {
+        flex: none;
+      }
+      .fp3d-link {
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--fp3d-accent);
+        background: none;
+        border: none;
+        padding: 4px 2px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .fp3d-wide-btn {
+        width: 100%;
+        margin-bottom: 6px;
+      }
+      .fp3d-device {
+        cursor: grab;
+      }
+      .fp3d-device circle:not(.fp3d-hit) {
+        fill: #111a2e;
+        stroke: var(--fp3d-soft);
+        stroke-width: 1.5;
+        vector-effect: non-scaling-stroke;
+      }
+      .fp3d-device path {
+        fill: none;
+        stroke: var(--fp3d-text);
+        stroke-width: 2.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .fp3d-device-on circle:not(.fp3d-hit) {
+        fill: var(--fp3d-warm);
+        stroke: var(--fp3d-warm);
+      }
+      .fp3d-device-on path {
+        stroke: #2a1a00;
+      }
       .fp3d-muted {
         color: var(--fp3d-muted);
         font-variant-numeric: tabular-nums;
@@ -1386,6 +1545,11 @@ export class Fp3dEditor extends LitElement {
         inset: 0;
         opacity: 0;
         cursor: pointer;
+      }
+      .fp3d-sub {
+        margin: 8px 0 0;
+        font-size: 12.5px;
+        color: var(--fp3d-muted);
       }
       .fp3d-note {
         margin: 0;

@@ -6,6 +6,30 @@ export interface HassArea {
   floor_id?: string | null;
 }
 
+/** Entry of the entity registry as the frontend sees it (hass.entities). */
+export interface HassEntityEntry {
+  entity_id: string;
+  name?: string | null;
+  device_id?: string | null;
+  area_id?: string | null;
+  hidden?: boolean;
+  entity_category?: "config" | "diagnostic" | null;
+}
+
+export interface HassDevice {
+  id: string;
+  area_id?: string | null;
+  name?: string | null;
+  name_by_user?: string | null;
+}
+
+export interface HassEntity {
+  entity_id: string;
+  state: string;
+  attributes: Record<string, unknown>;
+  last_changed?: string;
+}
+
 export interface HassConnection {
   subscribeMessage<T>(callback: (msg: T) => void, msg: Record<string, unknown>): Promise<() => Promise<void>>;
 }
@@ -14,7 +38,9 @@ export interface HomeAssistant {
   language: string;
   user?: { is_admin: boolean; name: string };
   areas?: Record<string, HassArea>;
-  states: Record<string, { entity_id: string; state: string; attributes: Record<string, unknown> }>;
+  entities?: Record<string, HassEntityEntry>;
+  devices?: Record<string, HassDevice>;
+  states: Record<string, HassEntity>;
   connection: HassConnection;
   callWS<T>(msg: Record<string, unknown>): Promise<T>;
   callService(domain: string, service: string, data?: Record<string, unknown>): Promise<unknown>;

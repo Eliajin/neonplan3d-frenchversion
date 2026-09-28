@@ -2,6 +2,7 @@
 
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import { BuildingController } from "./building-controller.ts";
+import "./components/room-panel.ts";
 import "./components/view3d.ts";
 import { translate } from "./i18n.ts";
 import { tokens } from "./styles.ts";
@@ -96,6 +97,14 @@ export class Floorplan3dCard extends LitElement {
               @back=${() => this.back()}
             ></fp3d-view3d>`
           : html`<p class="fp3d-card-msg">${this.data.error ?? (b ? translate(this.hass, "no_building") : translate(this.hass, "loading"))}</p>`}
+        ${this._roomId && b
+          ? html`<fp3d-room-panel
+              class="fp3d-card-panel"
+              .hass=${this.hass}
+              .room=${b.floors.flatMap((f) => f.rooms).find((r) => r.id === this._roomId) ?? null}
+              @close=${() => (this._roomId = null)}
+            ></fp3d-room-panel>`
+          : nothing}
         ${canGoBack ? html`<button class="fp3d-card-back" @click=${() => this.back()}>${translate(this.hass, "back")}</button>` : nothing}
       </div>
     </ha-card>`;
@@ -123,9 +132,19 @@ export class Floorplan3dCard extends LitElement {
         padding: 16px;
         text-align: center;
       }
+      .fp3d-card-panel {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        bottom: 10px;
+        width: min(340px, calc(100% - 20px));
+        display: flex;
+        flex-direction: column;
+        pointer-events: none;
+      }
       .fp3d-card-back {
         position: absolute;
-        right: 10px;
+        left: 10px;
         top: 10px;
         font: 500 13px var(--fp3d-font);
         color: var(--fp3d-text);

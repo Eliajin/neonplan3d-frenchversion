@@ -23,6 +23,8 @@ import {
   RepeatWrapping,
   Scene,
   SRGBColorSpace,
+  Float32BufferAttribute,
+  BufferGeometry as Geometry,
   Vector2,
   Vector3,
   WebGLRenderer,
@@ -44,9 +46,34 @@ export interface ViewerOptions {
   onRoomTap?: (floorId: string, roomId: string | null) => void;
   onFloorTap?: (floorId: string) => void;
   onBack?: () => void;
+  /** Short tap on a device marker. */
+  onDeviceTap?: (entityId: string) => void;
+  /** Long press on a device marker. */
+  onDeviceHold?: (entityId: string) => void;
   onStats?: (stats: ViewerStats) => void;
   /** Text for the floor labels in the house view, e.g. "5 rooms". */
   floorInfo?: (floor: Floor) => string;
+}
+
+/** A device shown in the 3D view (prepared by the main bundle from placements and states). */
+export interface DeviceMarker {
+  /** entity_id */
+  id: string;
+  floorId: string;
+  roomId: string | null;
+  x: number;
+  z: number;
+  /** Height above the floor. */
+  y: number;
+  /** Inline SVG markup of the icon. */
+  icon: string;
+  name: string;
+  /** Short state text, e.g. "60 %" or "21,5 °C". */
+  text: string;
+  active: boolean;
+  unavailable: boolean;
+  /** Light cone on the floor for lights that are on. */
+  glow: { color: [number, number, number]; level: number } | null;
 }
 
 export interface ViewerStats {
@@ -63,6 +90,8 @@ const BELOW_OPACITY = 0.22;
 const FLOOR_TAU = 140;
 /** Grid cells across the ground texture. */
 const GROUND_CELLS = 32;
+/** Press duration that counts as a long press (ms). */
+const HOLD_MS = 500;
 
 interface FloorMaterials {
   floor: MeshBasicMaterial;
@@ -71,6 +100,7 @@ interface FloorMaterials {
   shadow: MeshBasicMaterial;
   edge: LineBasicMaterial;
   soft: LineBasicMaterial;
+  glow: MeshBasicMaterial;
 }
 
 interface FloorView {
@@ -81,6 +111,7 @@ interface FloorView {
   geo: FloorGeometry;
   floorMesh: Mesh;
   shadowMesh: Mesh;
+  glowMesh: Mesh;
   materials: FloorMaterials;
   /** Current and target height offset and opacity. */
   y: number;
@@ -110,6 +141,9 @@ export class FloorplanViewer {
   private readonly root = new Group();
   private readonly gridTexture: CanvasTexture;
   private readonly groundTexture: CanvasTexture;
+  private readonly glowTexture: CanvasTexture;
+  private devices: DeviceMarker[] = [];
+  private readonly devicePins = new Map<string, HTMLButtonElement>();
   private readonly ground: Mesh;
   private floors: FloorView[] = [];
   private building: Building | null = null;
@@ -134,6 +168,7 @@ export class FloorplanViewer {
     host.append(this.labels);
     this.gridTexture = makeGridTexture();
     this.groundTexture = makeGroundTexture();
+    this.glowTexture = makeGlowTexture();
     this.ground = new Mesh(
       new PlaneGeometry(1, 1),
       new MeshBasicMaterial({ map: this.groundTexture, transparent: true, blending: AdditiveBlending, depthWrite: false }),
@@ -209,6 +244,41 @@ export class FloorplanViewer {
     this.invalidate();
   }
 
+  /** Replace the device markers; pins are reused per entity, light cones rebuilt per floor. */
+  setDevices(devices: DeviceMarker[]): void {
+    this.devices = devices;
+    const seen = new Set<string>();
+    for (const d of devices) {
+      seen.add(d.id);
+      let pin = this.devicePins.get(d.id);
+      if (!pin) {
+        pin = this.makeDevicePin(d.id);
+        this.devicePins.set(d.id, pin);
+        this.labels.append(pin);
+      }
+      if (pin.dataset.icon !== d.icon) {
+        pin.dataset.icon = d.icon;
+        pin.querySelector(".fp3d-dev-icon")!.innerHTML = d.icon;
+      }
+      pin.querySelector(".fp3d-dev-text")!.textContent = d.text;
+      pin.title = d.name;
+      pin.setAttribute("aria-label", `${d.name}: ${d.text}`);
+      pin.classList.toggle("fp3d-dev-on", d.active);
+      pin.classList.toggle("fp3d-dev-na", d.unavailable);
+      if (d.glow) {
+        const [r, g, b] = d.glow.color.map((c) => Math.round(c * 255));
+        pin.style.setProperty("--fp3d-glow", `rgb(${r}, ${g}, ${b})`);
+      } else pin.style.removeProperty("--fp3d-glow");
+    }
+    for (const [id, pin] of this.devicePins) {
+      if (seen.has(id)) continue;
+      pin.remove();
+      this.devicePins.delete(id);
+    }
+    for (const fv of this.floors) this.buildGlow(fv);
+    this.invalidate();
+  }
+
   resetView(): void {
     this.fit(700);
   }
@@ -224,6 +294,7 @@ export class FloorplanViewer {
     (this.ground.material as Material).dispose();
     this.gridTexture.dispose();
     this.groundTexture.dispose();
+    this.glowTexture.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.labels.remove();
@@ -278,7 +349,83 @@ export class FloorplanViewer {
       this.root.remove(fv.group);
     }
     this.floors = [];
-    this.labels.replaceChildren();
+    // device pins survive a rebuild; only floor and room labels are recreated
+    for (const el of [...this.labels.children]) if (!(el as HTMLElement).dataset.entity) el.remove();
+  }
+
+  private makeDevicePin(entityId: string): HTMLButtonElement {
+    const pin = document.createElement("button");
+    pin.className = "fp3d-dev";
+    pin.dataset.entity = entityId;
+    const icon = document.createElement("span");
+    icon.className = "fp3d-dev-icon";
+    const text = document.createElement("span");
+    text.className = "fp3d-dev-text";
+    pin.append(icon, text);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let held = false;
+    pin.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      held = false;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        held = true;
+        this.options.onDeviceHold?.(entityId);
+      }, HOLD_MS);
+    });
+    const cancel = () => clearTimeout(timer);
+    pin.addEventListener("pointerleave", cancel);
+    pin.addEventListener("pointercancel", cancel);
+    pin.addEventListener("pointerup", cancel);
+    pin.addEventListener("contextmenu", (e) => e.preventDefault());
+    pin.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (held) return;
+      this.options.onDeviceTap?.(entityId);
+    });
+    pin.addEventListener("keydown", (e) => {
+      // keyboard: Enter acts like a tap; Shift+Enter or the context-menu key opens the details
+      if ((e.key === "Enter" && e.shiftKey) || e.key === "ContextMenu") {
+        e.preventDefault();
+        this.options.onDeviceHold?.(entityId);
+      }
+    });
+    return pin;
+  }
+
+  /** Light cones of the lights that are on, merged into one mesh per floor. */
+  private buildGlow(fv: FloorView): void {
+    const p: number[] = [];
+    const c: number[] = [];
+    const uv: number[] = [];
+    for (const d of this.devices) {
+      if (d.floorId !== fv.floor.id || !d.glow) continue;
+      const r = 0.9 + 1.7 * d.glow.level;
+      const k = 0.3 + 0.5 * d.glow.level;
+      // additive light on a blue floor washes out; a gamma > 1 keeps warm light warm
+      const [cr, cg, cb] = d.glow.color.map((v) => Math.min(1, Math.pow(v, 1.7) * k));
+      const y = 0.012;
+      const quad = [
+        [d.x - r, d.z - r, 0, 0],
+        [d.x + r, d.z - r, 1, 0],
+        [d.x + r, d.z + r, 1, 1],
+        [d.x - r, d.z + r, 0, 1],
+      ];
+      for (const i of [0, 2, 1, 0, 3, 2]) {
+        const [x, z, u, v] = quad[i];
+        p.push(x, y, z);
+        c.push(cr, cg, cb);
+        uv.push(u, v);
+      }
+    }
+    const g = new Geometry();
+    g.setAttribute("position", new Float32BufferAttribute(p, 3));
+    g.setAttribute("color", new Float32BufferAttribute(c, 3));
+    g.setAttribute("uv", new Float32BufferAttribute(uv, 2));
+    g.computeBoundingSphere();
+    fv.glowMesh.geometry.dispose();
+    fv.glowMesh.geometry = g;
+    fv.glowMesh.visible = p.length > 0;
   }
 
   private makeMaterials(): FloorMaterials {
@@ -306,6 +453,16 @@ export class FloorplanViewer {
       }),
       edge: new LineBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false }),
       soft: new LineBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false }),
+      glow: new MeshBasicMaterial({
+        map: this.glowTexture,
+        vertexColors: true,
+        transparent: true,
+        blending: AdditiveBlending,
+        depthWrite: false,
+        side: DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: -3,
+      }),
     };
   }
 
@@ -324,7 +481,10 @@ export class FloorplanViewer {
       shadowMesh.renderOrder = 1;
       const grid = new Mesh(geo.floor, materials.grid);
       grid.renderOrder = 2;
-      group.add(floorMesh, shadowMesh, grid, new Mesh(geo.lower, materials.wall), new LineSegments(geo.lowerLines, materials.soft));
+      const glowMesh = new Mesh(new Geometry(), materials.glow);
+      glowMesh.renderOrder = 3;
+      glowMesh.visible = false;
+      group.add(floorMesh, shadowMesh, grid, glowMesh, new Mesh(geo.lower, materials.wall), new LineSegments(geo.lowerLines, materials.soft));
       const buckets = geo.buckets.map((bk) => {
         const upper = new Mesh(bk.upper, materials.wall);
         const upperLines = new LineSegments(bk.upperLines, materials.edge);
@@ -353,6 +513,7 @@ export class FloorplanViewer {
         geo,
         floorMesh,
         shadowMesh,
+        glowMesh,
         materials,
         y: prev?.y ?? 0,
         o: prev?.o ?? 1,
@@ -373,6 +534,7 @@ export class FloorplanViewer {
       }
     }
     if (this.floorId && !b.floors.some((f) => f.id === this.floorId)) this.floorId = null;
+    for (const fv of this.floors) this.buildGlow(fv);
     this.applyTargets(previous.size === 0);
     this.applyHighlight();
   }
@@ -425,6 +587,7 @@ export class FloorplanViewer {
       mat.opacity = fv.o;
     }
     m.grid.opacity = fv.o;
+    m.glow.opacity = fv.o;
     m.edge.opacity = fv.o;
     m.soft.opacity = fv.o;
   }
@@ -606,11 +769,12 @@ export class FloorplanViewer {
       placed[i].y = Math.max(placed[i].y, above.y + (above.h + placed[i].h) / 2 + 8);
     }
     for (const p of placed) p.fv.label.style.transform = `translate(${p.left}px, ${p.y}px) translate(0, -50%)`;
+    this.updateDevicePins(w, h);
     for (const pin of this.labels.querySelectorAll<HTMLElement>(".fp3d-pin[data-room]")) {
       const fv = this.floors.find((f) => f.floor.id === pin.dataset.floor);
       const room = fv?.floor.rooms.find((r) => r.id === pin.dataset.room);
-      // in the house view, room labels would pile up between the floors
-      if (!fv || !room || fv.to < 0.99 || fv.o < 0.9 || house) {
+      // in the house view, room labels would pile up between the floors; in a room its panel names it
+      if (!fv || !room || fv.to < 0.99 || fv.o < 0.9 || house || this.roomId) {
         pin.hidden = true;
         continue;
       }
@@ -619,6 +783,29 @@ export class FloorplanViewer {
       const off = v.z > 1 || Math.abs(v.x) > 1.1 || Math.abs(v.y) > 1.1;
       pin.hidden = off;
       if (!off) pin.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -50%)`;
+    }
+  }
+
+  private updateDevicePins(w: number, h: number): void {
+    const v = new Vector3();
+    const house = this.houseView;
+    for (const d of this.devices) {
+      const pin = this.devicePins.get(d.id);
+      if (!pin) continue;
+      const fv = this.floors.find((f) => f.floor.id === d.floorId);
+      // device markers belong to the floor and room views; the house view only shows floor labels
+      if (!fv || house || fv.to < 0.99 || fv.o < 0.9) {
+        pin.hidden = true;
+        continue;
+      }
+      v.set(d.x, fv.floor.elevation + fv.y + d.y, d.z).project(this.camera);
+      const off = v.z > 1 || Math.abs(v.x) > 1.05 || Math.abs(v.y) > 1.05;
+      pin.hidden = off;
+      if (off) continue;
+      const inRoom = this.roomId !== null && d.roomId === this.roomId;
+      pin.classList.toggle("fp3d-dev-full", inRoom);
+      pin.classList.toggle("fp3d-dev-dim", this.roomId !== null && !inRoom);
+      pin.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -50%)`;
     }
   }
 
@@ -657,6 +844,25 @@ function makeGridTexture(): CanvasTexture {
   tex.wrapS = RepeatWrapping;
   tex.wrapT = RepeatWrapping;
   tex.anisotropy = 4;
+  tex.colorSpace = SRGBColorSpace;
+  return tex;
+}
+
+/** Soft round light cone: bright core, long falloff. */
+function makeGlowTexture(): CanvasTexture {
+  const size = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(0.3, "rgba(255,255,255,0.5)");
+  g.addColorStop(0.65, "rgba(255,255,255,0.14)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new CanvasTexture(canvas);
   tex.colorSpace = SRGBColorSpace;
   return tex;
 }

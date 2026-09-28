@@ -2,10 +2,12 @@
 
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import { translate } from "../i18n.ts";
+import { kindOf, TOGGLE_KINDS } from "../devices.ts";
 import { load3d } from "../load3d.ts";
+import { buildMarkers, openMoreInfo, placedEntities, toggleEntity } from "../markers.ts";
 import type { Building } from "../model.ts";
 import { tokens } from "../styles.ts";
-import type { HomeAssistant } from "../types.ts";
+import type { HassEntity, HomeAssistant } from "../types.ts";
 import type { FloorplanViewer, Quality, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
 
 export class Fp3dView3d extends LitElement {
@@ -35,6 +37,8 @@ export class Fp3dView3d extends LitElement {
 
   private viewer: FloorplanViewer | null = null;
   private starting = false;
+  /** States of the placed entities as last sent to the viewer. */
+  private shownStates = new Map<string, HassEntity | undefined>();
 
   constructor() {
     super();
@@ -79,10 +83,13 @@ export class Fp3dView3d extends LitElement {
         floorInfo: (floor) =>
           floor.rooms.length === 1 ? translate(this.hass, "floor_rooms_one") : translate(this.hass, "floor_rooms", { n: floor.rooms.length }),
         onBack: () => this.fire("back", {}),
+        onDeviceTap: (id) => this.onDeviceTap(id),
+        onDeviceHold: (id) => openMoreInfo(this, id),
         onStats: this.showStats ? (s) => (this._stats = s) : undefined,
       });
       this.viewer.setWallMode(this.wallMode);
       if (this.building) this.viewer.setBuilding(this.building);
+      this.syncDevices(true);
       this.viewer.setFloor(this.floorId, false);
       if (this.roomId) this.viewer.selectRoom(this.roomId);
     } catch (err) {
@@ -96,11 +103,29 @@ export class Fp3dView3d extends LitElement {
     const v = this.viewer;
     if (!v) return;
     if (changed.has("building") && this.building) v.setBuilding(this.building);
+    if (changed.has("building") || changed.has("hass")) this.syncDevices(changed.has("building"));
     if (changed.has("floorId")) v.setFloor(this.floorId);
     if (changed.has("roomId") && (this.roomId || changed.get("roomId"))) v.selectRoom(this.roomId);
     if (changed.has("wallMode")) v.setWallMode(this.wallMode);
     if (changed.has("explode")) v.setExplode(this.explode);
     if (changed.has("quality") && changed.get("quality") !== undefined) v.setQuality(this.quality);
+  }
+
+  /** Send device markers to the viewer when a placed entity's state (or the building) changed. */
+  private syncDevices(force: boolean): void {
+    const v = this.viewer;
+    if (!v || !this.building || !this.hass) return;
+    const ids = placedEntities(this.building);
+    const changed = force || ids.length !== this.shownStates.size || ids.some((id) => this.shownStates.get(id) !== this.hass.states[id]);
+    if (!changed) return;
+    this.shownStates = new Map(ids.map((id) => [id, this.hass.states[id]]));
+    v.setDevices(buildMarkers(this.hass, this.building));
+  }
+
+  private onDeviceTap(entityId: string): void {
+    const kind = kindOf(entityId);
+    if (kind && TOGGLE_KINDS.has(kind)) void toggleEntity(this.hass, entityId);
+    else openMoreInfo(this, entityId);
   }
 
   resetView(): void {
@@ -188,6 +213,67 @@ export class Fp3dView3d extends LitElement {
         font: 500 12px var(--fp3d-font);
         opacity: 0.78;
       }
+      .fp3d-dev {
+        position: absolute;
+        left: 0;
+        top: 0;
+        pointer-events: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px;
+        border-radius: 999px;
+        border: 1px solid var(--fp3d-line);
+        background: var(--fp3d-chrome);
+        color: var(--fp3d-muted);
+        font: 600 12px var(--fp3d-font);
+        cursor: pointer;
+        white-space: nowrap;
+        backdrop-filter: blur(6px);
+        touch-action: manipulation;
+        -webkit-user-select: none;
+        user-select: none;
+        transition: opacity 0.2s ease;
+      }
+      .fp3d-dev-icon {
+        display: grid;
+        place-items: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: rgba(91, 124, 255, 0.14);
+      }
+      .fp3d-dev-text {
+        display: none;
+        padding-right: 6px;
+        color: var(--fp3d-text);
+        font-variant-numeric: tabular-nums;
+        max-width: 160px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .fp3d-dev-full .fp3d-dev-text {
+        display: inline;
+      }
+      .fp3d-dev-on {
+        color: #2a1a00;
+        border-color: transparent;
+        background: var(--fp3d-glow, var(--fp3d-warm));
+        box-shadow: 0 0 16px var(--fp3d-glow, var(--fp3d-warm));
+      }
+      .fp3d-dev-on .fp3d-dev-icon {
+        background: rgba(255, 255, 255, 0.28);
+      }
+      .fp3d-dev-on .fp3d-dev-text {
+        color: #2a1a00;
+      }
+      .fp3d-dev-na {
+        opacity: 0.45;
+      }
+      .fp3d-dev-dim {
+        opacity: 0.35;
+      }
+      .fp3d-dev[hidden],
       .fp3d-pin[hidden] {
         display: none;
       }

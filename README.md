@@ -2,7 +2,7 @@
 
 Draw your home directly in Home Assistant and see it as a 3D model in a neon look. No external tools, no cloud.
 
-> **Status: early development (Phase 2 of 6).** The data model, automatic walls, the 2D editor and the neon 3D view with floors and camera flights work. Device control, doors and windows, furniture, energy flow and presence follow in later phases (see [docs/plan.md](docs/plan.md), in German).
+> **Status: early development (Phase 3 of 6).** The data model, automatic walls, the 2D editor, the neon 3D view with floors and camera flights, and device control work. Doors and windows (with blinds and window sensors in 3D), furniture, energy flow and presence follow in later phases (see [docs/plan.md](docs/plan.md), in German).
 
 ## Features (so far)
 
@@ -15,13 +15,17 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
   - Mouse and touch: pinch to zoom, pan with two fingers.
 - **Automatic walls**: each shared edge becomes an interior wall, outer edges become exterior walls. Corners and T-junctions are mitred. Wall thickness is configurable.
 - **Area link**: each room can be linked to a Home Assistant area.
+- **Devices**: the area's lights, switches, covers, thermostats, media players, sensors and cameras can be placed in the room automatically and moved by hand in the plan.
 - **Floor plan image as template**: an image of your floor plan can be placed under the drawing, with scale and opacity.
 - **3D view (neon look)**:
   - Walls in front of the camera fold down automatically; a "Cut" mode shows all walls low.
   - Fine glowing top edges, faint corner lines and wall shadows baked into the floor.
   - Three levels: the whole house (floors pulled apart or stacked, with a label per floor), one floor (floors above fly away, floors below stay dimmed) and one room.
   - Tap a floor label or a room to go in; double tap, Esc or *Back* goes one level up.
+  - Device markers with their state; lights that are on cast a glow on the floor that follows brightness and colour.
+  - Tap a light or switch to toggle it; a long press opens Home Assistant's details dialog.
   - Quality levels *Auto*, *Tablet* and *High* (remembered per device).
+- **Room panel** (next to the 3D view, at the bottom on phones and portrait tablets): lights with brightness, colour temperature and colours, covers, heating, media, switches, sensors, scenes and scripts of the room's area.
   - Only renders when something changes, so it uses no GPU while idle.
 - **Sidebar page and dashboard card**: `custom:floorplan-3d-card` is loaded automatically, no resource needed.
 
