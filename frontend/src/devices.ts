@@ -377,3 +377,94 @@ export function groupByDevice(hass: HomeAssistant, ids: readonly string[]): Devi
 export function primaryEntities(hass: HomeAssistant, ids: readonly string[]): string[] {
   return groupByDevice(hass, ids).map((g) => g.primary);
 }
+
+// ------------------------------------------------------------------ furniture links
+
+/** Name patterns of the entities that belong to electric furniture. */
+const FURNITURE_NAMES: Record<string, RegExp> = {
+  tv_board: /\b(tv|fernseh|television|fire ?tv|apple ?tv|chromecast|shield)/i,
+  tv_wall: /\b(tv|fernseh|television|fire ?tv|apple ?tv|chromecast|shield)/i,
+  desk: /\b(pc|computer|rechner|desktop|monitor|workstation)/i,
+  fridge: /(kühl|fridge|gefrier|freezer)/i,
+  stove: /(herd|kochfeld|cooktop|stove|induktion)/i,
+  kitchen_tall: /(backofen|oven|ofen)/i,
+  dishwasher: /(spülmaschine|geschirrspül|dishwasher)/i,
+  washer: /(waschmaschine|washer|washing)/i,
+  dryer: /(trockner|dryer)/i,
+  kitchen: /(kaffee|coffee|wasserkocher|kettle)/i,
+  island: /(kochfeld|herd|induktion|cooktop)/i,
+  sink: /(spülmaschine|geschirrspül|dishwasher)/i,
+};
+const MEDIA_FURNITURE = new Set(["tv_board", "tv_wall"]);
+
+export interface FurnitureLinks {
+  entity: string | null;
+  power: string | null;
+}
+
+function isPower(hass: HomeAssistant, id: string): boolean {
+  return id.startsWith("sensor.") && hass.states[id]?.attributes.device_class === "power";
+}
+
+/** Power sensor of an entity's device. */
+function devicePower(hass: HomeAssistant, id: string): string | null {
+  if (isPower(hass, id)) return id;
+  const device = hass.entities?.[id]?.device_id;
+  if (!device || !hass.entities) return null;
+  return Object.values(hass.entities).find((e) => e.device_id === device && e.entity_id !== id && isPower(hass, e.entity_id))?.entity_id ?? null;
+}
+
+/**
+ * Entities of electric furniture: set by hand, or (when null) found in the area of the room the item
+ * stands in: the TV's media player (a TV first), otherwise an entity whose name fits the item; the
+ * power sensor comes from the same device or a sensor whose name fits. Each entity is used once.
+ */
+export function furnitureEntities(hass: HomeAssistant, floors: readonly Floor[]): Map<string, FurnitureLinks> {
+  const out = new Map<string, FurnitureLinks>();
+  for (const floor of floors) {
+    const used = new Set<string>(floor.furniture.flatMap((f) => [f.entity, f.power]).filter((v): v is string => !!v && v !== "none"));
+    for (const f of floor.furniture) {
+      const pattern = FURNITURE_NAMES[f.type];
+      if (!pattern && f.entity == null && f.power == null) continue;
+      const room = floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon([f.x, f.z], r.points));
+      const ids = room ? primaryEntities(hass, areaEntities(hass, room.area_id)) : [];
+      const name = (id: string) => `${id} ${entityName(hass, id)}`;
+      let entity: string | null = f.entity === "none" ? null : (f.entity ?? null);
+      if (f.entity == null) {
+        const free = ids.filter((id) => !used.has(id));
+        if (MEDIA_FURNITURE.has(f.type)) {
+          const media = free.filter((id) => kindOf(id) === "media");
+          entity = media.find((id) => hass.states[id]?.attributes.device_class === "tv") ?? media.find((id) => pattern?.test(name(id))) ?? media[0] ?? null;
+        } else if (pattern) {
+          entity = free.find((id) => ["switch", "media", "fan"].includes(kindOf(id) ?? "") && pattern.test(name(id))) ?? null;
+        }
+        if (entity) used.add(entity);
+      }
+      let power: string | null = f.power === "none" ? null : (f.power ?? null);
+      if (f.power == null) {
+        power = entity ? devicePower(hass, entity) : null;
+        if (!power && pattern && room) {
+          const all = areaEntities(hass, room.area_id);
+          power = all.find((id) => isPower(hass, id) && !used.has(id) && pattern.test(name(id))) ?? null;
+        }
+        if (power) used.add(power);
+      }
+      if (entity || power) out.set(f.id, { entity, power });
+    }
+  }
+  return out;
+}
+
+/** Glow colour of a TV screen for the app that is running (brand colours of common apps). */
+export function appColor(st: HassEntity | undefined): [number, number, number] | null {
+  if (!st || st.state === "off" || st.state === "standby" || isUnavailable(st)) return null;
+  const a = st.attributes;
+  const text = `${a.app_name ?? ""} ${a.source ?? ""} ${a.app_id ?? ""}`.toLowerCase();
+  if (text.includes("netflix")) return [0.9, 0.04, 0.08];
+  if (text.includes("youtube")) return [1, 0.1, 0.15];
+  if (text.includes("prime") || text.includes("amazon")) return [0.1, 0.6, 0.95];
+  if (text.includes("disney")) return [0.2, 0.35, 1];
+  if (text.includes("spotify")) return [0.12, 0.85, 0.4];
+  if (text.includes("zdf") || text.includes("ard") || text.includes("mediathek")) return [1, 0.5, 0.1];
+  return [0.22, 0.88, 1];
+}

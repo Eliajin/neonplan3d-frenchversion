@@ -109,3 +109,23 @@ test("without a meter there are no cables", () => {
   const consumers = findConsumers(hass, b);
   assert.deepEqual(flowSegments({ building: b, consumers, summary: energySummary(hass, b, consumers) }), []);
 });
+
+test("new power values re-weigh the cached cable routes", () => {
+  const hass = hassForHouse();
+  const b = house();
+  const run = () => {
+    const consumers = findConsumers(hass, b);
+    return flowSegments({ building: b, consumers, summary: energySummary(hass, b, consumers) });
+  };
+  const crossing = (segs: ReturnType<typeof run>) => segs.find((s) => s.floorId === "eg" && s.kind === "consumer" && (s.a[0] - 4) * (s.b[0] - 4) < 0 && s.a[1] === s.b[1])!;
+  const first = run();
+  assert.equal(crossing(first).power, 95 + 85);
+  hass.states["sensor.tv_power"] = power("sensor.tv_power", "300");
+  const second = run();
+  assert.equal(crossing(second).power, 300 + 85);
+  // same routes: same pieces in the same order
+  assert.deepEqual(
+    second.map((s) => [s.a, s.b]),
+    first.map((s) => [s.a, s.b]),
+  );
+});

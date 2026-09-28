@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { areaEntities, autoPlace, entityName, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, primaryEntities } from "./devices.ts";
+import { appColor, areaEntities, autoPlace, entityName, furnitureEntities, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, primaryEntities } from "./devices.ts";
 import type { Floor, Opening, Room } from "./model.ts";
 import { centroid, newFloor, pointInPolygon } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -173,4 +173,29 @@ test("entities are grouped by device; the entity without a name of its own is th
   // entities without a device are their own group
   assert.ok(groups.some((g) => g.primary === "light.decke" && g.others.length === 0));
   assert.deepEqual(primaryEntities(hass, ids).length, groups.length);
+});
+
+test("furniture finds its entities in the room's area: the TV, and power sensors by device or name", () => {
+  const hass = hassWith();
+  const add = (id: string, state: string, attributes: Record<string, unknown>, device?: string) => {
+    hass.entities![id] = { entity_id: id, area_id: "wohnen", ...(device ? { device_id: device } : {}) };
+    hass.states[id] = { entity_id: id, state, attributes };
+  };
+  add("media_player.soundbar", "on", { friendly_name: "Soundbar" });
+  add("media_player.fernseher", "on", { friendly_name: "Fernseher", device_class: "tv", app_name: "Netflix" }, "d_tv");
+  add("sensor.tv_leistung", "95", { friendly_name: "TV Leistung", device_class: "power" }, "d_tv");
+  add("sensor.kuehlschrank_leistung", "80", { friendly_name: "Kühlschrank Leistung", device_class: "power" });
+  const item = (id: string, type: string, extra: Record<string, unknown> = {}) => ({ id, type, x: 2, z: 1.5, rotation: 0, w: 1, d: 0.5, h: 0.5, variant: null, entity: null, power: null, ...extra });
+  const floor: Floor = {
+    ...newFloor("f", "F", 0),
+    rooms: [{ ...room, area_id: "wohnen" }],
+    furniture: [item("tv", "tv_board"), item("fridge", "fridge"), item("sofa", "sofa"), item("desk", "desk", { power: "none" })],
+  };
+  const links = furnitureEntities(hass, [floor]);
+  assert.deepEqual(links.get("tv"), { entity: "media_player.fernseher", power: "sensor.tv_leistung" });
+  assert.deepEqual(links.get("fridge"), { entity: null, power: "sensor.kuehlschrank_leistung" });
+  assert.equal(links.get("sofa"), undefined);
+  assert.equal(links.get("desk"), undefined);
+  assert.deepEqual(appColor(hass.states["media_player.fernseher"]), [0.9, 0.04, 0.08]);
+  assert.equal(appColor({ entity_id: "media_player.x", state: "off", attributes: {} }), null);
 });

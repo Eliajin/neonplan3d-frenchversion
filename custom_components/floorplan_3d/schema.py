@@ -57,6 +57,9 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Required("d"): _LENGTH,
         vol.Required("h"): _LENGTH,
         vol.Required("variant"): vol.Any(None, vol.All(str, vol.Length(max=32))),
+        # linked entities (e.g. the TV's media player, a power sensor): None = automatic, "none" = no entity
+        vol.Optional("entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        vol.Optional("power", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
     }
 )
 

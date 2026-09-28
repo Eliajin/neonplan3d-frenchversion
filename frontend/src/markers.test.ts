@@ -53,3 +53,10 @@ test("markers find their room, default height and light glow; missing entities a
   assert.equal(sw.y, 0.4);
   assert.equal(sw.glow, null);
 });
+
+test("a TV shows the app that is running", () => {
+  const hass = hassWith([]);
+  assert.equal(stateText(hass, st("media_player.tv", "on", { app_name: "YouTube" })), "YouTube");
+  assert.equal(stateText(hass, st("media_player.tv", "playing", { media_title: "Nachrichten" })), "Nachrichten");
+  assert.equal(stateText(hass, st("media_player.tv", "off", { app_name: "YouTube" })), "Aus");
+});

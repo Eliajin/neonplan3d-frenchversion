@@ -1,16 +1,30 @@
 // Lit wrapper around the lazily loaded 3D viewer.
 
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
-import { areaEntities, kindOf, openingEntities, openingState, TOGGLE_KINDS, type OpeningEntities } from "../devices.ts";
-import { energySummary, findConsumers, flowColor, flowSegments, powerSensorFor, type EnergySummary } from "../energy.ts";
+import {
+  appColor,
+  areaEntities,
+  entityName,
+  furnitureEntities,
+  isActive,
+  isUnavailable,
+  kindOf,
+  openingEntities,
+  openingState,
+  TOGGLE_KINDS,
+  type FurnitureLinks,
+  type OpeningEntities,
+} from "../devices.ts";
+import { iconSvg } from "../icons.ts";
+import { energySummary, findConsumers, flowColor, flowSegments, powerSensorFor, readPower, type Consumer, type EnergySummary } from "../energy.ts";
 import { formatNumber, translate } from "../i18n.ts";
 import { load3d } from "../load3d.ts";
-import { buildMarkers, openMoreInfo, placedEntities, toggleEntity } from "../markers.ts";
-import type { Building } from "../model.ts";
+import { buildMarkers, openMoreInfo, placedEntities, stateText, toggleEntity } from "../markers.ts";
+import { pointInPolygon, type Building, type Furniture } from "../model.ts";
 import { floorCounts, floorInfoText, personsInRooms } from "../presence.ts";
 import { tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
-import type { FloorplanViewer, Quality, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
+import type { DeviceMarker, FloorplanViewer, Quality, ScreenState, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
 
 export class Fp3dView3d extends LitElement {
   static properties = {
@@ -46,6 +60,8 @@ export class Fp3dView3d extends LitElement {
   /** Entities of each door and window, and the registry they were matched with. */
   private openingLinks: Map<string, OpeningEntities> | null = null;
   private linkedRegistry: HomeAssistant["entities"] | undefined;
+  /** Entities of electric furniture (TV, fridge, …). */
+  private furnitureLinks = new Map<string, FurnitureLinks>();
   /** Entities whose state changes redraw markers, cables, people and floor labels. */
   private watched: string[] = [];
 
@@ -136,6 +152,7 @@ export class Fp3dView3d extends LitElement {
     const hass = this.hass;
     if (force || !this.openingLinks || this.linkedRegistry !== hass.entities) {
       this.openingLinks = openingEntities(hass, b.floors);
+      this.furnitureLinks = furnitureEntities(hass, b.floors);
       this.linkedRegistry = hass.entities;
       const links = [...this.openingLinks.values()].flatMap((e) => [e.cover, e.contact, e.tilt]);
       const placed = placedEntities(b);
@@ -143,7 +160,8 @@ export class Fp3dView3d extends LitElement {
       const e = b.energy;
       const presence = b.presence.flatMap((p) => [p.person, p.sensor]);
       const lights = b.floors.flatMap((f) => f.rooms.flatMap((r) => areaEntities(hass, r.area_id).filter((id) => kindOf(id) === "light")));
-      const all = [...placed, ...links, ...power, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights];
+      const furniture = [...this.furnitureLinks.values()].flatMap((l) => [l.entity, l.power]);
+      const all = [...placed, ...links, ...power, ...furniture, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights];
       this.watched = [...new Set(all.filter((id): id is string => !!id))];
       force = true;
     }
@@ -152,15 +170,19 @@ export class Fp3dView3d extends LitElement {
     this.shownStates = new Map(this.watched.map((id) => [id, hass.states[id]]));
 
     const consumers = findConsumers(hass, b);
+    const deviceMarkers = buildMarkers(hass, b);
+    const furniture = this.furnitureMarkers(hass, b, new Set(deviceMarkers.map((m) => m.id)), new Set(consumers.map((c) => c.powerEntity)));
+    consumers.push(...furniture.consumers);
     const summary = energySummary(hass, b, consumers);
     // a placed power sensor shows its value as state text already, so only devices get a watt badge
     const byDevice = new Map(consumers.filter((c) => c.id !== c.powerEntity).map((c) => [c.id, c.power]));
     v.setDevices(
-      buildMarkers(hass, b).map((m) => {
+      [...deviceMarkers, ...furniture.markers].map((m) => {
         const power = byDevice.get(m.id) ?? null;
         return { ...m, power, powerText: power === null ? undefined : formatPower(hass, power) };
       }),
     );
+    v.setScreens(furniture.screens);
     const types = new Map(b.floors.flatMap((f) => f.openings.map((o) => [o.id, o.type] as const)));
     v.setOpeningStates(new Map([...this.openingLinks!].map(([id, e]) => [id, openingState(hass, e, types.get(id))])));
     const batteryPlaced = b.energy.battery ? b.floors.flatMap((f) => f.placements.filter((p) => p.entity_id === b.energy.battery).map((p) => ({ floorId: f.id, x: p.x, z: p.z })))[0] : null;
@@ -180,6 +202,57 @@ export class Fp3dView3d extends LitElement {
     v.setFloorInfo(new Map([...counts].map(([id, c]) => [id, floorInfoText(hass, c)])));
     const hasEnergy = summary.grid !== null || summary.solar !== null || summary.battery !== null || summary.tariff !== null;
     this._energy = hasEnergy ? summary : null;
+  }
+
+  /**
+   * Markers, energy consumers and lit screens of furniture with linked entities. Entities that are
+   * placed as devices as well keep their device marker.
+   */
+  private furnitureMarkers(
+    hass: HomeAssistant,
+    b: Building,
+    taken: Set<string>,
+    consumerSensors: Set<string>,
+  ): { markers: DeviceMarker[]; consumers: Consumer[]; screens: Map<string, ScreenState> } {
+    const markers: DeviceMarker[] = [];
+    const consumers: Consumer[] = [];
+    const screens = new Map<string, ScreenState>();
+    for (const floor of b.floors) {
+      for (const f of floor.furniture) {
+        const link = this.furnitureLinks.get(f.id);
+        if (!link) continue;
+        const id = link.entity ?? link.power!;
+        const st = link.entity ? hass.states[link.entity] : undefined;
+        const power = link.power ? readPower(hass.states[link.power]) : null;
+        if (link.power && power !== null && !consumerSensors.has(link.power)) {
+          consumerSensors.add(link.power);
+          consumers.push({ id, powerEntity: link.power, floorId: floor.id, x: f.x, z: f.z, power: Math.max(0, power) });
+        }
+        if (st && (f.type === "tv_board" || f.type === "tv_wall" || f.type === "desk")) {
+          const color = kindOf(st.entity_id) === "media" ? appColor(st) : isActive(st) ? ([0.22, 0.88, 1] as [number, number, number]) : null;
+          if (color) screens.set(f.id, { color, level: st.state === "playing" ? 1 : 0.6 });
+        }
+        if (taken.has(id)) continue;
+        taken.add(id);
+        const kind = link.entity ? kindOf(link.entity) : null;
+        const room = floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon([f.x, f.z], r.points));
+        markers.push({
+          id,
+          floorId: floor.id,
+          roomId: room?.id ?? null,
+          x: f.x,
+          z: f.z,
+          y: markerHeight(f),
+          icon: iconSvg(kind ?? "switch"),
+          name: link.entity ? entityName(hass, link.entity) : translate(hass, `furn_${f.type}` as Parameters<typeof translate>[1]),
+          text: st ? stateText(hass, st) : power !== null ? formatPower(hass, Math.max(0, power)) : "",
+          active: st ? isActive(st) : (power ?? 0) > 5,
+          unavailable: st ? isUnavailable(st) : false,
+          glow: null,
+        });
+      }
+    }
+    return { markers, consumers, screens };
   }
 
   private onDeviceTap(entityId: string): void {
@@ -482,4 +555,12 @@ if (!customElements.get("fp3d-view3d")) customElements.define("fp3d-view3d", Fp3
 /** Power as "850 W" or "1,2 kW". */
 function formatPower(hass: HomeAssistant | undefined, w: number): string {
   return Math.abs(w) >= 1000 ? `${formatNumber(hass, w / 1000, 1)} kW` : `${Math.round(w)} W`;
+}
+
+/** Marker height above furniture: in front of a screen, above wall units, else just above the top. */
+function markerHeight(f: Furniture): number {
+  if (f.type === "tv_board") return f.h + 0.9;
+  if (f.type === "tv_wall") return 1.3 + f.h / 2 + 0.25;
+  if (f.type === "kitchen_wall") return 1.45 + f.h + 0.25;
+  return f.h + 0.35;
 }

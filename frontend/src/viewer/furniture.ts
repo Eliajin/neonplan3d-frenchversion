@@ -371,6 +371,190 @@ function stairs(b: Builder, w: number, d: number, h: number): void {
   }
 }
 
+function sideboard(b: Builder, w: number, d: number, h: number): void {
+  legs(b, w, d, 0.12, 0.03, 0.04, C.metal);
+  b.box(-w / 2, w / 2, 0.12, h, -d / 2, d / 2 - 0.02, C.wood, C.woodTop, EDGE_FURN);
+  fronts(b, -w / 2, w / 2, 0.12, h, d / 2 - 0.02, Math.max(2, Math.round(w / 0.45)), h - 0.1, true);
+}
+
+function dresser(b: Builder, w: number, d: number, h: number): void {
+  b.box(-w / 2, w / 2, 0.06, h, -d / 2, d / 2 - 0.02, C.wood, C.woodTop, EDGE_FURN);
+  b.box(-w / 2 + 0.02, w / 2 - 0.02, 0, 0.06, -d / 2 + 0.02, d / 2 - 0.06, C.dark);
+  const n = Math.max(3, Math.round((h - 0.06) / 0.22));
+  const z = d / 2 - 0.02;
+  for (let i = 1; i < n; i++) {
+    const y = 0.06 + ((h - 0.06) / n) * i;
+    b.seg(-w / 2, y, z, w / 2, y, z, EDGE_FAINT);
+  }
+  for (let i = 0; i < n; i++) {
+    const y = 0.06 + ((h - 0.06) / n) * (i + 0.5);
+    b.seg(-0.08, y, z + 0.012, 0.08, y, z + 0.012, EDGE_GLOW);
+  }
+}
+
+function coatRack(b: Builder, w: number, d: number, h: number): void {
+  // shoe bench, back panel with hooks, hat shelf
+  b.box(-w / 2, w / 2, 0, 0.45, -d / 2, d / 2, C.wood, C.woodTop, EDGE_FURN);
+  fronts(b, -w / 2, w / 2, 0.02, 0.45, d / 2, Math.max(2, Math.round(w / 0.5)), 0.38, true);
+  b.box(-w / 2, w / 2, 0.45, h, -d / 2, -d / 2 + 0.03, C.body, C.bodyTop, EDGE_FURN);
+  b.box(-w / 2, w / 2, h - 0.04, h, -d / 2, d / 2, C.wood, C.woodTop, EDGE_FURN);
+  const hooks = Math.max(2, Math.round(w / 0.25));
+  for (let i = 0; i < hooks; i++) {
+    const x = -w / 2 + (w / hooks) * (i + 0.5);
+    b.box(x - 0.015, x + 0.015, h - 0.32, h - 0.28, -d / 2 + 0.03, -d / 2 + 0.1, C.metal, C.metal);
+  }
+}
+
+/** Bench with a back along the rear; `side` adds the second arm of a corner bench along -x. */
+function bench(b: Builder, w: number, d: number, h: number, corner: boolean): void {
+  const seat = 0.45;
+  const depth = Math.min(0.5, corner ? d * 0.4 : d);
+  const back = 0.08;
+  // rear arm
+  b.box(-w / 2, w / 2, 0, seat - 0.06, -d / 2, -d / 2 + depth, C.wood, C.woodTop, EDGE_FURN);
+  b.box(-w / 2, w / 2, 0, h, -d / 2, -d / 2 + back, C.wood, C.woodTop, EDGE_FURN);
+  b.box(-w / 2 + (corner ? depth : 0.02), w / 2 - 0.02, seat - 0.06, seat + 0.02, -d / 2 + back, -d / 2 + depth, C.cushion, C.cushion, EDGE_FAINT);
+  if (corner) {
+    // side arm along -x, meeting the rear arm in the corner
+    b.box(-w / 2, -w / 2 + depth, 0, seat - 0.06, -d / 2 + depth, d / 2, C.wood, C.woodTop, EDGE_FURN);
+    b.box(-w / 2, -w / 2 + back, 0, h, -d / 2 + back, d / 2, C.wood, C.woodTop, EDGE_FURN);
+    b.box(-w / 2 + back, -w / 2 + depth, seat - 0.06, seat + 0.02, -d / 2 + back, d / 2 - 0.02, C.cushion, C.cushion, EDGE_FAINT);
+  }
+}
+
+function barStool(b: Builder, w: number, d: number, h: number): void {
+  const r = Math.min(w, d) / 2;
+  b.cyl(0, 0, r * 0.8, 0, 0.02, C.metal, C.metal, 12);
+  b.cyl(0, 0, 0.025, 0.02, h - 0.05, C.metal, C.metal, 6);
+  b.cyl(0, 0, r * 0.75, h * 0.35, h * 0.35 + 0.015, C.metal, C.metal, 12, EDGE_FAINT);
+  b.cyl(0, 0, r, h - 0.05, h, C.cushion, C.fabricTop, 14, EDGE_FURN);
+}
+
+function officeChair(b: Builder, w: number, d: number, h: number): void {
+  const r = Math.min(w, d) / 2;
+  // five-star base as two crossed bars and a hub, gas lift, seat and back
+  b.box(-r, r, 0.04, 0.08, -0.03, 0.03, C.metal);
+  b.box(-0.03, 0.03, 0.04, 0.08, -r, r, C.metal);
+  b.cyl(0, 0, 0.06, 0.02, 0.1, C.dark, C.dark, 8);
+  b.cyl(0, 0, 0.025, 0.1, 0.44, C.metal, C.metal, 6);
+  b.box(-r * 0.75, r * 0.75, 0.44, 0.52, -r * 0.7, r * 0.75, C.fabric, C.cushion, EDGE_FURN);
+  b.box(-r * 0.7, r * 0.7, 0.58, h, -r * 0.78, -r * 0.62, C.fabric, C.fabricTop, EDGE_FURN);
+  b.box(-0.03, 0.03, 0.5, 0.62, -r * 0.72, -r * 0.62, C.metal);
+}
+
+function stool(b: Builder, w: number, d: number, h: number): void {
+  legs(b, w, d, 0.08, 0.04, 0.05, C.wood);
+  b.box(-w / 2, w / 2, 0.08, h, -d / 2, d / 2, C.fabric, C.cushion, EDGE_FURN);
+}
+
+function kitchenWall(b: Builder, w: number, d: number, h: number): void {
+  // hangs above the worktop
+  const y0 = 1.45;
+  b.box(-w / 2, w / 2, y0, y0 + h, -d / 2, d / 2 - 0.02, C.body, C.bodyTop, EDGE_FURN);
+  fronts(b, -w / 2, w / 2, y0, y0 + h, d / 2 - 0.02, Math.max(1, Math.round(w / 0.5)), y0 + 0.08);
+}
+
+function kitchenTall(b: Builder, w: number, d: number, h: number): void {
+  b.box(-w / 2, w / 2, 0.02, h, -d / 2, d / 2 - 0.02, C.body, C.bodyTop, EDGE_FURN);
+  b.box(-w / 2 + 0.02, w / 2 - 0.02, 0, 0.08, -d / 2 + 0.02, d / 2 - 0.06, C.dark);
+  const z = d / 2 - 0.02;
+  // oven with a dark glass door and a glowing handle, fronts above and below
+  b.box(-w / 2 + 0.03, w / 2 - 0.03, 0.85, 1.45, z, z + 0.01, C.dark, C.dark, EDGE_GLOW);
+  b.seg(-w / 2 + 0.08, 1.4, z + 0.02, w / 2 - 0.08, 1.4, z + 0.02, EDGE_GLOW);
+  for (const y of [0.85, 1.45]) b.seg(-w / 2, y, z, w / 2, y, z, EDGE_FAINT);
+  b.seg(w / 2 - 0.06, 0.5, z + 0.012, w / 2 - 0.06, 0.7, z + 0.012, EDGE_GLOW);
+  b.seg(w / 2 - 0.06, 1.6, z + 0.012, w / 2 - 0.06, 1.8, z + 0.012, EDGE_GLOW);
+}
+
+function island(b: Builder, w: number, d: number, h: number): void {
+  const inner = d - 0.3;
+  b.box(-w / 2 + 0.05, w / 2 - 0.05, 0.08, h - 0.04, -d / 2 + 0.02, -d / 2 + inner, C.body, C.bodyTop, EDGE_FURN);
+  b.box(-w / 2 + 0.07, w / 2 - 0.07, 0, 0.08, -d / 2 + 0.04, -d / 2 + inner - 0.04, C.dark);
+  fronts(b, -w / 2 + 0.05, w / 2 - 0.05, 0.08, h - 0.04, -d / 2 + inner, Math.max(2, Math.round(w / 0.6)), h - 0.2);
+  // worktop overhangs on the front for bar stools
+  b.box(-w / 2, w / 2, h - 0.04, h, -d / 2, d / 2, C.whiteTop, C.whiteTop, EDGE_FURN);
+}
+
+function dishwasher(b: Builder, w: number, d: number, h: number): void {
+  b.box(-w / 2, w / 2, 0.02, h - 0.04, -d / 2, d / 2 - 0.02, C.body, C.bodyTop, EDGE_FURN);
+  b.box(-w / 2 + 0.02, w / 2 - 0.02, 0, 0.08, -d / 2 + 0.02, d / 2 - 0.06, C.dark);
+  b.seg(-w / 2 + 0.08, h - 0.12, d / 2 - 0.008, w / 2 - 0.08, h - 0.12, d / 2 - 0.008, EDGE_GLOW);
+  b.box(-w / 2, w / 2, h - 0.04, h, -d / 2, d / 2, C.whiteTop, C.whiteTop, EDGE_FURN);
+}
+
+function laundry(b: Builder, w: number, d: number, h: number, dryer: boolean): void {
+  b.box(-w / 2, w / 2, 0, h, -d / 2, d / 2 - 0.02, C.white, C.whiteTop, EDGE_FURN);
+  const z = d / 2 - 0.012;
+  // control panel line and a round door drawn on the front
+  b.seg(-w / 2, h - 0.14, z, w / 2, h - 0.14, z, EDGE_FAINT);
+  b.seg(w / 2 - 0.16, h - 0.07, z, w / 2 - 0.08, h - 0.07, z, EDGE_GLOW);
+  const cy = (h - 0.14) / 2 + 0.04;
+  const r = Math.min(w * 0.36, (h - 0.2) * 0.42);
+  const n = 20;
+  for (let i = 0; i < n; i++) {
+    const a0 = (i / n) * Math.PI * 2;
+    const a1 = ((i + 1) / n) * Math.PI * 2;
+    b.seg(Math.cos(a0) * r, cy + Math.sin(a0) * r, z, Math.cos(a1) * r, cy + Math.sin(a1) * r, z, EDGE_GLOW);
+    if (!dryer) b.seg(Math.cos(a0) * r * 0.72, cy + Math.sin(a0) * r * 0.72, z, Math.cos(a1) * r * 0.72, cy + Math.sin(a1) * r * 0.72, z, EDGE_FAINT);
+  }
+}
+
+function bunkBed(b: Builder, w: number, d: number, h: number): void {
+  const t = 0.05;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.box(sx * (w / 2) - (sx > 0 ? t : 0), sx * (w / 2) + (sx < 0 ? t : 0), 0, h, sz * (d / 2) - (sz > 0 ? t : 0), sz * (d / 2) + (sz < 0 ? t : 0), C.wood, C.woodTop);
+  for (const y of [0.25, h - 0.55]) {
+    b.box(-w / 2, w / 2, y, y + 0.08, -d / 2, d / 2, C.wood, C.woodTop, EDGE_FURN);
+    b.box(-w / 2 + 0.04, w / 2 - 0.04, y + 0.08, y + 0.24, -d / 2 + 0.05, d / 2 - 0.05, C.white, C.whiteTop, EDGE_FAINT);
+    b.box(-w / 2 + 0.05, w / 2 - 0.05, y + 0.24, y + 0.33, -d / 2 + 0.08, -d / 2 + 0.4, C.whiteTop, C.whiteTop);
+  }
+  // guard rail on top and a ladder at the front
+  b.box(-w / 2, w / 2, h - 0.2, h - 0.15, d / 2 - t, d / 2, C.wood, C.woodTop);
+  const lx = w / 2 - 0.35;
+  for (const x of [lx - 0.18, lx + 0.18]) b.seg(x, 0, d / 2 + 0.02, x, h - 0.15, d / 2 + 0.02, EDGE_FURN);
+  for (let y = 0.3; y < h - 0.2; y += 0.28) b.seg(lx - 0.18, y, d / 2 + 0.02, lx + 0.18, y, d / 2 + 0.02, EDGE_FAINT);
+}
+
+function roundTable(b: Builder, w: number, d: number, h: number): void {
+  const r = Math.min(w, d) / 2;
+  b.cyl(0, 0, r * 0.4, 0, 0.03, C.metal, C.metal, 12);
+  b.cyl(0, 0, 0.05, 0.03, h - 0.04, C.wood, C.wood, 8);
+  b.cyl(0, 0, r, h - 0.04, h, C.wood, C.woodTop, 20, EDGE_FURN);
+}
+
+function coffeeTable(b: Builder, w: number, d: number, h: number): void {
+  legs(b, w, d, h - 0.03, 0.04, 0.03, C.wood);
+  b.box(-w / 2, w / 2, h - 0.03, h, -d / 2, d / 2, C.wood, C.woodTop, EDGE_FURN);
+  b.box(-w / 2 + 0.05, w / 2 - 0.05, 0.1, 0.13, -d / 2 + 0.05, d / 2 - 0.05, C.body, C.bodyTop, EDGE_FAINT);
+}
+
+function tvWall(b: Builder, w: number, d: number, h: number): void {
+  // flat screen on a wall bracket, centred at 1.3 m
+  const y0 = 1.3 - h / 2;
+  b.box(-0.12, 0.12, y0 + h * 0.3, y0 + h * 0.7, -d / 2, -d / 2 + 0.03, C.metal);
+  b.box(-w / 2, w / 2, y0, y0 + h, -d / 2 + 0.03, d / 2, C.dark, C.dark, EDGE_GLOW);
+}
+
+/**
+ * Screen of a TV or monitor in local coordinates (x across, y up, z = its front face), for the glow
+ * shown while the linked device is on. Null for furniture without a screen.
+ */
+export function screenRect(f: Furniture): { x0: number; x1: number; y0: number; y1: number; z: number } | null {
+  const w = Math.max(0.05, f.w);
+  const d = Math.max(0.05, f.d);
+  const h = Math.max(0.005, f.h);
+  if (f.type === "tv_board") {
+    const tw = Math.min(w * 0.8, 1.45);
+    const th = tw * 0.56;
+    return { x0: -tw / 2 + 0.02, x1: tw / 2 - 0.02, y0: h + 0.12, y1: h + 0.08 + th, z: -d / 2 + 0.165 };
+  }
+  if (f.type === "tv_wall") {
+    const y0 = 1.3 - h / 2;
+    return { x0: -w / 2 + 0.02, x1: w / 2 - 0.02, y0: y0 + 0.02, y1: y0 + h - 0.02, z: d / 2 + 0.003 };
+  }
+  if (f.type === "desk") return { x0: -0.28, x1: 0.28, y0: h + 0.1, y1: h + 0.4, z: -d / 2 + 0.115 };
+  return null;
+}
+
 /** Soft contact shadow under an item: a dark core that fades out beyond its footprint. */
 function contactShadow(shadow: GeoBuffer, tf: Tf, w: number, d: number, strength: number): void {
   const grow = Math.min(0.14, Math.max(0.06, Math.min(w, d) * 0.15));
@@ -463,6 +647,63 @@ export function pushFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuff
     case "stairs":
       stairs(b, w, d, h);
       break;
+    case "sideboard":
+      sideboard(b, w, d, h);
+      break;
+    case "dresser":
+      dresser(b, w, d, h);
+      break;
+    case "tall_cabinet":
+      cabinet(b, w, d, h, 1, h * 0.5);
+      break;
+    case "coat_rack":
+      coatRack(b, w, d, h);
+      break;
+    case "bench":
+      bench(b, w, d, h, false);
+      break;
+    case "corner_bench":
+      bench(b, w, d, h, true);
+      break;
+    case "bar_stool":
+      barStool(b, w, d, h);
+      break;
+    case "office_chair":
+      officeChair(b, w, d, h);
+      break;
+    case "stool":
+      stool(b, w, d, h);
+      break;
+    case "kitchen_wall":
+      kitchenWall(b, w, d, h);
+      return; // hangs on the wall, no shadow on the floor
+    case "kitchen_tall":
+      kitchenTall(b, w, d, h);
+      break;
+    case "island":
+      island(b, w, d, h);
+      break;
+    case "dishwasher":
+      dishwasher(b, w, d, h);
+      break;
+    case "washer":
+      laundry(b, w, d, h, false);
+      break;
+    case "dryer":
+      laundry(b, w, d, h, true);
+      break;
+    case "bunk_bed":
+      bunkBed(b, w, d, h);
+      break;
+    case "table_round":
+      roundTable(b, w, d, h);
+      break;
+    case "coffee_table":
+      coffeeTable(b, w, d, h);
+      break;
+    case "tv_wall":
+      tvWall(b, w, d, h);
+      return;
     default:
       b.box(-w / 2, w / 2, 0, h, -d / 2, d / 2, C.body, C.bodyTop, EDGE_FURN);
   }

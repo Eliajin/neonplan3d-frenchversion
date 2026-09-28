@@ -109,6 +109,30 @@ async def test_opening_fields_get_defaults(hass: HomeAssistant, hass_ws_client) 
     assert got[1]["hinge"] == "right" and got[1]["cover"] == "cover.x" and got[1]["contact"] == "none"
 
 
+async def test_furniture_links_default_to_automatic(hass: HomeAssistant, hass_ws_client) -> None:
+    await _setup(hass)
+    client = await hass_ws_client(hass)
+    building = copy.deepcopy(BUILDING)
+    item = {
+        "id": "m1",
+        "type": "tv_board",
+        "x": 1,
+        "z": 1,
+        "rotation": 0,
+        "w": 1.8,
+        "d": 0.4,
+        "h": 0.5,
+        "variant": None,
+    }
+    building["floors"][0]["furniture"] = [item, {**item, "id": "m2", "entity": "media_player.tv", "power": "none"}]
+    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": building})
+    assert (await client.receive_json())["success"]
+    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    got = (await client.receive_json())["result"]["building"]["floors"][0]["furniture"]
+    assert (got[0]["entity"], got[0]["power"]) == (None, None)
+    assert (got[1]["entity"], got[1]["power"]) == ("media_player.tv", "none")
+
+
 async def test_placement_mount_defaults_to_none(hass: HomeAssistant, hass_ws_client) -> None:
     await _setup(hass)
     client = await hass_ws_client(hass)

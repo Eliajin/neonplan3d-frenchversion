@@ -30,9 +30,12 @@ export function stateText(hass: HomeAssistant | undefined, st: HassEntity | unde
       if (st.state === "off") return cur ? `${cur} · ${t(hass, "state_off")}` : t(hass, "state_off");
       return cur ?? translateState(hass, st.state);
     }
-    case "media":
-      if (st.state === "playing" && typeof a.media_title === "string") return a.media_title;
-      return translateState(hass, st.state);
+    case "media": {
+      // what is running: the app (Netflix, YouTube, …), else the title or the input source
+      const running = st.state === "playing" || st.state === "paused" || st.state === "on" || st.state === "idle";
+      const what = [a.app_name, a.media_title, a.source].find((v) => typeof v === "string" && v) as string | undefined;
+      return running && what ? what : translateState(hass, st.state);
+    }
     case "lock":
       return translateState(hass, st.state);
     case "binary": {

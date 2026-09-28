@@ -37,6 +37,7 @@ import { centroid } from "../model.ts";
 import { buildFloorGeometry, SLAB, stairHoles, type FloorGeometry } from "./build.ts";
 import { OrbitControls } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
+import { screenRect } from "./furniture.ts";
 import { GeoBuffer, pushPrism } from "./geo.ts";
 import { buildOpeningParts, CLOSED, type OpeningState } from "./openings.ts";
 
@@ -99,6 +100,12 @@ export interface FlowPiece {
   color: [number, number, number];
 }
 
+/** A lit TV or monitor screen: colour of the running app and brightness (0..1). */
+export interface ScreenState {
+  color: [number, number, number];
+  level: number;
+}
+
 export interface PersonPin {
   id: string;
   name: string;
@@ -155,6 +162,7 @@ interface FloorMaterials {
   blinds: MeshBasicMaterial;
   flow: MeshBasicMaterial;
   lamps: MeshBasicMaterial;
+  screens: MeshBasicMaterial;
 }
 
 interface FloorView {
@@ -171,6 +179,14 @@ interface FloorView {
   blindsMesh: Mesh;
   flowMesh: Mesh;
   lampMesh: Mesh;
+  screenMesh: Mesh;
+  screenSig: string;
+  /** Content signatures: meshes are only rebuilt when these change. */
+  flowLayout: string;
+  glowSig: string;
+  lampSig: string;
+  /** Size of the floor label, measured once per text (reading it every frame forces a layout). */
+  labelSize: { w: number; h: number } | null;
   materials: FloorMaterials;
   /** Bit masks of the wall buckets that stand and that are drawn as glass (read by the fold shader). */
   mask: FoldMasks;
@@ -206,6 +222,7 @@ export class FloorplanViewer {
   private readonly patternTexture: CanvasTexture;
   private readonly blindTexture: CanvasTexture;
   private openingTargets = new Map<string, OpeningState>();
+  private screens = new Map<string, ScreenState>();
   private flows: FlowPiece[] = [];
   /** Stripe phase per cable piece, kept when its speed changes so the stripes do not jump. */
   private flowPhase = new Map<string, { speed: number; offset: number }>();
@@ -421,12 +438,23 @@ export class FloorplanViewer {
     this.invalidate();
   }
 
+  /** Screens of TVs and monitors that are on (by furniture id). */
+  setScreens(screens: Map<string, ScreenState>): void {
+    this.screens = screens;
+    for (const fv of this.floors) this.buildScreens(fv);
+    this.invalidate();
+  }
+
   /** Text under the floor names in the house view, e.g. "5 rooms · 3 lights on · 1 open". */
   setFloorInfo(info: Map<string, string>): void {
     this.floorInfo = info;
     for (const fv of this.floors) {
       const span = fv.label.querySelector("span");
-      if (span) span.textContent = info.get(fv.floor.id) ?? this.options.floorInfo?.(fv.floor) ?? "";
+      const text = info.get(fv.floor.id) ?? this.options.floorInfo?.(fv.floor) ?? "";
+      if (span && span.textContent !== text) {
+        span.textContent = text;
+        fv.labelSize = null;
+      }
     }
     this.invalidate();
   }
@@ -558,6 +586,12 @@ export class FloorplanViewer {
 
   /** Light cones of the lights that are on, merged into one mesh per floor. */
   private buildGlow(fv: FloorView): void {
+    const sig = this.devices
+      .filter((d) => d.floorId === fv.floor.id && d.glow)
+      .map((d) => `${d.x},${d.z},${d.glow!.level.toFixed(3)},${d.glow!.color.map((c) => c.toFixed(3)).join("/")}`)
+      .join(";");
+    if (sig === fv.glowSig && fv.glowMesh.geometry.getAttribute("position")) return;
+    fv.glowSig = sig;
     const p: number[] = [];
     const c: number[] = [];
     const uv: number[] = [];
@@ -627,6 +661,7 @@ export class FloorplanViewer {
       blinds: makeFoldable(new MeshBasicMaterial({ map: this.blindTexture, vertexColors: true, side: DoubleSide }), mask),
       flow: flowMaterial(this.flowTime),
       lamps: new MeshBasicMaterial({ vertexColors: true }),
+      screens: new MeshBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false, side: DoubleSide }),
     };
   }
 
@@ -656,6 +691,9 @@ export class FloorplanViewer {
       glassMesh.renderOrder = 4;
       const lampMesh = new Mesh(new Geometry(), materials.lamps);
       lampMesh.visible = false;
+      const screenMesh = new Mesh(new Geometry(), materials.screens);
+      screenMesh.visible = false;
+      screenMesh.renderOrder = 5;
       const flowMesh = new Mesh(new Geometry(), materials.flow);
       flowMesh.renderOrder = 5;
       flowMesh.frustumCulled = false;
@@ -676,6 +714,7 @@ export class FloorplanViewer {
         glassMesh,
         flowMesh,
         lampMesh,
+        screenMesh,
         glassWalls,
       );
       this.root.add(group);
@@ -705,6 +744,12 @@ export class FloorplanViewer {
         blindsMesh,
         flowMesh,
         lampMesh,
+        screenMesh,
+        screenSig: "",
+        flowLayout: "",
+        glowSig: "",
+        lampSig: "",
+        labelSize: null,
         materials,
         mask,
         openings: new Map(),
@@ -729,6 +774,7 @@ export class FloorplanViewer {
     for (const fv of this.floors) {
       this.buildGlow(fv);
       this.buildLamps(fv);
+      this.buildScreens(fv);
       const prev = previousOpenings.get(fv.floor.id);
       for (const info of fv.geo.openings) fv.openings.set(info.opening.id, prev?.get(info.opening.id) ?? this.openingTargets.get(info.opening.id) ?? CLOSED);
       this.buildOpenings(fv);
@@ -792,6 +838,7 @@ export class FloorplanViewer {
     m.glassWall.opacity = fv.o;
     m.flow.opacity = fv.o;
     m.lamps.opacity = fv.o;
+    m.screens.opacity = fv.o;
   }
 
   /** Advance the floor animation; returns true while something still moves. */
@@ -857,6 +904,14 @@ export class FloorplanViewer {
 
   /** Lamp models of the lights on a floor, merged into one mesh; lit shades take the light colour. */
   private buildLamps(fv: FloorView): void {
+    const sig =
+      this.wallMode +
+      this.devices
+        .filter((d) => d.floorId === fv.floor.id && d.lamp)
+        .map((d) => `${d.lamp},${d.x},${d.z},${d.glow ? `${d.glow.level.toFixed(3)},${d.glow.color.map((c) => c.toFixed(3)).join("/")}` : "off"}`)
+        .join(";");
+    if (sig === fv.lampSig && fv.lampMesh.geometry.getAttribute("position")) return;
+    fv.lampSig = sig;
     const buf = new GeoBuffer();
     const H = fv.floor.height;
     for (const d of this.devices) {
@@ -898,12 +953,52 @@ export class FloorplanViewer {
     fv.lampMesh.visible = buf.count > 0;
   }
 
+  /** Lit screens of a floor: a bright panel in the app colour and a faint glow around it. */
+  private buildScreens(fv: FloorView): void {
+    const items = fv.floor.furniture.filter((f) => this.screens.has(f.id));
+    const sig = items.map((f) => `${f.id}:${f.x},${f.z},${f.rotation},${f.w},${f.d},${f.h}:${JSON.stringify(this.screens.get(f.id))}`).join(";");
+    if (sig === fv.screenSig && fv.screenMesh.geometry.getAttribute("position")) return;
+    fv.screenSig = sig;
+    const buf = new GeoBuffer();
+    for (const f of items) {
+      const r = screenRect(f);
+      const st = this.screens.get(f.id)!;
+      if (!r) continue;
+      const a = (f.rotation * Math.PI) / 180;
+      const c = Math.cos(a);
+      const s = Math.sin(a);
+      const P = (x: number, y: number, z: number) => [f.x + x * c - z * s, y, f.z + x * s + z * c];
+      const core = new Color(...st.color.map((v) => Math.min(1, v * (0.35 + 0.65 * st.level))) as [number, number, number]);
+      const edge = new Color(0, 0, 0);
+      const z = r.z + 0.004;
+      buf.tri(P(r.x0, r.y0, z), P(r.x1, r.y0, z), P(r.x1, r.y1, z), core);
+      buf.tri(P(r.x0, r.y0, z), P(r.x1, r.y1, z), P(r.x0, r.y1, z), core);
+      // glow frame fading out around the screen
+      const g = 0.18 + 0.12 * st.level;
+      const halo = core.clone().multiplyScalar(0.5);
+      const inner = [P(r.x0, r.y0, z), P(r.x1, r.y0, z), P(r.x1, r.y1, z), P(r.x0, r.y1, z)];
+      const outer = [P(r.x0 - g, r.y0 - g, z + 0.01), P(r.x1 + g, r.y0 - g, z + 0.01), P(r.x1 + g, r.y1 + g, z + 0.01), P(r.x0 - g, r.y1 + g, z + 0.01)];
+      for (let i = 0; i < 4; i++) {
+        const j = (i + 1) % 4;
+        buf.tri(inner[i], outer[i], outer[j], halo, edge, edge);
+        buf.tri(inner[i], outer[j], inner[j], halo, edge, halo);
+      }
+    }
+    fv.screenMesh.geometry.dispose();
+    fv.screenMesh.geometry = buf.geometry();
+    fv.screenMesh.visible = buf.count > 0;
+  }
+
   private flowSeconds(): number {
     return (performance.now() - this.flowStart) / 1000;
   }
 
   /** Energy cables of a floor as flat glowing ribbons (vertical pieces as two crossed ribbons). */
   private buildFlows(fv: FloorView): void {
+    const layout = this.flows
+      .filter((f) => f.floorId === fv.floor.id)
+      .map(flowKey)
+      .join(";");
     const p: number[] = [];
     const c: number[] = [];
     const uv: number[] = [];
@@ -949,6 +1044,22 @@ export class FloorplanViewer {
         }
       }
     }
+    const old = fv.flowMesh.geometry;
+    if (layout === fv.flowLayout && old.getAttribute("position")?.count === p.length / 3) {
+      // same cables, new power: only colours and stripe speeds change (no new geometry, no garbage)
+      for (const [name, data] of [
+        ["color", c],
+        ["flowSpeed", sp],
+        ["flowOffset", off],
+      ] as const) {
+        const attr = old.getAttribute(name) as Float32BufferAttribute;
+        (attr.array as Float32Array).set(data);
+        attr.needsUpdate = true;
+      }
+      fv.flowMesh.visible = p.length > 0;
+      return;
+    }
+    fv.flowLayout = layout;
     const g = new Geometry();
     g.setAttribute("position", new Float32BufferAttribute(p, 3));
     g.setAttribute("color", new Float32BufferAttribute(c, 3));
@@ -1129,8 +1240,9 @@ export class FloorplanViewer {
           if (!best || sx < best.x) best = { x: sx, y: ((1 - v.y) / 2) * h };
         }
       }
-      const lw = fv.label.offsetWidth;
-      placed.push({ fv, left: Math.max(8, Math.min(w - lw - 8, best!.x - lw - 14)), y: best!.y, h: fv.label.offsetHeight });
+      fv.labelSize ??= { w: fv.label.offsetWidth, h: fv.label.offsetHeight };
+      const lw = fv.labelSize.w;
+      placed.push({ fv, left: Math.max(8, Math.min(w - lw - 8, best!.x - lw - 14)), y: best!.y, h: fv.labelSize.h });
     }
     // top floor first; each lower label keeps below the one above so labels never cover each other
     placed.sort((a, b) => b.fv.rank - a.fv.rank);

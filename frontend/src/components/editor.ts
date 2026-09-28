@@ -2,7 +2,8 @@
 
 import { css, html, LitElement, nothing, svg, type PropertyValues, type TemplateResult } from "lit";
 import { fetchImage, storeImage } from "../api.ts";
-import { areaEntities, autoPlace, defaultHeight, entityName, groupByDevice, isPlaceable, kindOf, openingEntities } from "../devices.ts";
+import { areaEntities, autoPlace, defaultHeight, entityName, furnitureEntities, groupByDevice, isPlaceable, kindOf, openingEntities } from "../devices.ts";
+import { furnitureSymbol } from "./furniture2d.ts";
 import { closeGaps, suggestedThickness } from "../geometry/gaps.ts";
 import { generateWalls, locateOnWalls, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
@@ -11,9 +12,10 @@ import {
   bounds,
   centroid,
   FLOOR_MATERIALS,
+  ELECTRIC_FURNITURE,
+  FURNITURE_GROUPS,
   FURNITURE_SIZE,
   FURNITURE_TYPES,
-  furnitureFootprint,
   isAxisRect,
   OPENING_DEFAULTS,
   signedArea,
@@ -43,6 +45,7 @@ type Drag =
   | { kind: "device"; entityId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "opening"; id: string; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "furniture"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
+  | { kind: "rotate"; id: string; base: Building; moved: boolean }
   | { kind: "room"; roomId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "rect"; start: Vec2; end: Vec2 }
   | { kind: "tap"; startScreen: [number, number]; last: [number, number]; panning: boolean };
@@ -54,7 +57,9 @@ interface Guides {
 }
 
 /** Drags that change the document live (restored when cancelled, recorded in the history when done). */
-const EDIT_DRAGS = new Set(["vertex", "room", "device", "opening", "furniture"]);
+const EDIT_DRAGS = new Set(["vertex", "room", "device", "opening", "furniture", "rotate"]);
+/** Furniture closer than this to a wall snaps against it (metres). */
+const WALL_SNAP = 0.25;
 
 const HISTORY = 100;
 const SNAP_PX = 10;
@@ -415,6 +420,11 @@ export class Fp3dEditor extends LitElement {
       this.drag = this.isAdmin ? { kind: "opening", id, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
       return;
     }
+    const rotateEl = target.closest("[data-rotate]");
+    if (rotateEl && this.isAdmin) {
+      this.drag = { kind: "rotate", id: rotateEl.getAttribute("data-rotate")!, base: this._doc, moved: false };
+      return;
+    }
     const furnitureEl = target.closest("[data-furniture]");
     if (furnitureEl && !target.closest("[data-vertex], [data-mid]")) {
       const id = furnitureEl.getAttribute("data-furniture")!;
@@ -556,9 +566,24 @@ export class Fp3dEditor extends LitElement {
         const f = drag.base.floors.find((x) => x.id === this._floorId)?.furniture.find((x) => x.id === drag.id);
         if (!f) return;
         const g = e.altKey ? 0.01 : this._doc.settings.grid;
-        const x = round(Math.round((f.x + world[0] - drag.start[0]) / g) * g);
-        const z = round(Math.round((f.z + world[1] - drag.start[1]) / g) * g);
-        this.change((_, floor) => Object.assign(floor.furniture.find((q) => q.id === drag.id)!, { x, z }), drag.base, false);
+        let x = round(Math.round((f.x + world[0] - drag.start[0]) / g) * g);
+        let z = round(Math.round((f.z + world[1] - drag.start[1]) / g) * g);
+        let rotation = f.rotation;
+        // near a wall: turn the back (or a side) to it and sit flush; Alt moves freely
+        const snap = e.altKey ? null : this.snapToWall({ ...f, x, z });
+        if (snap) ({ x, z, rotation } = snap);
+        this.change((_, floor) => Object.assign(floor.furniture.find((q) => q.id === drag.id)!, { x, z, rotation }), drag.base, false);
+        break;
+      }
+      case "rotate": {
+        drag.moved = true;
+        const f = drag.base.floors.find((x) => x.id === this._floorId)?.furniture.find((x) => x.id === drag.id);
+        if (!f) return;
+        // the handle sits in front of the item: turn the front towards the pointer
+        let a = (Math.atan2(-(world[0] - f.x), world[1] - f.z) * 180) / Math.PI;
+        const step = e.altKey ? 1 : 15;
+        a = ((Math.round(a / step) * step) % 360 + 360) % 360;
+        this.change((_, floor) => Object.assign(floor.furniture.find((q) => q.id === drag.id)!, { rotation: a }), drag.base, false);
         break;
       }
       case "device": {
@@ -605,6 +630,7 @@ export class Fp3dEditor extends LitElement {
         break;
       case "opening":
       case "furniture":
+      case "rotate":
         if (drag.moved) this.pushHistory(drag.base);
         break;
       case "device":
@@ -909,6 +935,64 @@ export class Fp3dEditor extends LitElement {
     const item: Furniture = { id: uid("furniture"), type, x: round(x), z: round(z), rotation: 0, w, d, h, variant: null };
     this.change((_, f) => f.furniture.push(item));
     this.selectItem("furniture", item.id);
+  }
+
+  /**
+   * Snap a furniture item against the nearest wall of its room: back to the wall (or a side, when it
+   * stands sideways), flush with the wall face. Null when no wall is close enough.
+   */
+  private snapToWall(f: Furniture): { x: number; z: number; rotation: number } | null {
+    const floor = this.floor;
+    if (!floor) return null;
+    const room = floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon([f.x, f.z], r.points));
+    if (!room) return null;
+    const pts = room.points;
+    const sgn = signedArea(pts) >= 0 ? 1 : -1;
+    const half = this._doc.settings.wall_interior / 2;
+    let best: { x: number; z: number; rotation: number; gap: number } | null = null;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1) % pts.length];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (len < 0.3) continue;
+      const u: Vec2 = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
+      // normal into the room
+      const n: Vec2 = [-u[1] * sgn, u[0] * sgn];
+      const along = (f.x - a[0]) * u[0] + (f.z - a[1]) * u[1];
+      if (along < 0 || along > len) continue;
+      // interior walls stand on the room edge, so their face is half the wall thickness inside
+      const shared = floor.rooms.some(
+        (r) =>
+          r.id !== room.id &&
+          r.points.some((p, k) => {
+            const q = r.points[(k + 1) % r.points.length];
+            const d0 = Math.abs((p[0] - a[0]) * n[0] + (p[1] - a[1]) * n[1]);
+            const d1 = Math.abs((q[0] - a[0]) * n[0] + (q[1] - a[1]) * n[1]);
+            return d0 < 0.02 && d1 < 0.02;
+          }),
+      );
+      const face = shared ? half : 0;
+      const dist = (f.x - a[0]) * n[0] + (f.z - a[1]) * n[1] - face;
+      // rotation that turns the back to the wall (front along n)
+      const back = (Math.atan2(-n[0], n[1]) * 180) / Math.PI;
+      const diff = (r: number) => Math.abs(((f.rotation - r + 540) % 360) - 180);
+      const options = [
+        { rotation: back, extent: f.d / 2 },
+        { rotation: back + 90, extent: f.w / 2 },
+        { rotation: back - 90, extent: f.w / 2 },
+      ];
+      const pick = options.reduce((p, q) => (diff(q.rotation) < diff(p.rotation) ? q : p));
+      if (diff(pick.rotation) > 50) continue;
+      const gap = dist - pick.extent;
+      if (Math.abs(gap) > WALL_SNAP || (best && Math.abs(gap) >= Math.abs(best.gap))) continue;
+      best = {
+        x: round(f.x - n[0] * gap),
+        z: round(f.z - n[1] * gap),
+        rotation: ((Math.round(pick.rotation) % 360) + 360) % 360,
+        gap,
+      };
+    }
+    return best ? { x: best.x, z: best.z, rotation: best.rotation } : null;
   }
 
   private updateFurniture(patch: Partial<Furniture>): void {
@@ -1236,18 +1320,32 @@ export class Fp3dEditor extends LitElement {
   }
 
   private renderFurniture(floor: Floor) {
+    const k = this._view.scale;
     return svg`<g>${floor.furniture.map((f) => {
-      const pts = furnitureFootprint(f).map((p) => this.toScreen(p));
       const sel = f.id === this._furnitureId;
-      // front edge (+z side of the item) is drawn brighter
-      const [c, d] = [pts[2], pts[3]];
       const [cx, cy] = this.toScreen([f.x, f.z]);
-      const big = Math.min(f.w, f.d) * this._view.scale > 34;
+      const big = Math.min(f.w, f.d) * k > 44;
+      // the handle sits in front of the item; dragging it turns the item
+      const a = (f.rotation * Math.PI) / 180;
+      const reach = f.d / 2 + Math.max(0.3, 26 / k);
+      const [hx, hy] = this.toScreen([f.x - Math.sin(a) * reach, f.z + Math.cos(a) * reach]);
+      const [fx, fy] = this.toScreen([f.x - Math.sin(a) * (f.d / 2), f.z + Math.cos(a) * (f.d / 2)]);
       return svg`<g data-furniture=${f.id} class=${sel ? "fp3d-furn fp3d-furn-sel" : "fp3d-furn"}>
-        <polygon points=${pts.map((p) => p.join(",")).join(" ")} />
-        <line class="fp3d-furn-front" x1=${c[0]} y1=${c[1]} x2=${d[0]} y2=${d[1]} />
+        <g transform="translate(${cx} ${cy}) rotate(${f.rotation}) scale(${k})">
+          <rect class="fp3d-furn-body" x=${-f.w / 2} y=${-f.d / 2} width=${f.w} height=${f.d} />
+          <g class="fp3d-furn-sym">${furnitureSymbol(f.type, f.w, f.d)}</g>
+          <line class="fp3d-furn-front" x1=${-f.w / 2} y1=${f.d / 2} x2=${f.w / 2} y2=${f.d / 2} />
+        </g>
         ${big ? svg`<text x=${cx} y=${cy + 4}>${this.t(`furn_${f.type}` as I18nKey)}</text>` : nothing}
-      </g>`;
+      </g>
+      ${sel && this.isAdmin
+        ? svg`<g class="fp3d-rotate" data-rotate=${f.id}>
+            <line x1=${fx} y1=${fy} x2=${hx} y2=${hy} />
+            <circle cx=${hx} cy=${hy} r="16" class="fp3d-hit" />
+            <circle cx=${hx} cy=${hy} r="8" />
+            <path d="M${hx - 4} ${hy - 1}a4 4 0 1 1 2 3.5" />
+          </g>`
+        : nothing}`;
     })}</g>`;
   }
 
@@ -1644,6 +1742,7 @@ export class Fp3dEditor extends LitElement {
         ${this.num(this.t("rotation"), f.rotation, (v) => this.updateFurniture({ rotation: ((v % 360) + 360) % 360 }), 1)}
       </div>
       ${f.type === "stairs" ? html`<p class="fp3d-sub">${this.t("stairs_hint")}</p>` : nothing}
+      ${ELECTRIC_FURNITURE.has(f.type) ? this.renderFurnitureLinks(f) : nothing}
       ${admin
         ? html`<div class="fp3d-actions">
             <button class="fp3d-btn" @click=${() => this.rotateFurniture(-90)}>${this.t("rotate_left")}</button>
@@ -1737,12 +1836,34 @@ export class Fp3dEditor extends LitElement {
     </details>`;
   }
 
+  private renderFurnitureLinks(f: Furniture) {
+    if (!this.hass) return nothing;
+    const hass = this.hass;
+    // what "automatic" would choose: resolve with this item's own links cleared
+    const autoPick = (key: "entity" | "power") => {
+      const probe = structuredClone(this._doc.floors);
+      for (const fl of probe) for (const x of fl.furniture) if (x.id === f.id) x[key] = null;
+      return furnitureEntities(hass, probe).get(f.id)?.[key] ?? null;
+    };
+    const media = f.type === "tv_board" || f.type === "tv_wall";
+    const entities = this.entityOptions((id) => (media ? id.startsWith("media_player.") : /^(switch|media_player|fan|input_boolean|climate)\./.test(id)));
+    const power = this.entityOptions((id) => id.startsWith("sensor.") && hass.states[id]?.attributes.device_class === "power");
+    return html`<div class="fp3d-form fp3d-links">
+        ${this.entitySelect(this.t(media ? "furn_entity_tv" : "furn_entity"), f.entity ?? null, autoPick("entity"), entities, (v) => this.updateFurniture({ entity: v }))}
+        ${this.entitySelect(this.t("furn_power"), f.power ?? null, autoPick("power"), power, (v) => this.updateFurniture({ power: v }))}
+      </div>
+      <p class="fp3d-sub">${this.t(media ? "furn_links_hint_tv" : "furn_links_hint")}</p>`;
+  }
+
   private renderFurnitureLibrary() {
     return html`<details class="fp3d-section">
       <summary>${this.t("furniture_add")}</summary>
-      <div class="fp3d-library">
-        ${FURNITURE_TYPES.map((t) => html`<button class="fp3d-btn" @click=${() => this.addFurniture(t)}>${this.t(`furn_${t}` as I18nKey)}</button>`)}
-      </div>
+      ${Object.entries(FURNITURE_GROUPS).map(
+        ([group, types]) => html`<h4 class="fp3d-lib-head">${this.t(`furn_group_${group}` as I18nKey)}</h4>
+          <div class="fp3d-library">
+            ${types.map((t) => html`<button class="fp3d-btn" @click=${() => this.addFurniture(t)}>${this.t(`furn_${t}` as I18nKey)}</button>`)}
+          </div>`,
+      )}
     </details>`;
   }
 
@@ -2184,16 +2305,58 @@ export class Fp3dEditor extends LitElement {
         font-weight: 500;
         font-size: 13px;
       }
-      .fp3d-furn polygon {
+      .fp3d-furn-body {
         fill: rgba(91, 124, 255, 0.1);
         stroke: rgba(91, 124, 255, 0.55);
         stroke-width: 1.2;
+        vector-effect: non-scaling-stroke;
         cursor: grab;
+      }
+      .fp3d-furn-sym * {
+        fill: none;
+        stroke: rgba(150, 175, 255, 0.55);
+        stroke-width: 1;
+        vector-effect: non-scaling-stroke;
+        pointer-events: none;
+      }
+      .fp3d-furn-sym .fp3d-sym-fill {
+        fill: rgba(91, 124, 255, 0.28);
+      }
+      .fp3d-furn-sym .fp3d-sym-strong {
+        stroke: var(--fp3d-accent);
+        stroke-width: 2;
+      }
+      .fp3d-rotate {
+        cursor: grab;
+      }
+      .fp3d-rotate line {
+        stroke: var(--fp3d-accent);
+        stroke-dasharray: 3 3;
+      }
+      .fp3d-rotate circle:not(.fp3d-hit) {
+        fill: #0b1222;
+        stroke: var(--fp3d-accent);
+        stroke-width: 2;
+      }
+      .fp3d-rotate path {
+        fill: none;
+        stroke: var(--fp3d-accent);
+        stroke-width: 1.5;
+        stroke-linecap: round;
+      }
+      .fp3d-lib-head {
+        margin: 10px 0 0;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--fp3d-muted);
       }
       .fp3d-furn-front {
         stroke: var(--fp3d-accent);
-        stroke-width: 2;
-        opacity: 0.7;
+        stroke-width: 2.5;
+        vector-effect: non-scaling-stroke;
+        opacity: 0.8;
         pointer-events: none;
       }
       .fp3d-furn text {
@@ -2202,7 +2365,7 @@ export class Fp3dEditor extends LitElement {
         text-anchor: middle;
         pointer-events: none;
       }
-      .fp3d-furn-sel polygon {
+      .fp3d-furn-sel .fp3d-furn-body {
         fill: rgba(55, 224, 255, 0.16);
         stroke: var(--fp3d-accent);
         stroke-width: 2;

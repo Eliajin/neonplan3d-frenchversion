@@ -45,6 +45,10 @@ export interface Furniture {
   d: number;
   h: number;
   variant: string | null;
+  /** Linked entity, e.g. the TV's media player (null = automatic, "none" = none). */
+  entity?: EntityRef;
+  /** Power sensor (null = automatic: the linked entity's device or a matching name). */
+  power?: EntityRef;
 }
 
 export type LampMount = "ceiling" | "floor" | "table" | "wall";
@@ -149,26 +153,71 @@ export function newFloor(id: string, name: string, elevation: number): Floor {
 export const FURNITURE_TYPES = [
   "sofa",
   "armchair",
+  "stool",
+  "coffee_table",
+  "tv_board",
+  "tv_wall",
+  "sideboard",
+  "shelf",
+  "plant",
+  "rug",
   "table",
+  "table_round",
   "chair",
+  "bench",
+  "corner_bench",
+  "bar_stool",
+  "kitchen",
+  "kitchen_wall",
+  "kitchen_tall",
+  "island",
+  "sink",
+  "stove",
+  "dishwasher",
+  "fridge",
   "bed",
+  "bunk_bed",
   "nightstand",
   "wardrobe",
-  "shelf",
-  "kitchen",
-  "fridge",
-  "stove",
-  "sink",
+  "dresser",
   "bathtub",
   "shower",
   "wc",
   "washbasin",
+  "washer",
+  "dryer",
   "desk",
-  "tv_board",
-  "plant",
-  "rug",
+  "office_chair",
+  "tall_cabinet",
+  "coat_rack",
   "stairs",
 ] as const;
+
+/** Furniture library sections (the editor lists them in this order). */
+export const FURNITURE_GROUPS: Record<string, FurnitureType[]> = {
+  living: ["sofa", "armchair", "stool", "coffee_table", "tv_board", "tv_wall", "sideboard", "shelf", "plant", "rug"],
+  dining: ["table", "table_round", "chair", "bench", "corner_bench", "bar_stool"],
+  kitchen: ["kitchen", "kitchen_wall", "kitchen_tall", "island", "sink", "stove", "dishwasher", "fridge"],
+  sleeping: ["bed", "bunk_bed", "nightstand", "wardrobe", "dresser"],
+  bath: ["bathtub", "shower", "wc", "washbasin", "washer", "dryer"],
+  work: ["desk", "office_chair", "tall_cabinet", "coat_rack", "stairs"],
+};
+
+/** Furniture that can show a linked entity (TV state, power, …). */
+export const ELECTRIC_FURNITURE = new Set<string>([
+  "tv_board",
+  "tv_wall",
+  "desk",
+  "fridge",
+  "stove",
+  "kitchen_tall",
+  "dishwasher",
+  "washer",
+  "dryer",
+  "kitchen",
+  "island",
+  "sink",
+]);
 
 export type FurnitureType = (typeof FURNITURE_TYPES)[number];
 
@@ -195,6 +244,25 @@ export const FURNITURE_SIZE: Record<FurnitureType, [number, number, number]> = {
   plant: [0.45, 0.45, 1.1],
   rug: [2.0, 1.4, 0.01],
   stairs: [1.0, 3.2, 2.75],
+  stool: [0.55, 0.55, 0.42],
+  coffee_table: [1.1, 0.6, 0.42],
+  tv_wall: [1.3, 0.08, 0.75],
+  sideboard: [1.6, 0.45, 0.8],
+  table_round: [1.1, 1.1, 0.75],
+  bench: [1.4, 0.45, 0.85],
+  corner_bench: [2.0, 1.6, 0.9],
+  bar_stool: [0.42, 0.42, 0.75],
+  kitchen_wall: [0.8, 0.35, 0.7],
+  kitchen_tall: [0.6, 0.62, 2.1],
+  island: [1.8, 0.9, 0.92],
+  dishwasher: [0.6, 0.62, 0.92],
+  bunk_bed: [1.0, 2.05, 1.65],
+  dresser: [1.0, 0.5, 0.9],
+  washer: [0.6, 0.6, 0.85],
+  dryer: [0.6, 0.6, 0.85],
+  office_chair: [0.65, 0.65, 1.1],
+  tall_cabinet: [0.6, 0.6, 2.1],
+  coat_rack: [1.0, 0.35, 1.9],
 };
 
 export const OPENING_DEFAULTS = {
@@ -209,6 +277,7 @@ export function normalizeBuilding(b: Building): Building {
   b.presence = b.presence ?? [];
   for (const f of b.floors) {
     f.placements = f.placements.map((p) => ({ ...p, mount: p.mount ?? null }));
+    f.furniture = f.furniture.map((m) => ({ ...m, entity: m.entity ?? null, power: m.power ?? null }));
     f.openings = f.openings.map((o) => ({ ...o, hinge: o.hinge ?? "left", cover: o.cover ?? null, contact: o.contact ?? null, tilt: o.tilt ?? null }));
   }
   return b;

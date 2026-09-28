@@ -259,47 +259,52 @@ export interface FlowInput {
   battery?: { floorId: string; x: number; z: number } | null;
 }
 
-/** All cable segments: consumers (tree from the meter), grid feed, solar riser and battery cable. */
-export function flowSegments({ building, consumers, summary, battery }: FlowInput): FlowSegment[] {
-  const meter = building.energy.meter;
-  if (!meter) return [];
-  const meterFloor = building.floors.find((f) => f.id === meter.floor_id);
-  if (!meterFloor) return [];
-  const out: FlowSegment[] = [];
+/** Cable route independent of the current power: which targets each piece feeds. */
+interface PlannedSegment {
+  floorId: string;
+  a: [number, number, number];
+  b: [number, number, number];
+  dist: number;
+  /** Indices of the targets (consumers, then the battery) fed through this piece. */
+  members: number[];
+  kind: FlowKind;
+}
+
+interface Target {
+  floorId: string;
+  x: number;
+  z: number;
+  kind: FlowKind;
+}
+
+/** Routes per building object and target layout; power changes only re-weigh the planned pieces. */
+const planCache = new WeakMap<Building, Map<string, PlannedSegment[]>>();
+
+function planRoutes(building: Building, targets: Target[]): PlannedSegment[] {
+  const meter = building.energy.meter!;
+  const meterFloor = building.floors.find((f) => f.id === meter.floor_id)!;
+  const out: PlannedSegment[] = [];
   const { wall_exterior: ext, wall_interior: int } = building.settings;
   const riserDist = new Map<string, number>();
-  const floorsAbove = (f: Floor) => f.elevation > meterFloor.elevation;
-
-  // consumers (and the battery when it charges) per floor
-  const byFloor = new Map<string, { id: string; x: number; z: number; power: number; kind: FlowKind }[]>();
-  for (const c of consumers) {
-    const list = byFloor.get(c.floorId) ?? [];
-    list.push({ id: c.id, x: c.x, z: c.z, power: c.power, kind: "consumer" });
-    byFloor.set(c.floorId, list);
-  }
-  if (battery && summary.battery !== null) {
-    const list = byFloor.get(battery.floorId) ?? [];
-    list.push({ id: "__battery", x: battery.x, z: battery.z, power: Math.abs(summary.battery), kind: "battery" });
-    byFloor.set(battery.floorId, list);
-  }
-
+  const byFloor = new Map<string, number[]>();
+  targets.forEach((t, i) => byFloor.set(t.floorId, [...(byFloor.get(t.floorId) ?? []), i]));
   const floorsWithLoad = building.floors.filter((f) => byFloor.has(f.id));
-  // vertical risers at the meter position: power for every floor above/below goes through them
-  const totalOn = (f: Floor) => (byFloor.get(f.id) ?? []).reduce((s, t) => s + t.power, 0);
+
+  // vertical risers at the meter position: power for every other floor goes through them
   for (const f of floorsWithLoad) {
     if (f.id === meterFloor.id) continue;
-    const up = floorsAbove(f);
-    const load = totalOn(f);
+    const up = f.elevation > meterFloor.elevation;
+    const members = byFloor.get(f.id)!;
+    const kind = members.every((m) => targets[m].kind === "battery") ? "battery" : "consumer";
     // on the meter floor: straight up to the ceiling (or down into the slab)
-    out.push({ floorId: meterFloor.id, a: [meter.x, CABLE_Y, meter.z], b: [meter.x, up ? meterFloor.height : -0.2, meter.z], dist: 0, power: load, kind: "consumer" });
+    out.push({ floorId: meterFloor.id, a: [meter.x, CABLE_Y, meter.z], b: [meter.x, up ? meterFloor.height : -0.2, meter.z], dist: 0, members, kind });
     // on the other floor: up out of the slab (or down from the ceiling) to the floor
     const h = Math.abs(f.elevation - meterFloor.elevation);
-    out.push({ floorId: f.id, a: [meter.x, up ? -0.2 : f.height, meter.z], b: [meter.x, CABLE_Y, meter.z], dist: h, power: load, kind: "consumer" });
+    out.push({ floorId: f.id, a: [meter.x, up ? -0.2 : f.height, meter.z], b: [meter.x, CABLE_Y, meter.z], dist: h, members, kind });
     riserDist.set(f.id, h + 0.25);
   }
 
   for (const f of floorsWithLoad) {
-    const targets = byFloor.get(f.id)!;
     const g = buildGraph(f, ext, int);
     const rootRoom = roomAt(f, [meter.x, meter.z]);
     if (!rootRoom) continue;
@@ -307,38 +312,70 @@ export function flowSegments({ building, consumers, summary, battery }: FlowInpu
     const rootAttach = attach(g, rootRoom.id, [meter.x, meter.z]);
     if (rootAttach === null) continue;
     link(g, root, rootAttach);
-    const ends: { node: number; power: number; kind: FlowKind }[] = [];
-    for (const t of targets) {
+    const ends: { node: number; member: number }[] = [];
+    for (const i of byFloor.get(f.id)!) {
+      const t = targets[i];
       const room = roomAt(f, [t.x, t.z]);
       if (!room) continue;
       const node = addNode(g, [t.x, t.z]);
       const at = attach(g, room.id, [t.x, t.z]);
       if (at === null) continue;
       link(g, node, at);
-      ends.push({ node, power: t.power, kind: t.kind });
+      ends.push({ node, member: i });
     }
     const { dist, prev } = dijkstra(g, root);
-    // add up the power on every edge of the tree
-    const edgePower = new Map<string, { a: number; b: number; power: number; kind: FlowKind }>();
+    // collect the targets behind every edge of the tree
+    const edges = new Map<string, { a: number; b: number; members: number[] }>();
     for (const e of ends) {
       if (!Number.isFinite(dist[e.node])) continue;
       for (let v = e.node; prev[v] >= 0; v = prev[v]) {
         const u = prev[v];
         const key = `${u}>${v}`;
-        const cur = edgePower.get(key) ?? { a: u, b: v, power: 0, kind: e.kind };
-        cur.power += e.power;
-        // a cable shared by the battery and consumers is drawn as consumer cable
-        if (cur.kind !== e.kind) cur.kind = "consumer";
-        edgePower.set(key, cur);
+        const cur = edges.get(key) ?? { a: u, b: v, members: [] };
+        cur.members.push(e.member);
+        edges.set(key, cur);
       }
     }
     const base = riserDist.get(f.id) ?? 0;
-    for (const { a, b, power, kind } of edgePower.values()) {
+    for (const { a, b, members } of edges.values()) {
       const pa = g.pos[a];
       const pb = g.pos[b];
-      out.push({ floorId: f.id, a: [pa[0], CABLE_Y, pa[1]], b: [pb[0], CABLE_Y, pb[1]], dist: base + dist[a], power, kind });
+      // a cable shared by the battery and consumers is drawn as consumer cable
+      const kind = members.every((m) => targets[m].kind === "battery") ? "battery" : "consumer";
+      out.push({ floorId: f.id, a: [pa[0], CABLE_Y, pa[1]], b: [pb[0], CABLE_Y, pb[1]], dist: base + dist[a], members, kind });
     }
   }
+  return out;
+}
+
+/** All cable segments: consumers (tree from the meter), grid feed, solar riser and battery cable. */
+export function flowSegments({ building, consumers, summary, battery }: FlowInput): FlowSegment[] {
+  const meter = building.energy.meter;
+  if (!meter) return [];
+  const meterFloor = building.floors.find((f) => f.id === meter.floor_id);
+  if (!meterFloor) return [];
+  const { wall_exterior: ext, wall_interior: int } = building.settings;
+
+  const targets: (Target & { power: number })[] = consumers.map((c) => ({ floorId: c.floorId, x: c.x, z: c.z, kind: "consumer" as FlowKind, power: c.power }));
+  if (battery && summary.battery !== null) targets.push({ ...battery, kind: "battery", power: Math.abs(summary.battery) });
+  const key = `${meter.floor_id}:${meter.x},${meter.z}|${targets.map((t) => `${t.floorId}:${t.x},${t.z}:${t.kind}`).join(";")}`;
+  let perBuilding = planCache.get(building);
+  if (!perBuilding) planCache.set(building, (perBuilding = new Map()));
+  let plan = perBuilding.get(key);
+  if (!plan) {
+    plan = planRoutes(building, targets);
+    // one layout per building is enough (a new building object comes with every edit)
+    perBuilding.clear();
+    perBuilding.set(key, plan);
+  }
+  const out: FlowSegment[] = plan.map((s) => ({
+    floorId: s.floorId,
+    a: s.a,
+    b: s.b,
+    dist: s.dist,
+    power: s.members.reduce((sum, m) => sum + targets[m].power, 0),
+    kind: s.kind,
+  }));
 
   // grid feed: from outside through the nearest exterior wall to the meter
   if (summary.grid !== null) {

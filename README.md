@@ -16,7 +16,10 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
   - Mouse and touch: pinch to zoom, pan with two fingers.
 - **Automatic walls**: each shared edge becomes an interior wall, outer edges become exterior walls. Corners and T-junctions are mitred. Wall thickness is configurable.
 - **Doors, windows and garage doors**: tap a wall with the door, window or garage door tool, then drag them along the wall. Width, sill, height and hinge side are adjustable; a window with sill 0 is a terrace door.
-- **Furniture library**: sofa, armchair, table, chair, bed, nightstand, wardrobe, shelf, kitchen unit, fridge, stove, sink, bathtub, shower, WC, washbasin, desk, TV board, plant, rug and stairs, as detailed low-poly models. Move, rotate, resize, duplicate.
+- **Furniture library** of 40 detailed low-poly models in six sections (living, dining, kitchen, sleeping, bath & laundry, work), e.g. sofa, corner bench, bar stool, office chair, wall and tall kitchen units with oven, kitchen island, dishwasher, washing machine, dryer, bunk bed, chest of drawers, coat rack, wall TV and stairs.
+  - Top-view symbols in the plan show how an item is turned; a handle in front of the selected item rotates it (15° steps).
+  - Dragged near a wall, an item turns its back (or side) to the wall and sits flush; Alt moves freely.
+  - Electric furniture can be linked to entities (automatically from the room's area, or by hand): a TV shows its media player, with the screen glowing in the colour of the running app (Netflix, YouTube, …) and the app or title on its label; a power sensor adds watts and an energy cable.
 - **Stairs** open the ceiling of the floor above.
 - **Floor materials** (wood, oak, tiles, carpet, stone, concrete) show as subtle patterns in 3D.
 - **Area link**: each room can be linked to a Home Assistant area.
