@@ -9,6 +9,7 @@ import {
   AdditiveBlending,
   Box3,
   CanvasTexture,
+  ClampToEdgeWrapping,
   Color,
   DoubleSide,
   Group,
@@ -33,8 +34,12 @@ import {
 } from "three";
 import type { Building, Floor } from "../model.ts";
 import { centroid } from "../model.ts";
-import { buildFloorGeometry, NEON, SLAB, type FloorGeometry } from "./build.ts";
+import { buildFloorGeometry, SLAB, stairHoles, type FloorGeometry } from "./build.ts";
 import { OrbitControls } from "./controls.ts";
+import { makeFoldable, type FoldMask } from "./fold.ts";
+import { buildOpeningParts, CLOSED, type OpeningState } from "./openings.ts";
+
+export type { OpeningState } from "./openings.ts";
 
 export type Quality = "auto" | "low" | "high";
 export type WallMode = "auto" | "cut";
@@ -92,15 +97,19 @@ const FLOOR_TAU = 140;
 const GROUND_CELLS = 32;
 /** Press duration that counts as a long press (ms). */
 const HOLD_MS = 500;
+/** Time constant of window and blind movements (ms). */
+const OPENING_TAU = 160;
 
 interface FloorMaterials {
   floor: MeshBasicMaterial;
-  grid: MeshBasicMaterial;
+  pattern: MeshBasicMaterial;
   wall: MeshBasicMaterial;
   shadow: MeshBasicMaterial;
-  edge: LineBasicMaterial;
-  soft: LineBasicMaterial;
+  lines: LineBasicMaterial;
   glow: MeshBasicMaterial;
+  frames: MeshBasicMaterial;
+  glass: MeshBasicMaterial;
+  blinds: MeshBasicMaterial;
 }
 
 interface FloorView {
@@ -112,16 +121,24 @@ interface FloorView {
   floorMesh: Mesh;
   shadowMesh: Mesh;
   glowMesh: Mesh;
+  framesMesh: Mesh;
+  glassMesh: Mesh;
+  blindsMesh: Mesh;
   materials: FloorMaterials;
+  /** Bit mask of the wall buckets that currently stand (read by the fold shader patch). */
+  mask: FoldMask;
+  /** Shown opening states (animated towards the targets set from Home Assistant). */
+  openings: Map<string, OpeningState>;
   /** Current and target height offset and opacity. */
   y: number;
   o: number;
   ty: number;
   to: number;
   appliedO: number;
-  buckets: { normal: [number, number] | null; upper: Mesh; upperLines: LineSegments; cutLines: LineSegments }[];
   label: HTMLButtonElement;
 }
+
+const ACTIVE_FLOOR = new Color(0x1a2a4d);
 
 export function isLowEnd(): boolean {
   const nav = navigator as Navigator & { deviceMemory?: number };
@@ -139,7 +156,9 @@ export class FloorplanViewer {
   private controls: OrbitControls;
   private readonly labels: HTMLDivElement;
   private readonly root = new Group();
-  private readonly gridTexture: CanvasTexture;
+  private readonly patternTexture: CanvasTexture;
+  private readonly blindTexture: CanvasTexture;
+  private openingTargets = new Map<string, OpeningState>();
   private readonly groundTexture: CanvasTexture;
   private readonly glowTexture: CanvasTexture;
   private devices: DeviceMarker[] = [];
@@ -166,7 +185,8 @@ export class FloorplanViewer {
     this.labels = document.createElement("div");
     this.labels.className = "fp3d-labels";
     host.append(this.labels);
-    this.gridTexture = makeGridTexture();
+    this.patternTexture = makePatternTexture();
+    this.blindTexture = makeBlindTexture();
     this.groundTexture = makeGroundTexture();
     this.glowTexture = makeGlowTexture();
     this.ground = new Mesh(
@@ -279,6 +299,12 @@ export class FloorplanViewer {
     this.invalidate();
   }
 
+  /** Target states of doors and windows (sashes and blinds move there smoothly). */
+  setOpeningStates(states: Map<string, OpeningState>): void {
+    this.openingTargets = states;
+    this.invalidate();
+  }
+
   resetView(): void {
     this.fit(700);
   }
@@ -292,7 +318,8 @@ export class FloorplanViewer {
     this.clear();
     this.ground.geometry.dispose();
     (this.ground.material as Material).dispose();
-    this.gridTexture.dispose();
+    this.patternTexture.dispose();
+    this.blindTexture.dispose();
     this.groundTexture.dispose();
     this.glowTexture.dispose();
     this.renderer.dispose();
@@ -428,18 +455,11 @@ export class FloorplanViewer {
     fv.glowMesh.visible = p.length > 0;
   }
 
-  private makeMaterials(): FloorMaterials {
+  private makeMaterials(mask: FoldMask): FloorMaterials {
     return {
       floor: new MeshBasicMaterial({ vertexColors: true }),
-      grid: new MeshBasicMaterial({
-        map: this.gridTexture,
-        transparent: true,
-        blending: AdditiveBlending,
-        depthWrite: false,
-        polygonOffset: true,
-        polygonOffsetFactor: -2,
-      }),
-      wall: new MeshBasicMaterial({ vertexColors: true }),
+      pattern: patternMaterial(this.patternTexture),
+      wall: makeFoldable(new MeshBasicMaterial({ vertexColors: true }), mask),
       // result = floor colour * vertex colour (white leaves the floor untouched)
       shadow: new MeshBasicMaterial({
         vertexColors: true,
@@ -451,8 +471,7 @@ export class FloorplanViewer {
         polygonOffset: true,
         polygonOffsetFactor: -1,
       }),
-      edge: new LineBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false }),
-      soft: new LineBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false }),
+      lines: makeFoldable(new LineBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false }), mask),
       glow: new MeshBasicMaterial({
         map: this.glowTexture,
         vertexColors: true,
@@ -463,35 +482,42 @@ export class FloorplanViewer {
         polygonOffset: true,
         polygonOffsetFactor: -3,
       }),
+      frames: makeFoldable(new MeshBasicMaterial({ vertexColors: true, side: DoubleSide }), mask),
+      glass: makeFoldable(
+        new MeshBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false, side: DoubleSide }),
+        mask,
+      ),
+      blinds: makeFoldable(new MeshBasicMaterial({ map: this.blindTexture, side: DoubleSide }), mask),
     };
   }
 
   private rebuild(): void {
     const previous = new Map(this.floors.map((f) => [f.floor.id, { y: f.y, o: f.o }]));
+    const previousOpenings = new Map(this.floors.map((f) => [f.floor.id, f.openings]));
     this.clear();
     const b = this.building;
     if (!b) return;
     const ordered = [...b.floors].sort((p, q) => p.elevation - q.elevation);
     for (const floor of b.floors) {
-      const geo = buildFloorGeometry(floor, b.settings.wall_exterior, b.settings.wall_interior);
-      const materials = this.makeMaterials();
+      const geo = buildFloorGeometry(floor, b.settings.wall_exterior, b.settings.wall_interior, stairHoles(b.floors, floor));
+      const mask: FoldMask = { value: 0xffff };
+      const materials = this.makeMaterials(mask);
       const group = new Group();
       const floorMesh = new Mesh(geo.floor, materials.floor);
       const shadowMesh = new Mesh(geo.shadow, materials.shadow);
       shadowMesh.renderOrder = 1;
-      const grid = new Mesh(geo.floor, materials.grid);
-      grid.renderOrder = 2;
+      const pattern = new Mesh(geo.floor, materials.pattern);
+      pattern.renderOrder = 2;
       const glowMesh = new Mesh(new Geometry(), materials.glow);
       glowMesh.renderOrder = 3;
       glowMesh.visible = false;
-      group.add(floorMesh, shadowMesh, grid, glowMesh, new Mesh(geo.lower, materials.wall), new LineSegments(geo.lowerLines, materials.soft));
-      const buckets = geo.buckets.map((bk) => {
-        const upper = new Mesh(bk.upper, materials.wall);
-        const upperLines = new LineSegments(bk.upperLines, materials.edge);
-        const cutLines = new LineSegments(bk.cutLines, materials.edge);
-        group.add(upper, upperLines, cutLines);
-        return { normal: bk.normal, upper, upperLines, cutLines };
-      });
+      const framesMesh = new Mesh(new Geometry(), materials.frames);
+      const blindsMesh = new Mesh(new Geometry(), materials.blinds);
+      const glassMesh = new Mesh(new Geometry(), materials.glass);
+      glassMesh.renderOrder = 4;
+      // the fold shader moves hidden parts, so the bounding spheres must not cull them early
+      for (const m of [framesMesh, blindsMesh, glassMesh]) m.frustumCulled = false;
+      group.add(floorMesh, shadowMesh, pattern, glowMesh, new Mesh(geo.walls, materials.wall), new LineSegments(geo.lines, materials.lines), framesMesh, blindsMesh, glassMesh);
       this.root.add(group);
 
       const label = document.createElement("button");
@@ -514,13 +540,17 @@ export class FloorplanViewer {
         floorMesh,
         shadowMesh,
         glowMesh,
+        framesMesh,
+        glassMesh,
+        blindsMesh,
         materials,
+        mask,
+        openings: new Map(),
         y: prev?.y ?? 0,
         o: prev?.o ?? 1,
         ty: 0,
         to: 1,
         appliedO: -1,
-        buckets,
         label,
       });
       for (const room of floor.rooms) {
@@ -534,7 +564,12 @@ export class FloorplanViewer {
       }
     }
     if (this.floorId && !b.floors.some((f) => f.id === this.floorId)) this.floorId = null;
-    for (const fv of this.floors) this.buildGlow(fv);
+    for (const fv of this.floors) {
+      this.buildGlow(fv);
+      const prev = previousOpenings.get(fv.floor.id);
+      for (const info of fv.geo.openings) fv.openings.set(info.opening.id, prev?.get(info.opening.id) ?? this.openingTargets.get(info.opening.id) ?? CLOSED);
+      this.buildOpenings(fv);
+    }
     this.applyTargets(previous.size === 0);
     this.applyHighlight();
   }
@@ -578,7 +613,7 @@ export class FloorplanViewer {
     fv.appliedO = fv.o;
     const m = fv.materials;
     const solid = fv.o > 0.999;
-    for (const mat of [m.floor, m.wall]) {
+    for (const mat of [m.floor, m.wall, m.frames, m.blinds]) {
       if (mat.transparent === solid) {
         mat.transparent = !solid;
         mat.depthWrite = solid;
@@ -586,10 +621,10 @@ export class FloorplanViewer {
       }
       mat.opacity = fv.o;
     }
-    m.grid.opacity = fv.o;
+    m.pattern.opacity = fv.o;
     m.glow.opacity = fv.o;
-    m.edge.opacity = fv.o;
-    m.soft.opacity = fv.o;
+    m.lines.opacity = fv.o;
+    m.glass.opacity = fv.o;
   }
 
   /** Advance the floor animation; returns true while something still moves. */
@@ -615,6 +650,57 @@ export class FloorplanViewer {
     return moving;
   }
 
+  /** Move sashes and blinds towards their targets; returns true while something still moves. */
+  private stepOpenings(dt: number): boolean {
+    let moving = false;
+    const k = 1 - Math.exp(-dt / OPENING_TAU);
+    for (const fv of this.floors) {
+      let changed = false;
+      for (const [id, cur] of fv.openings) {
+        const target = this.openingTargets.get(id) ?? CLOSED;
+        const next = { ...cur };
+        let busy = false;
+        for (const key of ["open", "tilt"] as const) {
+          const d = target[key] - cur[key];
+          if (Math.abs(d) < 0.003) next[key] = target[key];
+          else {
+            next[key] = cur[key] + d * k;
+            busy = true;
+          }
+        }
+        if (target.cover === null || cur.cover === null) next.cover = target.cover;
+        else {
+          const d = target.cover - cur.cover;
+          if (Math.abs(d) < 0.003) next.cover = target.cover;
+          else {
+            next.cover = cur.cover + d * k;
+            busy = true;
+          }
+        }
+        if (next.open !== cur.open || next.tilt !== cur.tilt || next.cover !== cur.cover) {
+          fv.openings.set(id, next);
+          changed = true;
+        }
+        moving ||= busy;
+      }
+      if (changed) this.buildOpenings(fv);
+    }
+    return moving;
+  }
+
+  private buildOpenings(fv: FloorView): void {
+    const parts = buildOpeningParts(fv.geo.openings, fv.openings, Math.min(fv.floor.cut_height, fv.floor.height));
+    for (const [mesh, geo] of [
+      [fv.framesMesh, parts.frames],
+      [fv.glassMesh, parts.glass],
+      [fv.blindsMesh, parts.blinds],
+    ] as const) {
+      mesh.geometry.dispose();
+      mesh.geometry = geo;
+      mesh.visible = geo.getAttribute("position").count > 0;
+    }
+  }
+
   /** Floors that can be tapped and are framed by the camera: the whole house or the selected floor. */
   private activeFloors(): FloorView[] {
     return this.floors.filter((f) => f.to > 0.99);
@@ -623,10 +709,9 @@ export class FloorplanViewer {
   private applyHighlight(): void {
     for (const fv of this.floors) {
       const colors = fv.geo.floor.getAttribute("color");
-      const base = new Color(NEON.floor);
-      const active = new Color(NEON.floorActive);
       for (const r of fv.geo.roomTris) {
-        const c = r.roomId === this.roomId ? active : base;
+        const c = new Color(r.color);
+        if (r.roomId === this.roomId) c.lerp(ACTIVE_FLOOR, 0.75);
         for (let v = r.start * 3; v < r.end * 3; v++) colors.setXYZ(v, c.r, c.g, c.b);
       }
       colors.needsUpdate = true;
@@ -707,7 +792,8 @@ export class FloorplanViewer {
     const dt = this.lastFrame ? Math.min(100, now - this.lastFrame) : 16;
     const cameraMoving = this.controls.update(now);
     const floorsMoving = this.stepFloors(dt);
-    const moving = cameraMoving || floorsMoving;
+    const openingsMoving = this.stepOpenings(dt);
+    const moving = cameraMoving || floorsMoving || openingsMoving;
     this.lastFrame = moving ? now : 0;
     this.updateWalls();
     this.renderer.render(this.scene, this.camera);
@@ -716,7 +802,7 @@ export class FloorplanViewer {
     if (moving) this.invalidate();
   }
 
-  /** Upper wall parts facing the camera fold down to the cut height. */
+  /** Upper wall parts facing the camera fold down to the cut height (bit mask for the fold shader). */
   private updateWalls(): void {
     const cam = this.camera.position;
     const t = this.controls.view.target;
@@ -726,14 +812,14 @@ export class FloorplanViewer {
     for (const fv of this.floors) {
       // in a room, its floor's interior walls fold down as well
       const inRoom = this.roomId !== null && fv.floor.rooms.some((r) => r.id === this.roomId);
-      for (const bk of fv.buckets) {
+      let mask = 0;
+      fv.geo.buckets.forEach((normal, b) => {
         let show = this.wallMode !== "cut";
-        if (show && bk.normal) show = (bk.normal[0] * dx) / l + (bk.normal[1] * dz) / l < 0.25;
+        if (show && normal) show = (normal[0] * dx) / l + (normal[1] * dz) / l < 0.25;
         else if (show && inRoom) show = false;
-        bk.upper.visible = show;
-        bk.upperLines.visible = show;
-        bk.cutLines.visible = !show;
-      }
+        if (show) mask |= 1 << b;
+      });
+      fv.mask.value = mask;
     }
   }
 
@@ -823,27 +909,125 @@ export class FloorplanViewer {
   }
 }
 
-/** Faint cyan grid: 1 texture tile = 1 m, lines every 0.5 m. */
-function makeGridTexture(): CanvasTexture {
-  const size = 128;
+/** Pattern atlas: 3 × 2 tiles of 1 m each (wood, oak, tiles / carpet, stone, concrete), faint cyan lines. */
+function makePatternTexture(): CanvasTexture {
+  const T = 256;
   const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
+  canvas.width = T * 3;
+  canvas.height = T * 2;
   const ctx = canvas.getContext("2d")!;
-  ctx.strokeStyle = "rgba(55,224,255,0.09)";
-  ctx.lineWidth = 1.5;
-  for (const p of [0.75, size / 2]) {
+  const line = (x0: number, y0: number, x1: number, y1: number, alpha: number) => {
+    ctx.strokeStyle = `rgba(55,224,255,${alpha})`;
     ctx.beginPath();
-    ctx.moveTo(p, 0);
-    ctx.lineTo(p, size);
-    ctx.moveTo(0, p);
-    ctx.lineTo(size, p);
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
     ctx.stroke();
-  }
+  };
+  ctx.lineWidth = 1.5;
+  const tile = (col: number, row: number, draw: (ox: number, oy: number) => void) => {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(col * T, row * T, T, T);
+    ctx.clip();
+    draw(col * T, row * T);
+    ctx.restore();
+  };
+  // wood: planks 0.2 m wide along x with staggered joints
+  tile(0, 0, (ox, oy) => {
+    for (let i = 0; i < 5; i++) {
+      const y = oy + (i * T) / 5 + 0.75;
+      line(ox, y, ox + T, y, 0.09);
+      const j = ox + ((i * 0.37) % 1) * T;
+      line(j, y, j, y + T / 5, 0.07);
+    }
+  });
+  // oak: narrower planks along z
+  tile(1, 0, (ox, oy) => {
+    for (let i = 0; i < 7; i++) {
+      const x = ox + (i * T) / 7 + 0.75;
+      line(x, oy, x, oy + T, 0.08);
+      const j = oy + ((i * 0.53) % 1) * T;
+      line(x, j, x + T / 7, j, 0.06);
+    }
+  });
+  // tiles: 0.25 m grid
+  tile(2, 0, (ox, oy) => {
+    for (let i = 0; i < 4; i++) {
+      const p = (i * T) / 4 + 0.75;
+      line(ox + p, oy, ox + p, oy + T, 0.1);
+      line(ox, oy + p, ox + T, oy + p, 0.1);
+    }
+  });
+  // carpet: plain (also used for slab sides)
+  // stone: 0.5 m slabs in a running bond
+  tile(1, 1, (ox, oy) => {
+    for (let r = 0; r < 2; r++) {
+      const y = oy + (r * T) / 2 + 0.75;
+      line(ox, y, ox + T, y, 0.09);
+      const shift = r ? T / 4 : 0;
+      for (const x of [shift, shift + T / 2]) line(ox + x + 0.75, y, ox + x + 0.75, y + T / 2, 0.09);
+    }
+  });
+  // concrete: 1 m grid and a faint speckle
+  tile(2, 1, (ox, oy) => {
+    line(ox + 0.75, oy, ox + 0.75, oy + T, 0.08);
+    line(ox, oy + 0.75, ox + T, oy + 0.75, 0.08);
+    ctx.fillStyle = "rgba(55,224,255,0.05)";
+    for (let i = 0; i < 90; i++) ctx.fillRect(ox + ((i * 97) % T), oy + ((i * 61 + (i * i) % 37) % T), 2, 2);
+  });
+  const tex = new CanvasTexture(canvas);
+  tex.flipY = false;
+  tex.wrapS = ClampToEdgeWrapping;
+  tex.wrapT = ClampToEdgeWrapping;
+  tex.anisotropy = 4;
+  tex.colorSpace = SRGBColorSpace;
+  return tex;
+}
+
+/** Additive floor pattern: picks the atlas tile per vertex and repeats it every metre. */
+function patternMaterial(texture: CanvasTexture): MeshBasicMaterial {
+  const m = new MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    blending: AdditiveBlending,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+  });
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nattribute vec2 tile;\nvarying vec2 vFp3dTile;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFp3dTile = tile;");
+    shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec2 vFp3dTile;").replace(
+      "#include <map_fragment>",
+      `#ifdef USE_MAP
+        vec2 fp3dCell = fract(vMapUv);
+        vec2 fp3dUv = (vFp3dTile + 0.004 + fp3dCell * 0.992) / vec2(3.0, 2.0);
+        // gradients of the unwrapped coordinates avoid mip seams at the tile borders
+        vec4 sampledDiffuseColor = textureGrad(map, fp3dUv, dFdx(vMapUv) / vec2(3.0, 2.0), dFdy(vMapUv) / vec2(3.0, 2.0));
+        diffuseColor *= sampledDiffuseColor;
+      #endif`,
+    );
+  };
+  m.customProgramCacheKey = () => "fp3d-pattern";
+  return m;
+}
+
+/** Blind slats: dark stripes with a faint cyan edge, repeated along v. */
+function makeBlindTexture(): CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 8;
+  canvas.height = 32;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#1a2742";
+  ctx.fillRect(0, 0, 8, 32);
+  ctx.fillStyle = "#223556";
+  ctx.fillRect(0, 4, 8, 14);
+  ctx.fillStyle = "rgba(55,224,255,0.45)";
+  ctx.fillRect(0, 29, 8, 2);
   const tex = new CanvasTexture(canvas);
   tex.wrapS = RepeatWrapping;
   tex.wrapT = RepeatWrapping;
-  tex.anisotropy = 4;
   tex.colorSpace = SRGBColorSpace;
   return tex;
 }

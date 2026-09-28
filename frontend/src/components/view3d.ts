@@ -2,7 +2,7 @@
 
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import { translate } from "../i18n.ts";
-import { kindOf, TOGGLE_KINDS } from "../devices.ts";
+import { kindOf, openingEntities, openingState, TOGGLE_KINDS, type OpeningEntities } from "../devices.ts";
 import { load3d } from "../load3d.ts";
 import { buildMarkers, openMoreInfo, placedEntities, toggleEntity } from "../markers.ts";
 import type { Building } from "../model.ts";
@@ -39,6 +39,9 @@ export class Fp3dView3d extends LitElement {
   private starting = false;
   /** States of the placed entities as last sent to the viewer. */
   private shownStates = new Map<string, HassEntity | undefined>();
+  /** Entities of each door and window, and the registry they were matched with. */
+  private openingLinks: Map<string, OpeningEntities> | null = null;
+  private linkedRegistry: HomeAssistant["entities"] | undefined;
 
   constructor() {
     super();
@@ -111,15 +114,25 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("quality") && changed.get("quality") !== undefined) v.setQuality(this.quality);
   }
 
-  /** Send device markers to the viewer when a placed entity's state (or the building) changed. */
+  /**
+   * Send device markers and door/window states to the viewer when a relevant entity changed (or the
+   * building). Openings are matched with entities again when the building or the registry changes.
+   */
   private syncDevices(force: boolean): void {
     const v = this.viewer;
     if (!v || !this.building || !this.hass) return;
-    const ids = placedEntities(this.building);
+    if (force || !this.openingLinks || this.linkedRegistry !== this.hass.entities) {
+      this.openingLinks = openingEntities(this.hass, this.building.floors);
+      this.linkedRegistry = this.hass.entities;
+      force = true;
+    }
+    const links = [...this.openingLinks.values()].flatMap((e) => [e.cover, e.contact, e.tilt]).filter((id): id is string => !!id);
+    const ids = [...placedEntities(this.building), ...links];
     const changed = force || ids.length !== this.shownStates.size || ids.some((id) => this.shownStates.get(id) !== this.hass.states[id]);
     if (!changed) return;
     this.shownStates = new Map(ids.map((id) => [id, this.hass.states[id]]));
     v.setDevices(buildMarkers(this.hass, this.building));
+    v.setOpeningStates(new Map([...this.openingLinks].map(([id, e]) => [id, openingState(this.hass, e)])));
   }
 
   private onDeviceTap(entityId: string): void {

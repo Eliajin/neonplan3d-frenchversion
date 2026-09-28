@@ -2,7 +2,7 @@
 
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 import { fetchBuilding, saveBuilding, subscribeBuilding } from "./api.ts";
-import type { Building } from "./model.ts";
+import { normalizeBuilding, type Building } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
 
 export type SaveState = "idle" | "saving" | "saved" | "error";
@@ -101,7 +101,7 @@ export class BuildingController implements ReactiveController {
     if (!this.hass) return;
     try {
       const res = await fetchBuilding(this.hass);
-      this.building = res.building;
+      this.building = normalizeBuilding(res.building);
       this.revision = res.revision;
       this.error = null;
     } catch (err) {

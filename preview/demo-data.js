@@ -99,7 +99,7 @@ const DEVICES = [
   light("kinderzimmer", "Kinderzimmer Decke", "kinderzimmer", true, { brightness: 150 }),
   light("schreibtisch", "Schreibtischlampe", "arbeitszimmer", true, { color_temp_kelvin: 4500 }),
   entity("cover.wohnzimmer", "wohnzimmer", "open", { friendly_name: "Wohnzimmer Rollladen", current_position: 70, supported_features: 15 }),
-  entity("cover.kueche", "kueche", "closed", { friendly_name: "Rollladen Küche", current_position: 0, supported_features: 15 }),
+  entity("cover.kueche", "kueche", "open", { friendly_name: "Rollladen Küche", current_position: 40, supported_features: 15 }),
   entity("climate.wohnzimmer", "wohnzimmer", "heat", {
     friendly_name: "Wohnzimmer Heizung",
     current_temperature: 21.4,
@@ -125,6 +125,9 @@ const DEVICES = [
   entity("sensor.wohnzimmer_feuchte", "wohnzimmer", "48", { friendly_name: "Wohnzimmer Luftfeuchtigkeit", device_class: "humidity", unit_of_measurement: "%" }),
   entity("binary_sensor.kueche_fenster", "kueche", "on", { friendly_name: "Küche Fenster", device_class: "window" }),
   entity("binary_sensor.flur_bewegung", "flur", "off", { friendly_name: "Flur Bewegung", device_class: "motion" }),
+  entity("binary_sensor.wohnzimmer_terrasse", "wohnzimmer", "on", { friendly_name: "Terrassentür", device_class: "opening" }),
+  entity("binary_sensor.schlafzimmer_fenster", "schlafzimmer", "on", { friendly_name: "Schlafzimmer Fenster", device_class: "window" }),
+  entity("binary_sensor.schlafzimmer_kipp", "schlafzimmer", "on", { friendly_name: "Schlafzimmer Fenster gekippt", device_class: "window" }),
   entity("scene.wohnzimmer_film", "wohnzimmer", "2024-01-01T00:00:00", { friendly_name: "Wohnzimmer Film" }),
   entity("scene.wohnzimmer_lesen", "wohnzimmer", "2024-01-01T00:00:00", { friendly_name: "Wohnzimmer Lesen" }),
   entity("script.gute_nacht", "schlafzimmer", "off", { friendly_name: "Gute Nacht" }),
@@ -149,3 +152,86 @@ DEMO_BUILDING.floors[0].placements = [
   place("light.flur", 8.8, 6.9),
 ];
 DEMO_BUILDING.floors[1].placements = [place("light.kinderzimmer", 2.9, 2.8), place("light.schreibtisch", 6.2, 1.2)];
+
+// Invented doors, windows and furniture for the preview.
+let openingId = 0;
+const hole = (type, room_id, edge, offset, width, extra = {}) => ({
+  id: `o${++openingId}`,
+  room_id,
+  edge,
+  offset,
+  width,
+  type,
+  sill: type === "door" ? 0 : 0.9,
+  height: type === "door" ? 2.05 : 1.3,
+  hinge: "left",
+  cover: null,
+  contact: null,
+  tilt: null,
+  ...extra,
+});
+const terrace = { sill: 0, height: 2.15 };
+DEMO_BUILDING.floors[0].openings = [
+  hole("window", "wohnen", 0, 1.6, 1.4, { contact: "none" }),
+  hole("window", "wohnen", 0, 4.3, 1.8, { ...terrace, contact: "binary_sensor.wohnzimmer_terrasse", hinge: "right" }),
+  hole("window", "wohnen", 3, 2.3, 1.2, { contact: "none" }),
+  hole("door", "wohnen", 1, 3.4, 0.9),
+  hole("door", "wohnen", 2, 4.2, 0.9),
+  hole("window", "kueche", 0, 2.4, 1.2),
+  hole("window", "kueche", 1, 2.6, 1.0),
+  hole("door", "kueche", 2, 1.6, 0.9),
+  hole("window", "schlafen", 2, 2.2, 1.4, { contact: "binary_sensor.schlafzimmer_fenster", tilt: "binary_sensor.schlafzimmer_kipp" }),
+  hole("window", "schlafen", 3, 1.7, 1.0, { contact: "none" }),
+  hole("window", "bad", 2, 1.2, 0.8, { sill: 1.3, height: 0.8 }),
+  hole("door", "bad", 1, 1.2, 0.8),
+  hole("door", "flur", 4, 0.8, 1.0),
+];
+DEMO_BUILDING.floors[1].openings = [
+  hole("window", "kind", 0, 2.2, 1.2),
+  hole("window", "arbeit", 0, 2.8, 1.6),
+  hole("window", "gast", 2, 3.0, 1.2),
+  hole("door", "kind", 1, 3.3, 0.9),
+];
+
+let furnitureId = 0;
+const item = (type, x, z, w, d, h, rotation = 0) => ({ id: `m${++furnitureId}`, type, x, z, w, d, h, rotation, variant: null });
+DEMO_BUILDING.floors[0].furniture = [
+  item("rug", 2.4, 2.3, 2.6, 1.7, 0.01),
+  item("sofa", 2.4, 3.7, 2.3, 0.92, 0.82, 180),
+  item("armchair", 0.75, 2.2, 0.85, 0.85, 0.8, 270),
+  item("tv_board", 2.4, 0.25, 1.8, 0.42, 0.5),
+  item("plant", 5.55, 0.45, 0.5, 0.5, 1.2),
+  item("shelf", 5.8, 2.6, 0.9, 0.35, 1.9, 90),
+  item("fridge", 6.35, 0.36, 0.6, 0.66, 1.85),
+  item("kitchen", 7.25, 0.31, 1.2, 0.62, 0.92),
+  item("stove", 8.15, 0.31, 0.6, 0.62, 0.92),
+  item("sink", 8.9, 0.31, 0.9, 0.62, 0.92),
+  item("kitchen", 9.65, 0.31, 0.6, 0.62, 0.92),
+  item("table", 8.0, 2.9, 1.4, 0.85, 0.75),
+  item("chair", 7.6, 2.2, 0.45, 0.5, 0.9),
+  item("chair", 8.4, 2.2, 0.45, 0.5, 0.9),
+  item("chair", 7.6, 3.6, 0.45, 0.5, 0.9, 180),
+  item("chair", 8.4, 3.6, 0.45, 0.5, 0.9, 180),
+  item("bed", 2.2, 6.97, 1.6, 2.05, 0.9, 180),
+  item("nightstand", 1.1, 7.78, 0.45, 0.4, 0.5, 180),
+  item("nightstand", 3.3, 7.78, 0.45, 0.4, 0.5, 180),
+  item("wardrobe", 0.31, 5.55, 1.6, 0.6, 2.1, 270),
+  item("bathtub", 5.6, 7.6, 1.7, 0.75, 0.58, 180),
+  item("wc", 4.72, 5.35, 0.38, 0.6, 0.8, 270),
+  item("washbasin", 6.55, 5.3, 0.6, 0.46, 0.85, 90),
+  item("stairs", 9.42, 6.3, 1.0, 3.2, 2.75),
+  item("wardrobe", 7.1, 6.4, 1.2, 0.4, 2.0, 270),
+];
+DEMO_BUILDING.floors[1].furniture = [
+  item("bed", 1.0, 1.4, 1.0, 2.05, 0.8, 90),
+  item("desk", 2.8, 3.8, 1.2, 0.6, 0.75, 180),
+  item("rug", 2.2, 2.6, 1.6, 1.2, 0.01),
+  item("desk", 7.2, 0.36, 1.6, 0.7, 0.75),
+  item("chair", 7.2, 1.1, 0.46, 0.5, 0.9, 180),
+  item("shelf", 9.8, 2.1, 1.2, 0.35, 1.9, 90),
+  item("sofa", 5.4, 3.6, 1.9, 0.85, 0.8, 180),
+  item("bed", 5.0, 6.9, 1.4, 2.0, 0.85, 180),
+  item("wardrobe", 3.72, 5.4, 1.4, 0.6, 2.1, 270),
+  item("bathtub", 0.45, 6.1, 1.7, 0.75, 0.58, 90),
+  item("washbasin", 2.1, 4.5, 0.6, 0.46, 0.85),
+];

@@ -45,6 +45,8 @@ const shots = [
   { name: "editor", query: "", width: 1280, height: 800, editor: true },
   { name: "editor-room", query: "", width: 1280, height: 800, editor: true, select: "Wohnzimmer" },
   { name: "editor-devices", query: "", width: 1280, height: 800, editor: true, select: "Küche", scrollSide: true },
+  { name: "editor-opening", query: "", width: 1280, height: 800, editor: true, editorState: { _openingId: "o2", _roomId: "wohnen" } },
+  { name: "editor-furniture", query: "", width: 1280, height: 800, editor: true, editorState: { _furnitureId: "m2" } },
   { name: "tablet", query: "", width: 800, height: 1280, click: "Obergeschoss" },
   { name: "empty", query: "?empty", width: 1280, height: 800 },
 ];
@@ -76,6 +78,13 @@ for (const shot of shots) {
   if (shot.select) await clickText(shot.select);
   if (shot.click) await clickText(shot.click);
   if (shot.then) await clickText(shot.then);
+  if (shot.editorState) {
+    await page.evaluate((state) => {
+      const editor = document.querySelector("floorplan-3d-panel").shadowRoot.querySelector("fp3d-editor");
+      Object.assign(editor, state);
+    }, shot.editorState);
+    await new Promise((r) => setTimeout(r, 300));
+  }
   if (shot.scrollSide) {
     await page.evaluate(() => {
       const editor = document.querySelector("floorplan-3d-panel").shadowRoot.querySelector("fp3d-editor");

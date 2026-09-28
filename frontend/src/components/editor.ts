@@ -2,33 +2,43 @@
 
 import { css, html, LitElement, nothing, svg, type PropertyValues, type TemplateResult } from "lit";
 import { fetchImage, storeImage } from "../api.ts";
-import { areaEntities, autoPlace, entityName, isPlaceable, kindOf } from "../devices.ts";
-import { generateWalls, type Wall } from "../geometry/walls.ts";
+import { areaEntities, autoPlace, entityName, isPlaceable, kindOf, openingEntities } from "../devices.ts";
+import { generateWalls, locateOnWalls, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { iconPath } from "../icons.ts";
 import {
   bounds,
   centroid,
   FLOOR_MATERIALS,
+  FURNITURE_SIZE,
+  FURNITURE_TYPES,
+  furnitureFootprint,
   isAxisRect,
+  OPENING_DEFAULTS,
+  signedArea,
   newFloor,
   pointInPolygon,
   polygonArea,
   uid,
   type Building,
   type Floor,
+  type Furniture,
+  type FurnitureType,
+  type Opening,
   type Room,
   type Vec2,
 } from "../model.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
 
-type Tool = "select" | "rect" | "polygon";
+type Tool = "select" | "rect" | "polygon" | "door" | "window";
 
 type Drag =
   | { kind: "pan"; last: [number, number] }
   | { kind: "vertex"; roomId: string; index: number; base: Building; moved: boolean }
   | { kind: "device"; entityId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
+  | { kind: "opening"; id: string; startScreen: [number, number]; base: Building; moved: boolean }
+  | { kind: "furniture"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "room"; roomId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "rect"; start: Vec2; end: Vec2 }
   | { kind: "tap"; startScreen: [number, number]; last: [number, number]; panning: boolean };
@@ -38,6 +48,9 @@ interface Guides {
   x?: number;
   z?: number;
 }
+
+/** Drags that change the document live (restored when cancelled, recorded in the history when done). */
+const EDIT_DRAGS = new Set(["vertex", "room", "device", "opening", "furniture"]);
 
 const HISTORY = 100;
 const SNAP_PX = 10;
@@ -52,6 +65,8 @@ export class Fp3dEditor extends LitElement {
     _floorId: { state: true },
     _roomId: { state: true },
     _vertex: { state: true },
+    _openingId: { state: true },
+    _furnitureId: { state: true },
     _tool: { state: true },
     _draft: { state: true },
     _cursor: { state: true },
@@ -70,6 +85,8 @@ export class Fp3dEditor extends LitElement {
   private declare _floorId: string | null;
   private declare _roomId: string | null;
   private declare _vertex: number | null;
+  private declare _openingId: string | null;
+  private declare _furnitureId: string | null;
   private declare _tool: Tool;
   private declare _draft: Vec2[];
   private declare _cursor: Vec2 | null;
@@ -95,6 +112,8 @@ export class Fp3dEditor extends LitElement {
     this._floorId = null;
     this._roomId = null;
     this._vertex = null;
+    this._openingId = null;
+    this._furnitureId = null;
     this._tool = "select";
     this._draft = [];
     this._cursor = null;
@@ -332,7 +351,7 @@ export class Fp3dEditor extends LitElement {
     this.pointers.set(e.pointerId, local);
     if (this.pointers.size === 2) {
       // second finger: cancel the current gesture and pinch instead
-      if (this.drag && (this.drag.kind === "vertex" || this.drag.kind === "room" || this.drag.kind === "device") && this.drag.moved) this.restoreLive(this.drag.base);
+      if (this.drag && EDIT_DRAGS.has(this.drag.kind) && "moved" in this.drag && this.drag.moved && "base" in this.drag) this.restoreLive(this.drag.base);
       this.drag = null;
       this.pinch = this.pinchState();
       return;
@@ -353,9 +372,27 @@ export class Fp3dEditor extends LitElement {
       this.drag = { kind: "tap", startScreen: local, last: local, panning: false };
       return;
     }
+    if (this._tool === "door" || this._tool === "window") {
+      if (!this.placeOpening(this._tool, local)) this.drag = { kind: "pan", last: local };
+      return;
+    }
     const deviceEl = target.closest("[data-device]");
     if (deviceEl && this.isAdmin) {
       this.drag = { kind: "device", entityId: deviceEl.getAttribute("data-device")!, start: world, startScreen: local, base: this._doc, moved: false };
+      return;
+    }
+    const openingEl = target.closest("[data-opening]");
+    if (openingEl) {
+      const id = openingEl.getAttribute("data-opening")!;
+      this.selectItem("opening", id);
+      this.drag = this.isAdmin ? { kind: "opening", id, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
+      return;
+    }
+    const furnitureEl = target.closest("[data-furniture]");
+    if (furnitureEl && !target.closest("[data-vertex], [data-mid]")) {
+      const id = furnitureEl.getAttribute("data-furniture")!;
+      this.selectItem("furniture", id);
+      this.drag = this.isAdmin ? { kind: "furniture", id, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
       return;
     }
     const vertexEl = target.closest("[data-vertex]");
@@ -374,7 +411,22 @@ export class Fp3dEditor extends LitElement {
       const base = this._doc;
       const roomId = this.room.id;
       // no history here: the pointer-up records the state before the insert
-      this.change((_, floor) => floor.rooms.find((r) => r.id === roomId)!.points.splice(i + 1, 0, mid), base, false);
+      this.change(
+        (_, floor) => {
+          floor.rooms.find((r) => r.id === roomId)!.points.splice(i + 1, 0, mid);
+          const first = Math.hypot(mid[0] - a[0], mid[1] - a[1]);
+          for (const o of floor.openings) {
+            if (o.room_id !== roomId) continue;
+            if (o.edge > i) o.edge += 1;
+            else if (o.edge === i && o.offset > first) {
+              o.edge = i + 1;
+              o.offset = round(o.offset - first);
+            }
+          }
+        },
+        base,
+        false,
+      );
       this._vertex = i + 1;
       this.drag = { kind: "vertex", roomId, index: i + 1, base, moved: true };
       return;
@@ -382,14 +434,13 @@ export class Fp3dEditor extends LitElement {
     const roomId = target.closest("[data-room]")?.getAttribute("data-room") ?? this.roomAt(world);
     if (roomId) {
       if (roomId !== this._roomId) this._vertex = null;
-      this._roomId = roomId;
+      this.selectItem("room", roomId);
       this.drag = this.isAdmin
         ? { kind: "room", roomId, start: world, startScreen: local, base: this._doc, moved: false }
         : { kind: "pan", last: local };
       return;
     }
-    this._roomId = null;
-    this._vertex = null;
+    this.selectItem("room", null);
     this.drag = { kind: "pan", last: local };
   }
 
@@ -461,6 +512,28 @@ export class Fp3dEditor extends LitElement {
         );
         break;
       }
+      case "opening": {
+        if (!drag.moved && Math.hypot(local[0] - drag.startScreen[0], local[1] - drag.startScreen[1]) < 5) return;
+        drag.moved = true;
+        const baseFloor = drag.base.floors.find((f) => f.id === this._floorId);
+        const o = baseFloor?.openings.find((x) => x.id === drag.id);
+        const room = baseFloor?.rooms.find((r) => r.id === o?.room_id);
+        if (!o || !room) return;
+        const offset = this.offsetOnEdge(room, o.edge, world, o.width, e.altKey);
+        this.change((_, floor) => Object.assign(floor.openings.find((x) => x.id === drag.id)!, { offset }), drag.base, false);
+        break;
+      }
+      case "furniture": {
+        if (!drag.moved && Math.hypot(local[0] - drag.startScreen[0], local[1] - drag.startScreen[1]) < 5) return;
+        drag.moved = true;
+        const f = drag.base.floors.find((x) => x.id === this._floorId)?.furniture.find((x) => x.id === drag.id);
+        if (!f) return;
+        const g = e.altKey ? 0.01 : this._doc.settings.grid;
+        const x = round(Math.round((f.x + world[0] - drag.start[0]) / g) * g);
+        const z = round(Math.round((f.z + world[1] - drag.start[1]) / g) * g);
+        this.change((_, floor) => Object.assign(floor.furniture.find((q) => q.id === drag.id)!, { x, z }), drag.base, false);
+        break;
+      }
       case "device": {
         if (!drag.moved && Math.hypot(local[0] - drag.startScreen[0], local[1] - drag.startScreen[1]) < 5) return;
         drag.moved = true;
@@ -484,7 +557,7 @@ export class Fp3dEditor extends LitElement {
     const drag = this.drag;
     this.drag = null;
     if (!drag || e.type === "pointercancel") {
-      if (drag && (drag.kind === "vertex" || drag.kind === "room" || drag.kind === "device") && drag.moved) this.restoreLive(drag.base);
+      if (drag && EDIT_DRAGS.has(drag.kind) && "moved" in drag && drag.moved && "base" in drag) this.restoreLive(drag.base);
       return;
     }
     const local = this.localPoint(e);
@@ -502,6 +575,10 @@ export class Fp3dEditor extends LitElement {
       }
       case "tap":
         if (!drag.panning) this.addDraftPoint(this.snap(this.toWorld(...local), undefined, e.altKey), local);
+        break;
+      case "opening":
+      case "furniture":
+        if (drag.moved) this.pushHistory(drag.base);
         break;
       case "device":
         if (drag.moved) this.pushHistory(drag.base);
@@ -631,8 +708,12 @@ export class Fp3dEditor extends LitElement {
       e.preventDefault();
       this.duplicateRoom();
     } else if (e.key === "Delete" || (e.key === "Backspace" && this._tool === "select")) {
-      if (this._vertex !== null) this.deleteVertex(this._vertex);
+      if (this._openingId) this.deleteOpening();
+      else if (this._furnitureId) this.deleteFurniture();
+      else if (this._vertex !== null) this.deleteVertex(this._vertex);
       else this.deleteRoom();
+    } else if (e.key.toLowerCase() === "r" && !mod && this._furnitureId) {
+      this.rotateFurniture(e.shiftKey ? -90 : 90);
     } else if (e.key === "Backspace" && this._tool === "polygon") {
       this._draft = this._draft.slice(0, -1);
     } else if (e.key === "Enter" && this._tool === "polygon") {
@@ -640,10 +721,7 @@ export class Fp3dEditor extends LitElement {
     } else if (e.key === "Escape") {
       if (this._draft.length) this._draft = [];
       else if (this._tool !== "select") this._tool = "select";
-      else {
-        this._roomId = null;
-        this._vertex = null;
-      }
+      else this.selectItem("room", null);
       this._cursor = null;
     }
   };
@@ -703,6 +781,130 @@ export class Fp3dEditor extends LitElement {
     this._roomId = id;
   }
 
+  /** Select a room, an opening or a furniture item (only one at a time). */
+  private selectItem(kind: "room" | "opening" | "furniture", id: string | null): void {
+    if (kind !== "room" || id !== this._roomId) this._vertex = null;
+    this._roomId = kind === "room" ? id : this._roomId;
+    this._openingId = kind === "opening" ? id : null;
+    this._furnitureId = kind === "furniture" ? id : null;
+    if (kind === "opening" && id) this._roomId = this.floor?.openings.find((o) => o.id === id)?.room_id ?? this._roomId;
+  }
+
+  private get opening(): Opening | undefined {
+    return this._openingId ? this.floor?.openings.find((o) => o.id === this._openingId) : undefined;
+  }
+
+  private get furnitureItem(): Furniture | undefined {
+    return this._furnitureId ? this.floor?.furniture.find((f) => f.id === this._furnitureId) : undefined;
+  }
+
+  /** Centre offset on a room edge closest to `world`, keeping the opening inside the edge. */
+  private offsetOnEdge(room: Room, edge: number, world: Vec2, width: number, free: boolean): number {
+    const a = room.points[edge];
+    const b = room.points[(edge + 1) % room.points.length];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    const t = ((world[0] - a[0]) * (b[0] - a[0]) + (world[1] - a[1]) * (b[1] - a[1])) / len;
+    const g = free ? 0.01 : this._doc.settings.grid;
+    const half = Math.min(width, len) / 2;
+    return round(Math.min(len - half, Math.max(half, Math.round(t / g) * g)));
+  }
+
+  /** Add a door or window on the room edge nearest to a screen point. */
+  private placeOpening(type: "door" | "window", screen: [number, number]): boolean {
+    const floor = this.floor;
+    if (!floor || !this.isAdmin) return false;
+    let best: { room: Room; edge: number; d: number } | null = null;
+    for (const room of floor.rooms) {
+      for (let i = 0; i < room.points.length; i++) {
+        const [ax, ay] = this.toScreen(room.points[i]);
+        const [bx, by] = this.toScreen(room.points[(i + 1) % room.points.length]);
+        const l2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
+        const t = Math.min(1, Math.max(0, ((screen[0] - ax) * (bx - ax) + (screen[1] - ay) * (by - ay)) / l2));
+        const d = Math.hypot(screen[0] - ax - (bx - ax) * t, screen[1] - ay - (by - ay) * t);
+        // the selected room wins on shared edges
+        const score = d - (room.id === this._roomId ? 0.5 : 0);
+        if (d < SNAP_PX * 2.2 && (!best || score < best.d)) best = { room, edge: i, d: score };
+      }
+    }
+    if (!best) return false;
+    const { room, edge } = best;
+    const a = room.points[edge];
+    const b = room.points[(edge + 1) % room.points.length];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const defaults = OPENING_DEFAULTS[type];
+    const width = round(Math.min(defaults.width, Math.max(0.3, len - 0.1)));
+    const opening: Opening = {
+      id: uid("opening"),
+      room_id: room.id,
+      edge,
+      offset: this.offsetOnEdge(room, edge, this.toWorld(...screen), width, false),
+      width,
+      type,
+      sill: defaults.sill,
+      height: defaults.height,
+      hinge: "left",
+      cover: null,
+      contact: null,
+      tilt: null,
+    };
+    this.change((_, f) => f.openings.push(opening));
+    this._tool = "select";
+    this.selectItem("opening", opening.id);
+    return true;
+  }
+
+  private updateOpening(patch: Partial<Opening>): void {
+    const id = this._openingId;
+    this.change((_, floor) => Object.assign(floor.openings.find((o) => o.id === id)!, patch));
+  }
+
+  private deleteOpening(): void {
+    const id = this._openingId;
+    if (!id || !this.isAdmin) return;
+    this.change((_, floor) => (floor.openings = floor.openings.filter((o) => o.id !== id)));
+    this._openingId = null;
+  }
+
+  private addFurniture(type: FurnitureType): void {
+    const floor = this.floor;
+    if (!floor || !this.isAdmin) return;
+    const [w, d, h0] = FURNITURE_SIZE[type];
+    // stairs reach up to the next floor
+    const above = this._doc.floors.filter((f) => f.elevation > floor.elevation).sort((p, q) => p.elevation - q.elevation)[0];
+    const h = type === "stairs" ? round(above ? above.elevation - floor.elevation : floor.height + 0.25) : h0;
+    const room = this.room;
+    const [x, z] = room ? centroid(room.points) : this.toWorld(this._size.w / 2, this._size.h / 2);
+    const item: Furniture = { id: uid("furniture"), type, x: round(x), z: round(z), rotation: 0, w, d, h, variant: null };
+    this.change((_, f) => f.furniture.push(item));
+    this.selectItem("furniture", item.id);
+  }
+
+  private updateFurniture(patch: Partial<Furniture>): void {
+    const id = this._furnitureId;
+    this.change((_, floor) => Object.assign(floor.furniture.find((f) => f.id === id)!, patch));
+  }
+
+  private rotateFurniture(delta: number): void {
+    const f = this.furnitureItem;
+    if (!f || !this.isAdmin) return;
+    this.updateFurniture({ rotation: (((f.rotation + delta) % 360) + 360) % 360 });
+  }
+
+  private deleteFurniture(): void {
+    const id = this._furnitureId;
+    if (!id || !this.isAdmin) return;
+    this.change((_, floor) => (floor.furniture = floor.furniture.filter((f) => f.id !== id)));
+    this._furnitureId = null;
+  }
+
+  private duplicateFurniture(): void {
+    const f = this.furnitureItem;
+    if (!f || !this.isAdmin) return;
+    const copy = { ...structuredClone(f), id: uid("furniture"), x: round(f.x + 0.3), z: round(f.z + 0.3) };
+    this.change((_, floor) => floor.furniture.push(copy));
+    this.selectItem("furniture", copy.id);
+  }
+
   /** Place entities in the selected room; an entity already placed elsewhere moves here. */
   private placeDevices(entityIds: string[]): void {
     const room = this.room;
@@ -723,7 +925,15 @@ export class Fp3dEditor extends LitElement {
   private deleteVertex(index: number): void {
     const room = this.room;
     if (!room || room.points.length <= 3) return;
-    this.change((_, floor) => floor.rooms.find((r) => r.id === room.id)!.points.splice(index, 1));
+    const n = room.points.length;
+    const prev = (index - 1 + n) % n;
+    this.change((_, floor) => {
+      floor.rooms.find((r) => r.id === room.id)!.points.splice(index, 1);
+      // the two edges at the removed corner merge; openings on them cannot keep their place
+      floor.openings = floor.openings
+        .filter((o) => o.room_id !== room.id || (o.edge !== index && o.edge !== prev))
+        .map((o) => (o.room_id === room.id && o.edge > index ? { ...o, edge: o.edge - 1 } : o));
+    });
     this._vertex = null;
   }
 
@@ -806,7 +1016,7 @@ export class Fp3dEditor extends LitElement {
         <div class="fp3d-main">
           <div class="fp3d-toolbar">
             <div class="fp3d-seg" role="group" aria-label=${this.t("tool_select")}>
-              ${(["select", "rect", "polygon"] as Tool[]).map(
+              ${(["select", "rect", "polygon", "door", "window"] as Tool[]).map(
                 (tool) => html`<button
                   aria-pressed=${this._tool === tool}
                   ?disabled=${!floor || (!this.isAdmin && tool !== "select")}
@@ -841,7 +1051,10 @@ export class Fp3dEditor extends LitElement {
               @contextmenu=${(e: Event) => e.preventDefault()}
             >
               ${this.renderBackground(floor)} ${this.renderGrid()} ${this.renderGhost()} ${walls ? this.renderWalls(walls.walls) : nothing}
-              ${floor ? this.renderRooms(floor) : nothing} ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
+              ${floor ? this.renderRooms(floor) : nothing} ${floor ? this.renderFurniture(floor) : nothing}
+              ${floor && walls ? this.renderOpenings(floor, walls.walls) : nothing}
+              ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
+              ${this.room && this.isAdmin && this._tool === "select" && !this._openingId && !this._furnitureId ? this.renderHandles(this.room) : nothing}
               ${this.renderDraft()} ${this.renderGuides()}
             </svg>
             <p class="fp3d-hint">${!floor ? this.t("hint_empty") : this.t(`hint_${this._tool}` as I18nKey)}</p>
@@ -903,7 +1116,6 @@ export class Fp3dEditor extends LitElement {
   }
 
   private renderRooms(floor: Floor) {
-    const selected = this.room;
     return svg`
       <g>${floor.rooms.map((r) => {
         const pts = r.points.map((p) => this.toScreen(p).join(",")).join(" ");
@@ -914,8 +1126,70 @@ export class Fp3dEditor extends LitElement {
         return svg`<text class="fp3d-room-name" x=${cx} y=${cy - 2}>${r.name}</text>
           <text class="fp3d-room-area" x=${cx} y=${cy + 14}>${this.t("area_m2", { a: formatNumber(this.hass, polygonArea(r.points), 1) })}</text>`;
       })}</g>
-      ${selected && this.isAdmin ? this.renderHandles(selected) : nothing}
     `;
+  }
+
+  private renderFurniture(floor: Floor) {
+    return svg`<g>${floor.furniture.map((f) => {
+      const pts = furnitureFootprint(f).map((p) => this.toScreen(p));
+      const sel = f.id === this._furnitureId;
+      // front edge (+z side of the item) is drawn brighter
+      const [c, d] = [pts[2], pts[3]];
+      const [cx, cy] = this.toScreen([f.x, f.z]);
+      const big = Math.min(f.w, f.d) * this._view.scale > 34;
+      return svg`<g data-furniture=${f.id} class=${sel ? "fp3d-furn fp3d-furn-sel" : "fp3d-furn"}>
+        <polygon points=${pts.map((p) => p.join(",")).join(" ")} />
+        <line class="fp3d-furn-front" x1=${c[0]} y1=${c[1]} x2=${d[0]} y2=${d[1]} />
+        ${big ? svg`<text x=${cx} y=${cy + 4}>${this.t(`furn_${f.type}` as I18nKey)}</text>` : nothing}
+      </g>`;
+    })}</g>`;
+  }
+
+  private renderOpenings(floor: Floor, walls: Wall[]) {
+    return svg`<g>${floor.openings.map((o) => {
+      const room = floor.rooms.find((r) => r.id === o.room_id);
+      if (!room || o.edge >= room.points.length) return nothing;
+      const hit = locateOnWalls(walls, room, o.edge, o.offset);
+      const p0 = pointOnRoomEdge(room, o.edge, o.offset - o.width / 2);
+      const p1 = pointOnRoomEdge(room, o.edge, o.offset + o.width / 2);
+      const ux = (p1[0] - p0[0]) / (o.width || 1);
+      const uz = (p1[1] - p0[1]) / (o.width || 1);
+      // normal into the room (room outlines may run either way round)
+      const sgn = signedArea(room.points) >= 0 ? 1 : -1;
+      const n: Vec2 = [-uz * sgn, ux * sgn];
+      // gap across the whole wall thickness
+      let across: [number, number] = [0.06, 0.06];
+      if (hit) across = hit.wall.roomLeft === room.id ? [hit.wall.left, hit.wall.right] : [hit.wall.right, hit.wall.left];
+      const q = (p: Vec2, k: number) => this.toScreen([p[0] + n[0] * k, p[1] + n[1] * k]);
+      const gap = [q(p0, across[0] + 0.01), q(p1, across[0] + 0.01), q(p1, -across[1] - 0.01), q(p0, -across[1] - 0.01)];
+      const sel = o.id === this._openingId;
+      const cls = `fp3d-open ${o.type === "door" ? "fp3d-open-door" : "fp3d-open-window"}${sel ? " fp3d-open-sel" : ""}`;
+      let symbol;
+      if (o.type === "door") {
+        // leaf and swing into the room from the hinge side
+        const hingeAtP0 = o.hinge === "left";
+        const hinge = hingeAtP0 ? p0 : p1;
+        const free = hingeAtP0 ? p1 : p0;
+        const leaf = q(hinge, o.width);
+        const [hx, hy] = this.toScreen(hinge);
+        const [fx, fy] = this.toScreen(free);
+        const r = o.width * this._view.scale;
+        const cross = (leaf[0] - hx) * (fy - hy) - (leaf[1] - hy) * (fx - hx);
+        symbol = svg`<path d="M${hx} ${hy}L${leaf[0]} ${leaf[1]}A${r} ${r} 0 0 ${cross > 0 ? 1 : 0} ${fx} ${fy}" />`;
+      } else {
+        // two panes in the middle of the wall
+        const mid = (across[0] - across[1]) / 2;
+        const a0 = q(p0, mid + 0.035);
+        const a1 = q(p1, mid + 0.035);
+        const b0 = q(p0, mid - 0.035);
+        const b1 = q(p1, mid - 0.035);
+        symbol = svg`<line x1=${a0[0]} y1=${a0[1]} x2=${a1[0]} y2=${a1[1]} /><line x1=${b0[0]} y1=${b0[1]} x2=${b1[0]} y2=${b1[1]} />`;
+      }
+      return svg`<g data-opening=${o.id} class=${cls}>
+        <polygon class="fp3d-open-gap" points=${gap.map((p) => p.join(",")).join(" ")} />
+        ${symbol}
+      </g>`;
+    })}</g>`;
   }
 
   private renderDevices(floor: Floor) {
@@ -1062,7 +1336,16 @@ export class Fp3dEditor extends LitElement {
             </div>`
           : nothing}
       </section>
-      ${room ? html`${this.renderRoomForm(room, areas)} ${this.renderDeviceList(room)}` : floor ? this.renderRoomList(floor) : nothing}
+      ${this.opening
+        ? this.renderOpeningForm(this.opening)
+        : this.furnitureItem
+          ? this.renderFurnitureForm(this.furnitureItem)
+          : room
+            ? html`${this.renderRoomForm(room, areas)} ${this.renderDeviceList(room)}`
+            : floor
+              ? this.renderRoomList(floor)
+              : nothing}
+      ${floor && admin ? this.renderFurnitureLibrary() : nothing}
       ${floor && admin ? this.renderBackgroundForm(floor) : nothing} ${admin ? this.renderSettings() : nothing}
     `;
   }
@@ -1073,7 +1356,7 @@ export class Fp3dEditor extends LitElement {
       <h3>${this.t("rooms")}</h3>
       <div class="fp3d-room-list">
         ${floor.rooms.map(
-          (r) => html`<button class="fp3d-row" @click=${() => (this._roomId = r.id)}>
+          (r) => html`<button class="fp3d-row" @click=${() => this.selectItem("room", r.id)}>
             <span>${r.name}</span><span class="fp3d-muted">${this.t("area_m2", { a: formatNumber(this.hass, polygonArea(r.points), 1) })}</span>
           </button>`,
         )}
@@ -1132,6 +1415,126 @@ export class Fp3dEditor extends LitElement {
           </div>`
         : nothing}
     </section>`;
+  }
+
+  private entityOptions(filter: (id: string) => boolean) {
+    const areaName = (id: string) => {
+      const entry = this.hass?.entities?.[id];
+      const area = entry?.area_id ?? (entry?.device_id ? this.hass?.devices?.[entry.device_id]?.area_id : null);
+      return area ? this.hass?.areas?.[area]?.name : undefined;
+    };
+    return Object.keys(this.hass?.states ?? {})
+      .filter(filter)
+      .map((id) => ({ id, label: `${entityName(this.hass, id)}${areaName(id) ? ` · ${areaName(id)}` : ""}` }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  private entitySelect(label: string, value: string | null, auto: string | null | undefined, options: { id: string; label: string }[], onChange: (v: string | null) => void) {
+    const autoLabel =
+      auto === undefined ? null : auto ? this.t("entity_auto", { name: entityName(this.hass, auto) }) : this.t("entity_auto_none");
+    return html`<label class="fp3d-field fp3d-wide"
+      >${label}
+      <select
+        ?disabled=${!this.isAdmin}
+        @change=${(e: Event) => {
+          const v = (e.target as HTMLSelectElement).value;
+          onChange(v === "__auto" ? null : v);
+        }}
+      >
+        ${autoLabel !== null ? html`<option value="__auto" ?selected=${value === null}>${autoLabel}</option>` : nothing}
+        <option value="none" ?selected=${value === "none" || (autoLabel === null && value === null)}>${this.t("entity_none")}</option>
+        ${options.map((o) => html`<option value=${o.id} ?selected=${o.id === value}>${o.label}</option>`)}
+      </select></label
+    >`;
+  }
+
+  private renderOpeningForm(o: Opening) {
+    const admin = this.isAdmin;
+    const window = o.type === "window";
+    // what "automatic" would pick: resolve with the opening's own links cleared
+    const autoPick = (key: "cover" | "contact") => {
+      if (!this.hass) return null;
+      const probe = structuredClone(this._doc.floors);
+      for (const f of probe) for (const x of f.openings) if (x.id === o.id) x[key] = null;
+      return openingEntities(this.hass, probe).get(o.id)?.[key] ?? null;
+    };
+    const dc = (id: string) => this.hass?.states[id]?.attributes.device_class as string | undefined;
+    const covers = this.entityOptions((id) => id.startsWith("cover."));
+    const contacts = this.entityOptions((id) => id.startsWith("binary_sensor.") && ["door", "window", "opening", "garage_door"].includes(dc(id) ?? ""));
+    return html`<section>
+      <h3>${this.t(window ? "opening_window" : "opening_door")}</h3>
+      <div class="fp3d-form">
+        <label class="fp3d-field fp3d-wide"
+          >${this.t("opening_type")}
+          <select
+            ?disabled=${!admin}
+            @change=${(e: Event) => {
+              const type = (e.target as HTMLSelectElement).value as "door" | "window";
+              this.updateOpening({ type, sill: OPENING_DEFAULTS[type].sill, height: OPENING_DEFAULTS[type].height });
+            }}
+          >
+            <option value="door" ?selected=${!window}>${this.t("opening_door")}</option>
+            <option value="window" ?selected=${window}>${this.t("opening_window")}</option>
+          </select></label
+        >
+        ${this.num(this.t("width"), o.width, (v) => this.updateOpening({ width: Math.max(0.3, v) }), 0.01, 0.3)}
+        ${this.num(this.t("opening_position"), o.offset, (v) => this.updateOpening({ offset: Math.max(0, v) }), 0.01, 0)}
+        ${window ? this.num(this.t("sill"), o.sill, (v) => this.updateOpening({ sill: Math.max(0, v) }), 0.01, 0) : nothing}
+        ${this.num(this.t("opening_height"), o.height, (v) => this.updateOpening({ height: Math.max(0.3, v) }), 0.01, 0.3)}
+        <label class="fp3d-field fp3d-wide"
+          >${this.t("hinge")}
+          <select ?disabled=${!admin} @change=${(e: Event) => this.updateOpening({ hinge: (e.target as HTMLSelectElement).value as "left" | "right" })}>
+            <option value="left" ?selected=${o.hinge === "left"}>${this.t("hinge_left")}</option>
+            <option value="right" ?selected=${o.hinge === "right"}>${this.t("hinge_right")}</option>
+          </select></label
+        >
+        ${window ? this.entitySelect(this.t("cover_entity"), o.cover, autoPick("cover"), covers, (v) => this.updateOpening({ cover: v })) : nothing}
+        ${this.entitySelect(this.t("contact_entity"), o.contact, autoPick("contact"), contacts, (v) => this.updateOpening({ contact: v }))}
+        ${window ? this.entitySelect(this.t("tilt_entity"), o.tilt, undefined, contacts, (v) => this.updateOpening({ tilt: v === "none" ? null : v })) : nothing}
+      </div>
+      <p class="fp3d-sub">${this.t("opening_hint")}</p>
+      ${admin
+        ? html`<div class="fp3d-actions"><button class="fp3d-btn fp3d-danger" @click=${() => this.deleteOpening()}>${this.t("delete")}</button></div>`
+        : nothing}
+    </section>`;
+  }
+
+  private renderFurnitureForm(f: Furniture) {
+    const admin = this.isAdmin;
+    return html`<section>
+      <h3>${this.t("furniture")}</h3>
+      <div class="fp3d-form">
+        <label class="fp3d-field fp3d-wide"
+          >${this.t("furniture_type")}
+          <select ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ type: (e.target as HTMLSelectElement).value })}>
+            ${FURNITURE_TYPES.map((t) => html`<option value=${t} ?selected=${t === f.type}>${this.t(`furn_${t}` as I18nKey)}</option>`)}
+          </select></label
+        >
+        ${this.num(this.t("x"), f.x, (v) => this.updateFurniture({ x: v }))} ${this.num(this.t("z"), f.z, (v) => this.updateFurniture({ z: v }))}
+        ${this.num(this.t("width"), f.w, (v) => this.updateFurniture({ w: Math.max(0.05, v) }), 0.01, 0.05)}
+        ${this.num(this.t("depth"), f.d, (v) => this.updateFurniture({ d: Math.max(0.05, v) }), 0.01, 0.05)}
+        ${this.num(this.t("height_m"), f.h, (v) => this.updateFurniture({ h: Math.max(0.005, v) }), 0.01, 0)}
+        ${this.num(this.t("rotation"), f.rotation, (v) => this.updateFurniture({ rotation: ((v % 360) + 360) % 360 }), 1)}
+      </div>
+      ${f.type === "stairs" ? html`<p class="fp3d-sub">${this.t("stairs_hint")}</p>` : nothing}
+      ${admin
+        ? html`<div class="fp3d-actions">
+            <button class="fp3d-btn" @click=${() => this.rotateFurniture(-90)}>${this.t("rotate_left")}</button>
+            <button class="fp3d-btn" @click=${() => this.rotateFurniture(90)}>${this.t("rotate_right")}</button>
+            <button class="fp3d-btn" @click=${() => this.duplicateFurniture()}>${this.t("duplicate")}</button>
+            <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteFurniture()}>${this.t("delete")}</button>
+          </div>`
+        : nothing}
+    </section>`;
+  }
+
+  private renderFurnitureLibrary() {
+    return html`<details class="fp3d-section">
+      <summary>${this.t("furniture_add")}</summary>
+      <div class="fp3d-library">
+        ${FURNITURE_TYPES.map((t) => html`<button class="fp3d-btn" @click=${() => this.addFurniture(t)}>${this.t(`furn_${t}` as I18nKey)}</button>`)}
+      </div>
+    </details>`;
   }
 
   private renderDeviceList(room: Room) {
@@ -1459,6 +1862,67 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-row:hover {
         color: var(--fp3d-accent);
+      }
+      .fp3d-library {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+        gap: 6px;
+        margin-top: 8px;
+      }
+      .fp3d-library .fp3d-btn {
+        font-weight: 500;
+        font-size: 13px;
+      }
+      .fp3d-furn polygon {
+        fill: rgba(91, 124, 255, 0.1);
+        stroke: rgba(91, 124, 255, 0.55);
+        stroke-width: 1.2;
+        cursor: grab;
+      }
+      .fp3d-furn-front {
+        stroke: var(--fp3d-accent);
+        stroke-width: 2;
+        opacity: 0.7;
+        pointer-events: none;
+      }
+      .fp3d-furn text {
+        fill: var(--fp3d-muted);
+        font-size: 11px;
+        text-anchor: middle;
+        pointer-events: none;
+      }
+      .fp3d-furn-sel polygon {
+        fill: rgba(55, 224, 255, 0.16);
+        stroke: var(--fp3d-accent);
+        stroke-width: 2;
+      }
+      .fp3d-open {
+        cursor: grab;
+      }
+      .fp3d-open-gap {
+        fill: #0b1222;
+        stroke: none;
+      }
+      .fp3d-open path,
+      .fp3d-open line {
+        fill: none;
+        stroke-width: 1.6;
+        stroke-linecap: round;
+      }
+      .fp3d-open-door path {
+        stroke: var(--fp3d-warm);
+        stroke-dasharray: 3 3;
+      }
+      .fp3d-open-window line {
+        stroke: var(--fp3d-accent);
+        stroke-width: 2;
+      }
+      .fp3d-open-sel .fp3d-open-gap {
+        fill: rgba(55, 224, 255, 0.25);
+      }
+      .fp3d-open-sel path,
+      .fp3d-open-sel line {
+        stroke-width: 2.4;
       }
       .fp3d-dev-row {
         align-items: center;

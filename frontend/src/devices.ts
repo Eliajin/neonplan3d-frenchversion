@@ -1,7 +1,7 @@
 // Devices of a room: which entities belong to an area, what kind they are, how they are placed and
 // what their state looks like. Pure functions (no Lit, no three.js) so they can be tested directly.
 
-import type { Placement, Room, Vec2 } from "./model.ts";
+import type { Floor, Opening, Placement, Room, Vec2 } from "./model.ts";
 import { centroid, pointInPolygon } from "./model.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
 
@@ -242,4 +242,72 @@ export function autoPlace(room: Room, entityIds: readonly string[], taken: reado
     out.push({ entity_id, x: p[0], z: p[1], y: null });
   }
   return out;
+}
+
+// ------------------------------------------------------------------ doors and windows
+
+const COVER_CLASSES = new Set([undefined, "shutter", "blind", "awning", "shade", "curtain", "window"]);
+const WINDOW_CONTACTS = new Set(["window", "opening"]);
+
+export interface OpeningEntities {
+  cover: string | null;
+  contact: string | null;
+  tilt: string | null;
+}
+
+/** Pairs openings with entities in order; with `shared`, a single entity serves all openings. */
+function pair(openings: Opening[], ids: string[], shared = false): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!ids.length) return out;
+  openings.forEach((o, i) => {
+    const id = shared && ids.length === 1 ? ids[0] : ids[i];
+    if (id) out.set(o.id, id);
+  });
+  return out;
+}
+
+/**
+ * Entities of every door and window: set by hand, or (when null) matched automatically with the
+ * covers and contact sensors of the room's area, in the order the openings sit on the room outline.
+ */
+export function openingEntities(hass: HomeAssistant, floors: readonly Floor[]): Map<string, OpeningEntities> {
+  const out = new Map<string, OpeningEntities>();
+  for (const floor of floors) {
+    for (const room of floor.rooms) {
+      const own = floor.openings.filter((o) => o.room_id === room.id).sort((a, b) => a.edge - b.edge || a.offset - b.offset);
+      if (!own.length) continue;
+      const ids = areaEntities(hass, room.area_id);
+      const cls = (id: string) => hass.states[id]?.attributes.device_class as string | undefined;
+      const covers = ids.filter((id) => kindOf(id) === "cover" && COVER_CLASSES.has(cls(id)));
+      const windows = own.filter((o) => o.type === "window");
+      const doors = own.filter((o) => o.type === "door");
+      // one blind for the whole room (e.g. a group) serves every window; a sensor belongs to one window
+      const autoCover = pair(windows, covers, true);
+      const autoWindow = pair(windows, ids.filter((id) => kindOf(id) === "binary" && WINDOW_CONTACTS.has(cls(id)!)));
+      const autoDoor = pair(doors, ids.filter((id) => kindOf(id) === "binary" && cls(id) === "door"));
+      const pick = (ref: string | null, auto: string | undefined) => (ref === "none" ? null : (ref ?? auto ?? null));
+      for (const o of own) {
+        out.set(o.id, {
+          cover: o.type === "window" ? pick(o.cover, autoCover.get(o.id)) : pick(o.cover, undefined),
+          contact: pick(o.contact, (o.type === "window" ? autoWindow : autoDoor).get(o.id)),
+          tilt: o.tilt === "none" ? null : o.tilt,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/** Visual state of an opening from its entities: sash open or tilted, blind closed fraction. */
+export function openingState(hass: HomeAssistant, e: OpeningEntities): { open: number; tilt: number; cover: number | null } {
+  const on = (id: string | null) => !!id && hass.states[id]?.state === "on";
+  const tilted = on(e.tilt);
+  const open = on(e.contact) && !tilted ? 1 : 0;
+  let cover: number | null = null;
+  const c = e.cover ? hass.states[e.cover] : undefined;
+  if (c && !isUnavailable(c)) {
+    const pos = c.attributes.current_position;
+    cover = typeof pos === "number" ? 1 - Math.min(100, Math.max(0, pos)) / 100 : c.state === "closed" ? 1 : 0;
+  } else if (e.cover) cover = 0;
+  return { open, tilt: tilted ? 1 : 0, cover };
 }

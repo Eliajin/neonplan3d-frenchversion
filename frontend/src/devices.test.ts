@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { areaEntities, autoPlace, entityName, isActive, kindOf, lightGlow } from "./devices.ts";
-import type { Room } from "./model.ts";
-import { centroid, pointInPolygon } from "./model.ts";
+import { areaEntities, autoPlace, entityName, isActive, kindOf, lightGlow, openingEntities, openingState } from "./devices.ts";
+import type { Floor, Opening, Room } from "./model.ts";
+import { centroid, newFloor, pointInPolygon } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
 
 function hassWith(): HomeAssistant {
@@ -93,4 +93,38 @@ test("automatic placement works in a tiny room", () => {
   const out = autoPlace(tiny, ["light.a", "switch.b"]);
   assert.equal(out.length, 2);
   for (const p of out) assert.ok(pointInPolygon([p.x, p.z], tiny.points));
+});
+
+test("doors and windows get blinds and contacts of their room's area, or the ones set by hand", () => {
+  const hass = hassWith();
+  hass.entities!["binary_sensor.f1"] = { entity_id: "binary_sensor.f1", area_id: "wohnen" };
+  hass.entities!["binary_sensor.f2"] = { entity_id: "binary_sensor.f2", area_id: "wohnen" };
+  hass.entities!["binary_sensor.tuer"] = { entity_id: "binary_sensor.tuer", area_id: "wohnen" };
+  hass.states["binary_sensor.f1"] = { entity_id: "binary_sensor.f1", state: "on", attributes: { device_class: "window" } };
+  hass.states["binary_sensor.f2"] = { entity_id: "binary_sensor.f2", state: "off", attributes: { device_class: "window" } };
+  hass.states["binary_sensor.tuer"] = { entity_id: "binary_sensor.tuer", state: "off", attributes: { device_class: "door" } };
+  const o = (id: string, type: "door" | "window", edge: number, extra: Partial<Opening> = {}): Opening => ({
+    id, room_id: "r", edge, offset: 1, width: 1, type, sill: 0.9, height: 1.3, hinge: "left", cover: null, contact: null, tilt: null, ...extra,
+  });
+  const floor: Floor = {
+    ...newFloor("f", "F", 0),
+    rooms: [{ ...room, area_id: "wohnen" }],
+    openings: [o("w2", "window", 2), o("w1", "window", 0), o("d", "door", 1), o("w3", "window", 3, { cover: "none", contact: "binary_sensor.tuer" })],
+  };
+  const links = openingEntities(hass, [floor]);
+  // the only blind of the area serves every window without its own choice; sensors go one per window
+  assert.deepEqual(links.get("w1"), { cover: "cover.rollo", contact: "binary_sensor.f1", tilt: null });
+  assert.deepEqual(links.get("w2"), { cover: "cover.rollo", contact: "binary_sensor.f2", tilt: null });
+  assert.deepEqual(links.get("w3"), { cover: null, contact: "binary_sensor.tuer", tilt: null });
+  assert.deepEqual(links.get("d"), { cover: null, contact: "binary_sensor.tuer", tilt: null });
+});
+
+test("opening states: open, tilted and blind position", () => {
+  const hass = hassWith();
+  hass.states["binary_sensor.k"] = { entity_id: "binary_sensor.k", state: "on", attributes: {} };
+  hass.states["binary_sensor.t"] = { entity_id: "binary_sensor.t", state: "on", attributes: {} };
+  hass.states["cover.p"] = { entity_id: "cover.p", state: "open", attributes: { current_position: 25 } };
+  assert.deepEqual(openingState(hass, { cover: null, contact: "binary_sensor.k", tilt: null }), { open: 1, tilt: 0, cover: null });
+  assert.deepEqual(openingState(hass, { cover: "cover.p", contact: "binary_sensor.k", tilt: "binary_sensor.t" }), { open: 0, tilt: 1, cover: 0.75 });
+  assert.deepEqual(openingState(hass, { cover: "cover.rollo", contact: null, tilt: null }), { open: 0, tilt: 0, cover: 0 });
 });

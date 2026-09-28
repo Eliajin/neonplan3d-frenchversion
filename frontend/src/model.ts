@@ -11,15 +11,26 @@ export interface Room {
   floor_material: string;
 }
 
+/** Entity link of an opening: null = assigned automatically by area, "none" = no entity. */
+export type EntityRef = string | null;
+
 export interface Opening {
   id: string;
   room_id: string;
+  /** Room edge the opening sits on (points[edge] -> points[edge + 1]). */
   edge: number;
+  /** Distance of the opening's centre from points[edge] (metres). */
   offset: number;
   width: number;
   type: "door" | "window";
+  /** Height of the bottom above the floor; 0 for doors and terrace doors. */
   sill: number;
   height: number;
+  /** Window sash hinge as seen from the room. */
+  hinge: "left" | "right";
+  cover: EntityRef;
+  contact: EntityRef;
+  tilt: EntityRef;
 }
 
 export interface Furniture {
@@ -97,6 +108,70 @@ export function newFloor(id: string, name: string, elevation: number): Floor {
   };
 }
 
+export const FURNITURE_TYPES = [
+  "sofa",
+  "armchair",
+  "table",
+  "chair",
+  "bed",
+  "nightstand",
+  "wardrobe",
+  "shelf",
+  "kitchen",
+  "fridge",
+  "stove",
+  "sink",
+  "bathtub",
+  "shower",
+  "wc",
+  "washbasin",
+  "desk",
+  "tv_board",
+  "plant",
+  "rug",
+  "stairs",
+] as const;
+
+export type FurnitureType = (typeof FURNITURE_TYPES)[number];
+
+/** Default size (width x, depth z, height) of new furniture in metres. */
+export const FURNITURE_SIZE: Record<FurnitureType, [number, number, number]> = {
+  sofa: [2.2, 0.9, 0.82],
+  armchair: [0.85, 0.85, 0.8],
+  table: [1.6, 0.9, 0.75],
+  chair: [0.46, 0.5, 0.9],
+  bed: [1.6, 2.05, 0.9],
+  nightstand: [0.45, 0.4, 0.5],
+  wardrobe: [1.8, 0.6, 2.1],
+  shelf: [0.9, 0.35, 1.9],
+  kitchen: [2.4, 0.62, 0.92],
+  fridge: [0.6, 0.65, 1.8],
+  stove: [0.6, 0.62, 0.92],
+  sink: [0.9, 0.62, 0.92],
+  bathtub: [1.7, 0.75, 0.58],
+  shower: [0.9, 0.9, 2.0],
+  wc: [0.38, 0.6, 0.8],
+  washbasin: [0.6, 0.46, 0.85],
+  desk: [1.4, 0.7, 0.75],
+  tv_board: [1.8, 0.42, 0.5],
+  plant: [0.45, 0.45, 1.1],
+  rug: [2.0, 1.4, 0.01],
+  stairs: [1.0, 3.2, 2.75],
+};
+
+export const OPENING_DEFAULTS = {
+  door: { width: 0.9, sill: 0, height: 2.05 },
+  window: { width: 1.2, sill: 0.9, height: 1.3 },
+} as const;
+
+/** Fill fields added in later versions so older saved buildings keep working. */
+export function normalizeBuilding(b: Building): Building {
+  for (const f of b.floors) {
+    f.openings = f.openings.map((o) => ({ ...o, hinge: o.hinge ?? "left", cover: o.cover ?? null, contact: o.contact ?? null, tilt: o.tilt ?? null }));
+  }
+  return b;
+}
+
 export function uid(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -158,6 +233,21 @@ export function bounds(points: readonly Vec2[]): { x0: number; z0: number; x1: n
     z1 = Math.max(z1, z);
   }
   return { x0, z0, x1, z1 };
+}
+
+/** Corners of a furniture item in world x/z (rotated rectangle). */
+export function furnitureFootprint(f: Furniture): Vec2[] {
+  const a = (f.rotation * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  const hw = f.w / 2;
+  const hd = f.d / 2;
+  return [
+    [-hw, -hd],
+    [hw, -hd],
+    [hw, hd],
+    [-hw, hd],
+  ].map(([x, z]) => [f.x + x * c - z * s, f.z + x * s + z * c] as Vec2);
 }
 
 export function pointInPolygon(p: Vec2, points: readonly Vec2[]): boolean {

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { BufferGeometry } from "three";
-import type { Floor, Room } from "../model.ts";
+import type { Floor, Furniture, Opening, Room } from "../model.ts";
 import { newFloor } from "../model.ts";
-import { buildFloorGeometry } from "./build.ts";
+import { buildFloorGeometry, clipAlong, stairHoles } from "./build.ts";
 
 const EXT = 0.24;
 const INT = 0.12;
@@ -12,21 +12,28 @@ function rect(id: string, x0: number, z0: number, x1: number, z1: number): Room 
   return { id, name: id, area_id: null, points: [[x0, z0], [x1, z0], [x1, z1], [x0, z1]], floor_material: "wood" };
 }
 
-function floorWith(...rooms: Room[]): Floor {
-  return { ...newFloor("f", "Floor", 0), rooms };
+function floorWith(rooms: Room[], openings: Opening[] = [], furniture: Furniture[] = []): Floor {
+  return { ...newFloor("f", "Floor", 0), rooms, openings, furniture };
+}
+
+function opening(type: "door" | "window", room_id: string, edge: number, offset: number, width: number): Opening {
+  return { id: `${type}${edge}`, room_id, edge, offset, width, type, sill: type === "door" ? 0 : 0.9, height: type === "door" ? 2.05 : 1.3, hinge: "left", cover: null, contact: null, tilt: null };
 }
 
 const near = (a: number, b: number, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);
 
-/** Line segments as [x0, y0, z0, x1, y1, z1]. */
+/** Line segments as [x0, y0, z0, x1, y1, z1, fold]. */
 function segments(g: BufferGeometry): number[][] {
   const p = g.getAttribute("position");
+  const f = g.getAttribute("fold");
   const out: number[][] = [];
-  for (let i = 0; i < p.count; i += 2) out.push([p.getX(i), p.getY(i), p.getZ(i), p.getX(i + 1), p.getY(i + 1), p.getZ(i + 1)]);
+  for (let i = 0; i < p.count; i += 2) out.push([p.getX(i), p.getY(i), p.getZ(i), p.getX(i + 1), p.getY(i + 1), p.getZ(i + 1), f.getX(i)]);
   return out;
 }
 
 const vertical = (s: number[]) => Math.abs(s[0] - s[3]) < 1e-9 && Math.abs(s[2] - s[5]) < 1e-9;
+const atY = (s: number[], y: number) => Math.abs(s[1] - y) < 1e-6 && Math.abs(s[4] - y) < 1e-6;
+const length = (s: number[]) => Math.hypot(s[3] - s[0], s[4] - s[1], s[5] - s[2]);
 
 /** Total area of a triangle soup in the x/z plane. */
 function area(g: BufferGeometry): number {
@@ -41,35 +48,85 @@ function area(g: BufferGeometry): number {
 }
 
 test("a single room has corner lines at its four inner and four outer corners", () => {
-  const geo = buildFloorGeometry(floorWith(rect("a", 0, 0, 4, 3)), EXT, INT);
-  const segs = segments(geo.lowerLines);
-  const corners = segs.filter(vertical);
-  assert.equal(corners.length, 8);
+  const geo = buildFloorGeometry(floorWith([rect("a", 0, 0, 4, 3)]), EXT, INT);
+  const segs = segments(geo.lines);
+  // lower part of each corner line is always visible
+  assert.equal(segs.filter((s) => vertical(s) && s[6] === -1).length, 8);
   // the base outline runs along both faces of the wall ring, without the mitre joints
-  assert.equal(segs.length - corners.length, 8);
+  assert.equal(segs.filter((s) => atY(s, 0.004)).length, 8);
 });
 
 test("a straight outer face across a T-joint gets no corner line", () => {
-  const geo = buildFloorGeometry(floorWith(rect("a", 0, 0, 4, 3), rect("b", 4, 0, 7, 3)), EXT, INT);
-  const corners = segments(geo.lowerLines).filter(vertical);
+  const geo = buildFloorGeometry(floorWith([rect("a", 0, 0, 4, 3), rect("b", 4, 0, 7, 3)]), EXT, INT);
+  const corners = segments(geo.lines).filter((s) => vertical(s) && s[6] === -1);
   // 4 outer corners + 4 inner corners per room; the interior wall meets the outer walls in T-joints
   assert.equal(corners.length, 12);
   assert.ok(!corners.some((s) => Math.abs(s[0] - 4) < 1e-6 && (Math.abs(s[2] + EXT) < 1e-6 || Math.abs(s[2] - 3 - EXT) < 1e-6)));
 });
 
 test("baked wall shadows cover every wall face inside a room and nothing outside", () => {
-  const geo = buildFloorGeometry(floorWith(rect("a", 0, 0, 4, 3), rect("b", 4, 0, 7, 3)), EXT, INT);
+  const geo = buildFloorGeometry(floorWith([rect("a", 0, 0, 4, 3), rect("b", 4, 0, 7, 3)]), EXT, INT);
   const half = INT / 2;
   const lengthA = 2 * (4 - half) + 3 + 3;
   const lengthB = 2 * (3 - half) + 3 + 3;
   near(area(geo.shadow), (lengthA + lengthB) * 0.42, 1e-4);
 });
 
-test("upper wall buckets split exterior walls by facing and keep interior walls together", () => {
-  const geo = buildFloorGeometry(floorWith(rect("a", 0, 0, 4, 3), rect("b", 4, 0, 7, 3)), EXT, INT);
-  const exterior = geo.buckets.filter((b) => b.normal);
-  assert.equal(exterior.length, 4);
+test("walls are grouped into fold buckets: one per exterior direction plus the interior walls", () => {
+  const geo = buildFloorGeometry(floorWith([rect("a", 0, 0, 4, 3), rect("b", 4, 0, 7, 3)]), EXT, INT);
+  assert.equal(geo.buckets.filter((b) => b).length, 4);
   assert.equal(geo.buckets.length, 5);
-  // top edges of each bucket sit at the full wall height
-  for (const b of geo.buckets) assert.ok(segments(b.upperLines).some((s) => !vertical(s) && Math.abs(s[1] - 2.5) < 1e-9));
+  const segs = segments(geo.lines);
+  geo.buckets.forEach((_, b) => {
+    // top edges stand with their bucket, cut edges show when it folds
+    assert.ok(segs.some((s) => atY(s, 2.5) && s[6] === b));
+    assert.ok(segs.some((s) => atY(s, 1.15) && s[6] === 16 + b));
+  });
+});
+
+test("a door leaves the base line and the wall shadow out of the doorway", () => {
+  const plain = buildFloorGeometry(floorWith([rect("a", 0, 0, 4, 3)]), EXT, INT);
+  const geo = buildFloorGeometry(floorWith([rect("a", 0, 0, 4, 3)], [opening("door", "a", 0, 2, 0.9)]), EXT, INT);
+  const base = (g: BufferGeometry) => segments(g).filter((s) => atY(s, 0.004)).reduce((sum, s) => sum + length(s), 0);
+  near(base(plain.lines) - base(geo.lines), 2 * 0.9, 1e-6);
+  near(area(plain.shadow) - area(geo.shadow), 0.9 * 0.42, 1e-6);
+  const [info] = geo.openings;
+  near(info.width, 0.9);
+  near(info.start[0], 1.55);
+  // the room lies at z > 0 of edge 0
+  near(info.toRoom[1], 1);
+  near(info.faceRoom, 0);
+  near(info.faceOut, EXT);
+});
+
+test("a window above the cut height keeps the cut line; one across it interrupts it", () => {
+  const cutLength = (g: BufferGeometry) => segments(g).filter((s) => atY(s, 1.15) && s[6] >= 16 && !vertical(s)).reduce((sum, s) => sum + length(s), 0);
+  const plain = buildFloorGeometry(floorWith([rect("a", 0, 0, 4, 3)]), EXT, INT);
+  const win = buildFloorGeometry(floorWith([rect("a", 0, 0, 4, 3)], [opening("window", "a", 0, 2, 1.2)]), EXT, INT);
+  // the window (0.9–2.2 m) crosses the cut: both faces lose 1.2 m, the jambs add four short edges across the wall
+  near(cutLength(plain.lines) - cutLength(win.lines), 2 * 1.2 - 2 * EXT, 1e-6);
+});
+
+test("stairs cut a hole into the floor above", () => {
+  const stair: Furniture = { id: "s", type: "stairs", x: 2, z: 1.5, rotation: 0, w: 1, d: 2, h: 2.75, variant: null };
+  const lower = floorWith([rect("a", 0, 0, 4, 3)], [], [stair]);
+  const upper = { ...floorWith([rect("b", 0, 0, 4, 3)]), id: "u", elevation: 2.75 };
+  const holes = stairHoles([lower, upper], upper);
+  assert.equal(holes.length, 1);
+  const geo = buildFloorGeometry(upper, EXT, INT, holes);
+  near(area(geo.floor), 12 - 2, 1e-6);
+  assert.deepEqual(stairHoles([lower, upper], lower), []);
+});
+
+test("clipping a wall footprint along its axis", () => {
+  const poly: [number, number][] = [
+    [0, 0],
+    [4, 0],
+    [4, 0.2],
+    [0, 0.2],
+  ];
+  const piece = clipAlong(poly, [0, 0], [1, 0], 1, 2.5);
+  const xs = piece.map((p) => p[0]);
+  near(Math.min(...xs), 1);
+  near(Math.max(...xs), 2.5);
 });

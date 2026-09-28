@@ -83,6 +83,32 @@ async def test_save_and_get_building(hass: HomeAssistant, hass_ws_client) -> Non
     assert got["result"]["building"]["floors"][0]["rooms"][0]["name"] == "Living"
 
 
+async def test_opening_fields_get_defaults(hass: HomeAssistant, hass_ws_client) -> None:
+    await _setup(hass)
+    client = await hass_ws_client(hass)
+    building = copy.deepcopy(BUILDING)
+    opening = {
+        "id": "o1",
+        "room_id": "r1",
+        "edge": 0,
+        "offset": 2,
+        "width": 1.2,
+        "type": "window",
+        "sill": 0.9,
+        "height": 1.3,
+    }
+    building["floors"][0]["openings"] = [
+        opening,
+        {**opening, "id": "o2", "hinge": "right", "cover": "cover.x", "contact": "none"},
+    ]
+    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": building})
+    assert (await client.receive_json())["success"]
+    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    got = (await client.receive_json())["result"]["building"]["floors"][0]["openings"]
+    assert got[0] == {**opening, "hinge": "left", "cover": None, "contact": None, "tilt": None}
+    assert got[1]["hinge"] == "right" and got[1]["cover"] == "cover.x" and got[1]["contact"] == "none"
+
+
 async def test_invalid_building_is_rejected(hass: HomeAssistant, hass_ws_client) -> None:
     await _setup(hass)
     client = await hass_ws_client(hass)

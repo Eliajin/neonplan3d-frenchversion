@@ -15,6 +15,7 @@ _NAME = vol.All(str, vol.Length(max=100))
 _COORD = vol.All(vol.Coerce(float), vol.Range(min=-1000, max=1000))
 _LENGTH = vol.All(vol.Coerce(float), vol.Range(min=0, max=100))
 _POINT = vol.All([_COORD], vol.Length(min=2, max=2))
+_ENTITY_REF = vol.Any(None, vol.All(str, vol.Length(max=255)))
 
 ROOM_SCHEMA = vol.Schema(
     {
@@ -36,6 +37,12 @@ OPENING_SCHEMA = vol.Schema(
         vol.Required("type"): vol.In(["door", "window"]),
         vol.Required("sill"): _LENGTH,
         vol.Required("height"): _LENGTH,
+        # window sash hinge as seen from the room; entities: None = assign automatically by area,
+        # "none" = no entity
+        vol.Optional("hinge", default="left"): vol.In(["left", "right"]),
+        vol.Optional("cover", default=None): _ENTITY_REF,
+        vol.Optional("contact", default=None): _ENTITY_REF,
+        vol.Optional("tilt", default=None): _ENTITY_REF,
     }
 )
 
