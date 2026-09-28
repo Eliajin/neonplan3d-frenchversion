@@ -2,7 +2,8 @@
 // furniture has the type "pack:<pack id>:<item id>". Every bundle (main, editor, 3D) keeps its own
 // registry, filled with setPacks() from the packs the backend returns.
 
-import { ELECTRIC_FURNITURE, FURNITURE_SIZE } from "./model.ts";
+import { ELECTRIC_FURNITURE, FURNITURE_SIZE, surfaceHeight, type Floor, type Furniture } from "./model.ts";
+import type { LampModel } from "./viewer/viewer3d.ts";
 
 export interface PackPart {
   shape: "box" | "cyl";
@@ -19,6 +20,8 @@ export interface PackPart {
   color: string;
   top?: string;
   edges?: boolean;
+  /** Lamps: shines in the colour and brightness of the linked light. */
+  glow?: boolean;
 }
 
 export type PackSymbol =
@@ -33,6 +36,13 @@ export interface PackItem {
   /** Default width, depth, height (metres). */
   size: [number, number, number];
   electric?: boolean;
+  /** On the floor, on the furniture below, on a wall (bottom at wall_y) or hanging from the ceiling. */
+  mount?: "floor" | "surface" | "wall" | "ceiling";
+  wall_y?: number;
+  /** Its top carries other items. */
+  surface?: boolean;
+  /** A lamp: how its light spreads. */
+  light?: LampModel;
   parts: PackPart[];
   symbol?: PackSymbol[];
 }
@@ -95,3 +105,18 @@ export function packItemName(item: PackItem, language: string): string {
   return item.name[lang] ?? item.name.en ?? Object.values(item.name)[0] ?? item.id;
 }
 
+
+/** Height of the bottom of a pack item above the floor (0 for built-in furniture). */
+export function mountBase(floor: Floor, f: Pick<Furniture, "type" | "x" | "z" | "h">): number {
+  const item = packItem(f.type);
+  switch (item?.mount) {
+    case "surface":
+      return surfaceHeight(floor, f.x, f.z);
+    case "wall":
+      return item.wall_y ?? 1;
+    case "ceiling":
+      return Math.max(0, floor.height - f.h);
+    default:
+      return 0;
+  }
+}

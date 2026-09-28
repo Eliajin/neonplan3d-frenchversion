@@ -15,6 +15,7 @@ import type { Floor, Opening, Room, Vec2 } from "../model.ts";
 import { furnitureFootprint, isLamp, pointInPolygon } from "../model.ts";
 import { generateWalls, locateOnWalls, type Wall } from "../geometry/walls.ts";
 import { pushFurniture } from "./furniture.ts";
+import { mountBase } from "../packs.ts";
 import { pushOutdoor } from "./outdoor.ts";
 import { ALWAYS, CAP_OFFSET, CUT_OFFSET, EDGE_BASE, EDGE_CUT, EDGE_SOFT, EDGE_TOP, GeoBuffer, LineBuffer, LOWER_OFFSET, pushPrism, triangulate } from "./geo.ts";
 
@@ -265,7 +266,7 @@ export function buildFloorGeometry(floor: Floor, wallExterior: number, wallInter
   for (const f of floor.furniture) {
     if (isLamp(f.type)) continue;
     const start = wallBuf.count;
-    pushFurniture(wallBuf, lines, shadow, f);
+    pushFurniture(wallBuf, lines, shadow, f, mountBase(floor, f));
     furnitureTris.push({ id: f.id, start, end: wallBuf.count });
   }
 

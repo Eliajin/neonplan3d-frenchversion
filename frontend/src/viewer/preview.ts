@@ -1,10 +1,10 @@
 // Small pictures of furniture and lamps for the editor's library: one offscreen renderer draws the
 // same low-poly models as the 3D view, seen from the front at an angle, into a PNG data URL.
 
-import { Box3, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, OrthographicCamera, Scene, Vector3, WebGLRenderer } from "three";
+import { Box3, Color, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, OrthographicCamera, Scene, Vector3, WebGLRenderer } from "three";
 import type { Furniture } from "../model.ts";
-import { setPacks, type FurniturePack } from "../packs.ts";
-import { pushFurniture } from "./furniture.ts";
+import { packItem, setPacks, type FurniturePack } from "../packs.ts";
+import { pushFurniture, pushPackLamp } from "./furniture.ts";
 import { GeoBuffer, LineBuffer } from "./geo.ts";
 import { pushLampModel, type LampModel } from "./viewer3d.ts";
 
@@ -22,8 +22,8 @@ export interface PreviewItem {
 }
 
 /** PNG data URL of an item (cached per type and size); `packs` are needed for pack furniture. */
-export function furniturePreview(item: PreviewItem, size = 180, packs?: FurniturePack[]): string {
-  const key = `${item.type}|${item.w}|${item.d}|${item.h}|${item.variant ?? ""}|${size}`;
+export function furniturePreview(item: PreviewItem, size = 180, packs?: FurniturePack[], brightness = 1.3): string {
+  const key = `${item.type}|${item.w}|${item.d}|${item.h}|${item.variant ?? ""}|${size}|${brightness}`;
   const hit = cache.get(key);
   if (hit) return hit;
   if (packs) setPacks(packs);
@@ -34,7 +34,10 @@ export function furniturePreview(item: PreviewItem, size = 180, packs?: Furnitur
 
   const buf = new GeoBuffer();
   const lines = new LineBuffer();
-  if (item.lamp) {
+  const packed = packItem(item.type);
+  if (packed?.light) {
+    pushPackLamp(buf, packed, { x: 0, z: 0, rotation: 0, w: item.w, d: item.d, h: item.h }, 0, 0xffb547);
+  } else if (item.lamp) {
     // hanging lamps hang from a ceiling just above them
     pushLampModel(buf, { x: 0, z: 0, size: [item.w, item.d, item.h], base: 0, rotation: 0, variant: item.variant ?? null, lamp: item.lamp }, Math.max(item.h + 0.15, 0.6), 0xffb547);
   } else {
@@ -42,8 +45,9 @@ export function furniturePreview(item: PreviewItem, size = 180, packs?: Furnitur
     pushFurniture(buf, lines, new GeoBuffer(), f);
   }
   const scene = new Scene();
-  const mesh = new Mesh(buf.geometry(), new MeshBasicMaterial({ vertexColors: true }));
-  const edges = new LineSegments(lines.geometry(), new LineBasicMaterial({ vertexColors: true }));
+  // the neon palette is made for a dark room: pictures get a little more light and brighter edges
+  const mesh = new Mesh(buf.geometry(), new MeshBasicMaterial({ vertexColors: true, color: new Color(brightness, brightness, brightness) }));
+  const edges = new LineSegments(lines.geometry(), new LineBasicMaterial({ vertexColors: true, color: new Color(brightness * 1.8, brightness * 1.8, brightness * 1.8) }));
   scene.add(mesh, edges);
 
   // look from the front right, a little from above; fit the item's box into the picture

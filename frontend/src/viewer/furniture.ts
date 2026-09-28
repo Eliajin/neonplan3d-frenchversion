@@ -6,7 +6,7 @@
 import { Color } from "three";
 import type { Furniture, Vec2 } from "../model.ts";
 import { packItem, type PackItem } from "../packs.ts";
-import { ALWAYS, type GeoBuffer, type LineBuffer, pushPrism, shade } from "./geo.ts";
+import { ALWAYS, type GeoBuffer, LineBuffer, pushPrism, shade } from "./geo.ts";
 
 const C = {
   body: 0x172238,
@@ -598,7 +598,7 @@ function contactShadow(shadow: GeoBuffer, tf: Tf, w: number, d: number, strength
   }
 }
 
-export function pushFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f: Furniture): void {
+export function pushFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f: Furniture, base = 0): void {
   const a = (f.rotation * Math.PI) / 180;
   const c = Math.cos(a);
   const s = Math.sin(a);
@@ -734,8 +734,11 @@ export function pushFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuff
       return; // on the wall, no shadow on the floor
     default: {
       const item = packItem(f.type);
-      if (item) packModel(b, item, w, d, h);
-      else b.box(-w / 2, w / 2, 0, h, -d / 2, d / 2, C.body, C.bodyTop, EDGE_FURN);
+      if (item) {
+        packModel(b, item, w, d, h, base, null);
+        // items on furniture, walls or ceilings cast no shadow on the floor
+        if (base > 0.05) return;
+      } else b.box(-w / 2, w / 2, 0, h, -d / 2, d / 2, C.body, C.bodyTop, EDGE_FURN);
     }
   }
   contactShadow(shadow, tf, w, d, f.type === "plant" ? 0.35 : 0.5);
@@ -749,16 +752,27 @@ function packColor(value: string | undefined, top: boolean): number | null {
   return (top ? palette[`${value}Top`] : undefined) ?? palette[value] ?? null;
 }
 
-/** Model of a pack item: its parts scaled to the item's size. */
-function packModel(b: Builder, item: PackItem, w: number, d: number, h: number): void {
+/** Model of a pack item: its parts scaled to the item's size; glowing parts take `glow` (a lit lamp). */
+function packModel(b: Builder, item: PackItem, w: number, d: number, h: number, base: number, glow: number | null): void {
   for (const p of item.parts) {
-    const side = packColor(p.color, false) ?? C.body;
+    const lit = p.glow && glow !== null;
+    const side = lit ? glow : (packColor(p.color, false) ?? C.body);
     // without a top colour, the top is the role's top shade or a little lighter
-    const top = packColor(p.top, false) ?? packColor(p.color, true) ?? shade(side, 1.25).getHex();
-    const y0 = p.y * h;
-    const y1 = Math.min(h, (p.y + p.h) * h);
+    const top = lit ? glow : (packColor(p.top, false) ?? packColor(p.color, true) ?? shade(side, 1.25).getHex());
+    const y0 = base + p.y * h;
+    const y1 = base + Math.min(h, (p.y + p.h) * h);
     const edges = p.edges ? EDGE_FURN : null;
     if (p.shape === "cyl") b.cyl(p.x * w, p.z * d, (Math.min(p.w * w, p.d * d)) / 2, y0, y1, side, top, 14, edges);
     else b.box((p.x - p.w / 2) * w, (p.x + p.w / 2) * w, y0, y1, (p.z - p.d / 2) * d, (p.z + p.d / 2) * d, side, top, edges);
   }
+}
+
+/** A pack lamp into the lamp buffer: glowing parts in the light's colour (`glow`), or dark when off. */
+export function pushPackLamp(buf: GeoBuffer, item: PackItem, f: Pick<Furniture, "x" | "z" | "rotation" | "w" | "d" | "h">, base: number, glow: number): void {
+  const a = (f.rotation * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  const tf: Tf = (x, z) => [f.x + x * c - z * s, f.z + x * s + z * c];
+  // lamps have no outlines: their edges are dropped
+  packModel(new Builder(buf, new LineBuffer(), tf), item, Math.max(0.05, f.w), Math.max(0.05, f.d), Math.max(0.005, f.h), base, glow);
 }

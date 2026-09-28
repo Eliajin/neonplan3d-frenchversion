@@ -41,8 +41,8 @@ import { centroid } from "../model.ts";
 import { buildFloorGeometry, SLAB, stairHoles, type FloorGeometry } from "./build.ts";
 import { OrbitControls } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
-import { screenRect } from "./furniture.ts";
-import { setPacks, type FurniturePack } from "../packs.ts";
+import { pushPackLamp, screenRect } from "./furniture.ts";
+import { mountBase, packItem, setPacks, type FurniturePack } from "../packs.ts";
 import { buildRoof } from "./roof.ts";
 import { lineBlending, themed, themeIndex, type Theme, type ThemeUniform } from "./theme.ts";
 
@@ -113,6 +113,10 @@ export interface DeviceMarker {
   pickable?: boolean;
   /** Furniture item this lamp is (for moving it in 3D). */
   furnitureId?: string;
+  /** Lamp from a furniture pack (its type): drawn from the pack's parts. */
+  pack?: string | null;
+  /** Height its light comes from (pack lamps). */
+  lightY?: number;
   /** A colour effect runs (colour loop …): the colour is animated in 3D. */
   effect?: boolean;
   /** Pendant shape: shade (default), globe, cone or drum. */
@@ -821,7 +825,8 @@ export class FloorplanViewer {
         bollard: [base + h - 0.08, "ceiling"],
         garden: [base + h, "up"],
       };
-      const [y, kind] = d.lamp ? kinds[d.lamp] : [d.y, "omni" as LightKind];
+      const [y0, kind] = d.lamp ? kinds[d.lamp] : [d.y, "omni" as LightKind];
+      const y = d.lightY ?? y0;
       const color = glow.color;
       if (d.lamp === "strip") {
         // a strip lights along its length: three sources spread over it
@@ -1319,7 +1324,10 @@ export class FloorplanViewer {
       const f = flash(d.id);
       if (f > 0) shadeC.lerp(new Color(1, 1, 1), 0.7 * f);
       const shadeCol = shadeC.getHex();
-      pushLampModel(buf, { ...d, lamp: d.lamp }, H, shadeCol);
+      const packed = d.pack ? packItem(d.pack) : undefined;
+      const [pw, pd, ph] = d.size ?? [0.3, 0.3, 0.3];
+      if (packed) pushPackLamp(buf, packed, { x: d.x, z: d.z, rotation: d.rotation ?? 0, w: pw, d: pd, h: ph }, d.base ?? 0, glow ? shadeCol : LAMP_SHADE);
+      else pushLampModel(buf, { ...d, lamp: d.lamp }, H, shadeCol);
       if (d.pickable !== false) tris.push({ id: d.id, start, end: buf.count });
       if (d.furnitureId) furnTris.push({ id: d.furnitureId, start, end: buf.count });
     }
@@ -1855,7 +1863,17 @@ export class FloorplanViewer {
     const H = fv.floor.height;
     const hanging = ["lamp_ceiling", "lamp_downlight", "lamp_spot", "lamp_panel", "lamp_pendant", "led_strip"].includes(f.type);
     const h = Math.max(0.1, f.type === "lamp_pendant" ? 0.3 : f.h);
-    const y0 = hanging ? (f.type === "lamp_pendant" ? H - f.h - 0.1 : H - h) : f.type === "radiator" ? 0.12 : f.type === "kitchen_wall" ? 1.45 : 0;
+    const y0 = packItem(f.type)
+      ? mountBase(fv.floor, f)
+      : hanging
+        ? f.type === "lamp_pendant"
+          ? H - f.h - 0.1
+          : H - h
+        : f.type === "radiator"
+          ? 0.12
+          : f.type === "kitchen_wall"
+            ? 1.45
+            : 0;
     const a = (f.rotation * Math.PI) / 180;
     const c = Math.cos(a);
     const sn = Math.sin(a);

@@ -22,7 +22,7 @@ import { STAGE, type Theme } from "../themes.ts";
 import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from "../heatmap.ts";
 import { furnitureName } from "../furniture-names.ts";
 import { formatNumber, translate } from "../i18n.ts";
-import { getPacks, packsVersion } from "../packs.ts";
+import { getPacks, mountBase, packItem, packsVersion } from "../packs.ts";
 import { searchIndex, searchItems, type SearchItem } from "../search.ts";
 import { coverPositionable, lightAbilities } from "./quick-menu.ts";
 import "./quick-menu.ts";
@@ -366,7 +366,7 @@ export class Fp3dView3d extends LitElement {
           roomId: room?.id ?? null,
           x: f.x,
           z: f.z,
-          y: markerHeight(f),
+          y: markerHeight(f) + mountBase(floor, f),
           icon: iconSvg(kind ?? "switch"),
           name: link.entity ? entityName(hass, link.entity) : furnitureName(hass, f.type),
           text: st ? stateText(hass, st) : power !== null ? formatPower(hass, Math.max(0, power)) : "",
@@ -383,11 +383,23 @@ export class Fp3dView3d extends LitElement {
   /** A lamp: its 3D model glows with the linked light and is tapped directly. */
   private lampMarker(hass: HomeAssistant, floor: Building["floors"][number], f: Furniture, entity: string | null): DeviceMarker & { fromFurniture: boolean } {
     const st = entity ? hass.states[entity] : undefined;
-    const model = LAMP_MODEL[f.type];
-    const base = model === "table" ? surfaceHeight(floor, f.x, f.z) : model === "bollard" || model === "garden" ? outdoorGround(floor, f.x, f.z) : 0;
+    const item = packItem(f.type);
+    const model = LAMP_MODEL[f.type] ?? item?.light ?? "floor";
+    const base = item
+      ? mountBase(floor, f)
+      : model === "table"
+        ? surfaceHeight(floor, f.x, f.z)
+        : model === "bollard" || model === "garden"
+          ? outdoorGround(floor, f.x, f.z)
+          : 0;
     const room = floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon([f.x, f.z], r.points));
     const H = floor.height;
-    const y = {
+    // pack lamps: the marker sits above the lamp (below it when it hangs from the ceiling)
+    const y = item
+      ? item.mount === "ceiling"
+        ? Math.max(0.5, base - 0.15)
+        : base + f.h + 0.2
+      : {
       ceiling: H - 0.3,
       downlight: H - 0.25,
       spot: H - 0.35,
@@ -421,6 +433,8 @@ export class Fp3dView3d extends LitElement {
       base,
       pickable: !!entity,
       furnitureId: f.id,
+      pack: item ? f.type : null,
+      lightY: item ? (item.mount === "ceiling" ? base : base + f.h * 0.85) : undefined,
       effect: !!st && st.state === "on" && typeof st.attributes.effect === "string" && !/^(none|off|solid|static|normal)$/i.test(st.attributes.effect),
       variant: f.variant,
       fromFurniture: true,

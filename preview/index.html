@@ -34,6 +34,11 @@
           try {
             const res = await fetch("../private/packs/starter.json");
             if (res.ok) importedPacks.push({ licensee: null, ...(await res.json()) });
+            const index = await fetch("../private/packs/src/index.json");
+            for (const name of index.ok ? await index.json() : []) {
+              const pack = await fetch(`../private/packs/src/${name}`);
+              if (pack.ok) importedPacks.push({ licensee: null, ...(await pack.json()) });
+            }
           } catch {
             // no local packs
           }

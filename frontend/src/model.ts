@@ -1,6 +1,7 @@
 // Data model shared by editor, 3D view and backend (see custom_components/floorplan_3d/schema.py).
 // Units are metres; x grows to the right, z grows downwards (as in the 2D editor).
 
+import { packItem } from "./packs.ts";
 import type { LampModel } from "./viewer/viewer3d.ts";
 
 export type Vec2 = [number, number];
@@ -345,7 +346,7 @@ export const LAMP_TYPES = new Set<string>([
 ]);
 
 export function isLamp(type: string): boolean {
-  return LAMP_TYPES.has(type);
+  return LAMP_TYPES.has(type) || !!packItem(type)?.light;
 }
 
 /** Furniture a table lamp can stand on. */
@@ -396,7 +397,7 @@ export function step(p: Vec2, length: number, dir: Direction): Vec2 {
 export function surfaceHeight(floor: Floor, x: number, z: number): number {
   let top = 0;
   for (const f of floor.furniture) {
-    if (!SURFACES.has(f.type) || !pointInPolygon([x, z], furnitureFootprint(f))) continue;
+    if (!(SURFACES.has(f.type) || packItem(f.type)?.surface) || !pointInPolygon([x, z], furnitureFootprint(f))) continue;
     top = Math.max(top, f.h);
   }
   return top;

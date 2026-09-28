@@ -47,6 +47,20 @@ const PACK_SCRIPT = `
   e.setDoc(structuredClone(e._doc));
 `;
 
+// kitchen with pack furniture on the island, pendant lights from a pack and a wallbox (local packs)
+const PACK_MOUNT_SCRIPT = `
+  const f = e._doc.floors[0];
+  e._floorId = f.id;
+  const put = (type, x, z, rotation = 0, entity = null) => { e.addFurniture(type); Object.assign(e._doc.floors[0].furniture.at(-1), { x, z, rotation, entity }); };
+  put('pack:mastershort.kitchen:island_bar', 8.0, 3.0, 0);
+  put('pack:mastershort.kitchen:coffee_machine', 7.6, 3.1, 0);
+  put('pack:mastershort.kitchen:microwave', 8.6, 2.9, 0);
+  put('pack:mastershort.kitchen:pendant_trio', 8.0, 3.0, 0, 'light.kueche_links');
+  put('pack:mastershort.smarthome:wallbox', 9.9, 2.0, 270);
+  put('pack:mastershort.living:arc_lamp', 1.5, 3.0, 90, 'light.stehlampe');
+  e.setDoc(structuredClone(e._doc));
+`;
+
 const shots = [
   { name: "view-house", query: "?fp3d_stats", width: 1280, height: 800 },
   { name: "view-stacked", query: "", width: 1280, height: 800, click: "Gestapelt" },
@@ -98,6 +112,7 @@ const shots = [
   { name: "editor-preview-pendant", query: "", width: 1280, height: 800, editor: true, editorState: { _tool: "furniture" }, hover: "Pendelleuchte" },
   { name: "editor-preview-kitchen", query: "", width: 1280, height: 800, editor: true, editorState: { _tool: "furniture" }, hover: "Küchenzeile" },
   { name: "editor-preview-pack", query: "", width: 1280, height: 800, editor: true, editorState: { _tool: "furniture" }, hover: "Kamin" },
+  { name: "view-pack-mounts", query: "", width: 1280, height: 800, editor: true, editorScript: PACK_MOUNT_SCRIPT, then3d: "Küche" },
   { name: "editor-package", query: "", width: 1280, height: 900, editor: true, editorScript: "const f = e._doc.floors[1]; e._floorId = f.id; e.applyPackage(f.rooms.find((r) => r.id === 'gast'), 'bedroom'); e.applyPackage(f.rooms.find((r) => r.id === 'kind'), 'kids');" },
   { name: "view-package", query: "", width: 1280, height: 800, editor: true, editorScript: "const f = e._doc.floors[1]; e.applyPackage(f.rooms.find((r) => r.id === 'gast'), 'bedroom');", then3d: "Obergeschoss" },
   { name: "view-furnish", query: "", width: 1280, height: 800, click: "Erdgeschoss", furnishDrag: { id: "m2", dx: -160, dy: 60 } },

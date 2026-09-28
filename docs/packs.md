@@ -61,6 +61,19 @@ dessen öffentlicher Schlüssel zusätzlich in `PACK_PUBLIC_KEYS` eingetragen un
   Anteil der kleineren Seite) und `line` (`x1`, `z1`, `x2`, `z2`). Ohne Symbol zeichnet der Plan die
   Teile von oben.
 - `electric`: das Möbel lässt sich mit einem Schalter und Leistungssensor verknüpfen.
+- `mount`: wo das Möbel sitzt – `floor` (Standard), `surface` (auf dem Möbel darunter, z. B.
+  Kaffeemaschine auf der Arbeitsplatte), `wall` (Unterkante bei `wall_y` Metern, z. B. Wallbox) oder
+  `ceiling` (hängt von der Decke, z. B. Dunstabzug, Pendelleuchten).
+- `surface`: die Oberseite trägt andere Möbel (Tisch, Kücheninsel, Werkbank).
+- `light`: das Möbel ist eine Leuchte und wird mit einem Licht (oder Schalter) verknüpft. Der Wert sagt,
+  wie das Licht den Raum ausleuchtet (`ceiling`, `pendant`, `floor`, `table`, `wall`, `spot`, `garden` …).
+  Teile mit `"glow": true` leuchten in Farbe und Helligkeit des Lichts.
+
+## Shop-Bilder
+
+`cd frontend && node pack-images.mjs <pack.json>... --out <ordner>` rendert mit der echten 3D-Grafik
+(vorher `npm run build`) je Pack ein Übersichtsbild (`overview.png`, 3200 × 2400) und ein freigestelltes
+PNG pro Möbel (`items/<id>.png`).
 
 Möbel eines entfernten Packs bleiben im Plan als einfache Kästen stehen und erscheinen wieder, wenn das
 Pack erneut importiert wird.

@@ -38,7 +38,7 @@ _COLOR = vol.Any(
     vol.In(["body", "fabric", "cushion", "wood", "white", "metal", "dark", "glass", "plant", "pot", "accent"]),
 )
 _FRACTION = vol.All(vol.Coerce(float), vol.Range(min=-0.5, max=0.5))
-_SPAN = vol.All(vol.Coerce(float), vol.Range(min=0.005, max=1))
+_SPAN = vol.All(vol.Coerce(float), vol.Range(min=0.001, max=1))
 _LEVEL = vol.All(vol.Coerce(float), vol.Range(min=0, max=1))
 _METRES = vol.All(vol.Coerce(float), vol.Range(min=0.01, max=10))
 
@@ -56,6 +56,8 @@ PART_SCHEMA = vol.Schema(
         vol.Required("color"): _COLOR,
         vol.Optional("top"): _COLOR,
         vol.Optional("edges", default=False): bool,
+        # lamps: the part shines in the colour and brightness of the linked light
+        vol.Optional("glow", default=False): bool,
     }
 )
 
@@ -82,6 +84,29 @@ ITEM_SCHEMA = vol.Schema(
         vol.Required("name"): vol.All({vol.All(str, vol.Length(min=2, max=5)): _TEXT}, vol.Length(min=1, max=10)),
         vol.Required("size"): vol.All([_METRES], vol.Length(min=3, max=3)),
         vol.Optional("electric", default=False): bool,
+        # where it stands: on the floor, on the furniture below it, on a wall (bottom at wall_y) or
+        # hanging from the ceiling
+        vol.Optional("mount", default="floor"): vol.In(["floor", "surface", "wall", "ceiling"]),
+        vol.Optional("wall_y", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0, max=3)),
+        # its top carries other items (like a table or a worktop)
+        vol.Optional("surface", default=False): bool,
+        # a lamp: how its light spreads (like the built-in lamp of that kind)
+        vol.Optional("light"): vol.In(
+            [
+                "ceiling",
+                "downlight",
+                "spot",
+                "panel",
+                "pendant",
+                "floor",
+                "uplight",
+                "table",
+                "wall",
+                "strip",
+                "bollard",
+                "garden",
+            ]
+        ),
         vol.Required("parts"): vol.All([PART_SCHEMA], vol.Length(min=1, max=60)),
         vol.Optional("symbol"): vol.All([SYMBOL_SCHEMA], vol.Length(max=40)),
     }
