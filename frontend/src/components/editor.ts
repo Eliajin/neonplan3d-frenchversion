@@ -53,7 +53,7 @@ import {
 import { controls, tokens } from "../styles.ts";
 import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
 
-type Tool = "select" | "rect" | "polygon" | "measure" | "opening" | "outdoor" | "meter";
+type Tool = "select" | "rect" | "polygon" | "measure" | "opening" | "furniture" | "outdoor" | "meter";
 
 type Drag =
   | { kind: "pan"; last: [number, number] }
@@ -531,7 +531,8 @@ export class Fp3dEditor extends LitElement {
     if (roomId) {
       if (roomId !== this._roomId) this._vertex = null;
       this.selectItem("room", roomId);
-      this.drag = this.isAdmin
+      this.drag =
+        this.isAdmin && this._tool !== "furniture"
         ? { kind: "room", roomId, start: world, startScreen: local, base: this._doc, moved: false }
         : { kind: "pan", last: local };
       return;
@@ -555,7 +556,7 @@ export class Fp3dEditor extends LitElement {
     const world = this.toWorld(...local);
     const drag = this.drag;
     if (!drag) {
-      if (this._tool !== "select" && this.floor) this._cursor = this.snap(world, undefined, e.altKey);
+      if (this._tool !== "select" && this._tool !== "furniture" && this.floor) this._cursor = this.snap(world, undefined, e.altKey);
       return;
     }
     switch (drag.kind) {
@@ -959,7 +960,7 @@ export class Fp3dEditor extends LitElement {
     } else if (mod && e.key.toLowerCase() === "d") {
       e.preventDefault();
       this.duplicateRoom();
-    } else if (e.key === "Delete" || (e.key === "Backspace" && this._tool === "select")) {
+    } else if (e.key === "Delete" || (e.key === "Backspace" && (this._tool === "select" || this._tool === "furniture"))) {
       if (this._deviceId) {
         this.removeDevice(this._deviceId);
         this._deviceId = null;
@@ -1408,7 +1409,7 @@ export class Fp3dEditor extends LitElement {
         <div class="fp3d-main">
           <div class="fp3d-toolbar">
             <div class="fp3d-seg" role="group" aria-label=${this.t("tool_select")}>
-              ${(["select", "rect", "polygon", "measure", "opening", "outdoor"] as Tool[]).map(
+              ${(["select", "rect", "polygon", "measure", "opening", "furniture", "outdoor"] as Tool[]).map(
                 (tool) => html`<button
                   aria-pressed=${this._tool === tool}
                   ?disabled=${!floor || (!this.isAdmin && tool !== "select")}
@@ -1808,6 +1809,10 @@ export class Fp3dEditor extends LitElement {
     const room = this.room;
     const admin = this.isAdmin;
     const areas = Object.values(this.hass?.areas ?? {}).sort((a, b) => a.name.localeCompare(b.name));
+    // furnishing: the library and the selected item come first
+    if (this._tool === "furniture" && floor && admin) {
+      return html`${this.furnitureItem ? this.renderFurnitureForm(this.furnitureItem) : nothing} ${this.renderFurnitureLibrary()}`;
+    }
     return html`
       ${admin ? nothing : html`<p class="fp3d-note">${this.t("read_only")}</p>`}
       <section>
@@ -1906,7 +1911,7 @@ export class Fp3dEditor extends LitElement {
             : floor
               ? this.renderRoomList(floor)
               : nothing}
-      ${floor && admin ? this.renderFurnitureLibrary() : nothing} ${admin ? this.renderEnergySettings() : nothing}
+      ${admin ? this.renderEnergySettings() : nothing}
       ${admin ? this.renderPresenceSettings() : nothing}
       ${floor && admin ? this.renderBackgroundForm(floor) : nothing} ${admin ? this.renderSettings() : nothing}
       ${admin ? this.renderBackup() : nothing}
@@ -2313,15 +2318,17 @@ export class Fp3dEditor extends LitElement {
   }
 
   private renderFurnitureLibrary() {
-    return html`<details class="fp3d-section">
-      <summary>${this.t("furniture_add")}</summary>
+    const room = this.room;
+    return html`<section>
+      <h3>${this.t("furniture_add")}</h3>
+      <p class="fp3d-sub">${room ? this.t("furniture_into", { room: room.name }) : this.t("furniture_pick_room")}</p>
       ${Object.entries(FURNITURE_GROUPS).map(
         ([group, types]) => html`<h4 class="fp3d-lib-head">${this.t(`furn_group_${group}` as I18nKey)}</h4>
           <div class="fp3d-library">
             ${types.map((t) => html`<button class="fp3d-btn" @click=${() => this.addFurniture(t)}>${this.t(`furn_${t}` as I18nKey)}</button>`)}
           </div>`,
       )}
-    </details>`;
+    </section>`;
   }
 
   private renderDeviceForm(pl: Placement) {
