@@ -1830,6 +1830,10 @@ export class Fp3dEditor extends LitElement {
       return html`<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("room", this._roomId)}>‹ ${this.t(room ? "back_to_room" : "back_to_floor", { room: room?.name ?? "" })}</button>
         ${item}`;
     }
+    if (room && this._tool !== "measure") {
+      return html`<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("room", null)}>‹ ${this.t("back_to_floor")}</button>
+        ${this.renderRoomForm(room, areas)} ${this.renderDeviceList(room)}`;
+    }
     return html`
       ${admin ? nothing : html`<p class="fp3d-note">${this.t("read_only")}</p>`}
       <section>
