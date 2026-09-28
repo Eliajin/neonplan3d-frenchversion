@@ -9,7 +9,7 @@ import { tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
 import type { Quality, WallMode } from "./viewer/viewer3d.ts";
 
-interface CardConfig {
+export interface CardConfig {
   type: string;
   floor?: string;
   height?: number;
@@ -25,6 +25,12 @@ interface CardConfig {
   heatmap?: "none" | "temperature" | "humidity" | "co2";
   /** Look: neon | blueprint | day. */
   theme?: "neon" | "blueprint" | "day";
+  /** Energy values at the top (default true). */
+  energy?: boolean;
+  /** Power flow lines always on or off; without it the card has its own switch. */
+  flows?: boolean;
+  /** Tapping a room opens its details (lights, blinds, cameras); default true. */
+  room_panel?: boolean;
 }
 
 export class Floorplan3dCard extends LitElement {
@@ -47,6 +53,12 @@ export class Floorplan3dCard extends LitElement {
     super();
     this._roomId = null;
     this._floorId = null;
+  }
+
+  /** Visual editor in the dashboard (no YAML needed). */
+  static async getConfigElement(): Promise<HTMLElement> {
+    await import("./card-editor.ts");
+    return document.createElement("floorplan-3d-card-editor");
   }
 
   static getStubConfig(): CardConfig {
@@ -98,6 +110,8 @@ export class Floorplan3dCard extends LitElement {
               .markerMode=${this._config?.markers ?? "important"}
               .heatMode=${this._config?.heatmap ?? "none"}
               .theme=${this._config?.theme ?? "neon"}
+              .showEnergy=${this._config?.energy ?? true}
+              .flows=${this._config?.flows ?? null}
               @room-tap=${(e: CustomEvent<{ floorId: string; roomId: string | null }>) => {
                 if (!e.detail.roomId) return;
                 if (!floorId && !this._config?.floor) this._floorId = e.detail.floorId;
@@ -110,7 +124,7 @@ export class Floorplan3dCard extends LitElement {
               @back=${() => this.back()}
             ></fp3d-view3d>`
           : html`<p class="fp3d-card-msg">${this.data.error ?? (b ? translate(this.hass, "no_building") : translate(this.hass, "loading"))}</p>`}
-        ${this._roomId && b
+        ${this._roomId && b && this._config?.room_panel !== false
           ? html`<fp3d-room-panel
               class="fp3d-card-panel"
               .hass=${this.hass}

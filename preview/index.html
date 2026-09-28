@@ -142,11 +142,37 @@
 
       let current = hass;
       await import("../custom_components/floorplan_3d/frontend/floorplan-3d.js");
-      const panel = document.querySelector("floorplan-3d-panel");
-      panel.hass = hass;
-      window.addEventListener("hass-more-info", (e) => console.log("more-info", e.detail.entityId));
-      panel.narrow = window.innerWidth < 870;
-      window.fp3dPanel = panel;
+      if (params.has("card")) {
+        // ?card: the dashboard card next to its visual editor (like Home Assistant's card dialog)
+        document.querySelector("floorplan-3d-panel").remove();
+        const CardClass = customElements.get("floorplan-3d-card");
+        const wrap = document.createElement("div");
+        wrap.style.cssText = "display:grid;grid-template-columns:420px 1fr;gap:24px;padding:24px;font-family:Figtree,Roboto,sans-serif;--primary-text-color:#e1e1e1;--secondary-text-color:#9b9b9b;--card-background-color:#1c1c1c;--primary-color:#03a9f4;--divider-color:rgba(225,225,225,.2)";
+        const editorBox = document.createElement("div");
+        editorBox.style.cssText = "background:#1c1c1c;border-radius:12px;padding:20px";
+        const editor = await CardClass.getConfigElement();
+        const card = document.createElement("floorplan-3d-card");
+        let config = { type: "custom:floorplan-3d-card", quality: "low", floor: "eg", flows: false };
+        card.setConfig(config);
+        editor.setConfig(config);
+        editor.addEventListener("config-changed", (e) => {
+          config = e.detail.config;
+          card.setConfig(config);
+          editor.setConfig(config);
+        });
+        editor.hass = hass;
+        card.hass = hass;
+        editorBox.append(editor);
+        wrap.append(editorBox, card);
+        document.body.append(wrap);
+        window.fp3dCard = card;
+      } else {
+        const panel = document.querySelector("floorplan-3d-panel");
+        panel.hass = hass;
+        window.addEventListener("hass-more-info", (e) => console.log("more-info", e.detail.entityId));
+        panel.narrow = window.innerWidth < 870;
+        window.fp3dPanel = panel;
+      }
     </script>
   </body>
 </html>

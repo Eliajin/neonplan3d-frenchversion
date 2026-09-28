@@ -61,6 +61,8 @@ export class Fp3dView3d extends LitElement {
     heatMode: { attribute: false },
     theme: { attribute: false },
     packs: { attribute: false },
+    showEnergy: { attribute: false },
+    flows: { attribute: false },
     furnish: { type: Boolean },
     selectedFurniture: { attribute: false },
     _sky: { state: true },
@@ -83,6 +85,10 @@ export class Fp3dView3d extends LitElement {
   /** Imported furniture packs (a new list rebuilds pack furniture). */
   declare packs: unknown;
   declare theme: Theme;
+  /** Show the energy values at the top (cards can switch them off). */
+  declare showEnergy: boolean;
+  /** Power flow lines fixed on or off (cards); null: the viewer's own toggle decides. */
+  declare flows: boolean | null;
   /** Furnishing: furniture and lamps are dragged in 3D (admins, panel only). */
   declare furnish: boolean;
   declare selectedFurniture: string | null;
@@ -122,6 +128,8 @@ export class Fp3dView3d extends LitElement {
     this.heatMode = "none";
     this.theme = "neon";
     this.furnish = false;
+    this.showEnergy = true;
+    this.flows = null;
     this.selectedFurniture = null;
     this._sky = 0;
     this.quality = "auto";
@@ -200,8 +208,8 @@ export class Fp3dView3d extends LitElement {
       v.setPacks([...getPacks()]);
     }
     if (changed.has("building") && this.building) v.setBuilding(this.building);
-    if (changed.has("building") || changed.has("hass") || changed.has("markerMode") || changed.has("heatMode")) {
-      this.syncDevices(changed.has("building") || changed.has("markerMode") || changed.has("heatMode"));
+    if (changed.has("building") || changed.has("hass") || changed.has("markerMode") || changed.has("heatMode") || changed.has("flows")) {
+      this.syncDevices(changed.has("building") || changed.has("markerMode") || changed.has("heatMode") || changed.has("flows"));
     }
     if (changed.has("floorId")) v.setFloor(this.floorId);
     if (changed.has("roomId") && (this.roomId || changed.get("roomId"))) v.selectRoom(this.roomId);
@@ -266,7 +274,7 @@ export class Fp3dView3d extends LitElement {
     v.setOpeningStates(new Map([...this.openingLinks!].map(([id, e]) => [id, openingState(hass, e, types.get(id))])));
     const batteryPlaced = b.energy.battery ? b.floors.flatMap((f) => f.placements.filter((p) => p.entity_id === b.energy.battery).map((p) => ({ floorId: f.id, x: p.x, z: p.z })))[0] : null;
     v.setFlows(
-      !this._flows
+      !(this.flows ?? this._flows)
         ? []
         : flowSegments({ building: b, consumers, summary, battery: batteryPlaced ?? null }).map((f) => ({
         floorId: f.floorId,
@@ -465,7 +473,7 @@ export class Fp3dView3d extends LitElement {
 
   private renderEnergy() {
     const e = this._energy;
-    if (!e || this.roomId) return nothing;
+    if (!e || this.roomId || !this.showEnergy) return nothing;
     const t = (k: Parameters<typeof translate>[1]) => translate(this.hass, k);
     const items: { cls: string; label: string; value: string }[] = [];
     if (e.consumption !== null) items.push({ cls: "total", label: t("energy_consumption"), value: formatPower(this.hass, e.consumption) });
@@ -481,9 +489,11 @@ export class Fp3dView3d extends LitElement {
     if (e.tariff) items.push({ cls: "tariff", label: t("energy_tariff"), value: `${formatNumber(this.hass, e.tariff.value, 3)} ${e.tariff.unit}`.trim() });
     return html`<div class="fp3d-energy" aria-live="off">
       ${items.map((i) => html`<div class="fp3d-energy-item fp3d-energy-${i.cls}"><span>${i.label}</span><b>${i.value}</b></div>`)}
-      <button class="fp3d-energy-item fp3d-flow-toggle" aria-pressed=${this._flows} title=${`${t("flows_hint")} (${t(this._flows ? "flow_on" : "flow_off")})`} aria-label=${t("flows")} @click=${() => this.toggleFlows()}>
+      ${this.flows !== null
+        ? nothing
+        : html`<button class="fp3d-energy-item fp3d-flow-toggle" aria-pressed=${this._flows} title=${`${t("flows_hint")} (${t(this._flows ? "flow_on" : "flow_off")})`} aria-label=${t("flows")} @click=${() => this.toggleFlows()}>
         <span>${t("flows")}</span><b>⚡</b>
-      </button>
+      </button>`}
     </div>`;
   }
 

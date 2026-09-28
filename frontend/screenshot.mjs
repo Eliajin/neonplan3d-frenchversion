@@ -88,6 +88,7 @@ const shots = [
   { name: "editor-packs", query: "", width: 1280, height: 1000, editor: true, editorState: { _tool: "furniture", _roomId: "wohnen" }, scrollSide: true },
   { name: "view-packs", query: "", width: 1280, height: 800, editor: true, editorScript: PACK_SCRIPT, then3d: "Wohnzimmer" },
   { name: "editor-packs-plan", query: "", width: 1280, height: 800, editor: true, editorScript: PACK_SCRIPT },
+  { name: "card-editor", query: "?card", width: 1400, height: 900 },
   { name: "editor-package", query: "", width: 1280, height: 900, editor: true, editorScript: "const f = e._doc.floors[1]; e._floorId = f.id; e.applyPackage(f.rooms.find((r) => r.id === 'gast'), 'bedroom'); e.applyPackage(f.rooms.find((r) => r.id === 'kind'), 'kids');" },
   { name: "view-package", query: "", width: 1280, height: 800, editor: true, editorScript: "const f = e._doc.floors[1]; e.applyPackage(f.rooms.find((r) => r.id === 'gast'), 'bedroom');", then3d: "Obergeschoss" },
   { name: "view-furnish", query: "", width: 1280, height: 800, click: "Erdgeschoss", furnishDrag: { id: "m2", dx: -160, dy: 60 } },
