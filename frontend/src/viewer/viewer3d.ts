@@ -42,6 +42,7 @@ import { buildFloorGeometry, SLAB, stairHoles, type FloorGeometry } from "./buil
 import { OrbitControls } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
 import { screenRect } from "./furniture.ts";
+import { setPacks, type FurniturePack } from "../packs.ts";
 import { buildRoof } from "./roof.ts";
 import { lineBlending, themed, themeIndex, type Theme, type ThemeUniform } from "./theme.ts";
 
@@ -392,6 +393,15 @@ export class FloorplanViewer {
     this.controls = this.makeControls();
     this.controls.view = view;
     this.resize();
+  }
+
+  /** Furniture packs (models of pack furniture); set before the building that uses them. */
+  setPacks(packs: FurniturePack[]): void {
+    setPacks(packs);
+    if (this.building) {
+      this.rebuild();
+      this.invalidate();
+    }
   }
 
   setBuilding(building: Building): void {

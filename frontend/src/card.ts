@@ -88,6 +88,7 @@ export class Floorplan3dCard extends LitElement {
           ? html`<fp3d-view3d
               .hass=${this.hass}
               .building=${b}
+              .packs=${this.data.packs}
               .floorId=${floorId}
               .roomId=${this._roomId}
               .wallMode=${this._config?.walls ?? "auto"}

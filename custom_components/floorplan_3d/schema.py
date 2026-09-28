@@ -60,7 +60,8 @@ OPENING_SCHEMA = vol.Schema(
 FURNITURE_SCHEMA = vol.Schema(
     {
         vol.Required("id"): _ID,
-        vol.Required("type"): vol.All(str, vol.Length(max=32)),
+        # built-in type, or "pack:<pack id>:<item id>" for furniture from a pack
+        vol.Required("type"): vol.All(str, vol.Length(max=96)),
         vol.Required("x"): _COORD,
         vol.Required("z"): _COORD,
         vol.Required("rotation"): vol.Coerce(float),

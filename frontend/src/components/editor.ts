@@ -15,7 +15,6 @@ import {
   bounds,
   centroid,
   FLOOR_MATERIALS,
-  ELECTRIC_FURNITURE,
   FURNITURE_GROUPS,
   FURNITURE_SIZE,
   FURNITURE_TYPES,
@@ -52,6 +51,9 @@ import {
 } from "../model.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
+import { importPack, removePack } from "../api.ts";
+import { furnitureName } from "../furniture-names.ts";
+import { furnitureSize, isElectric, packItemName, packType, setPacks, type FurniturePack } from "../packs.ts";
 
 type Tool = "select" | "rect" | "polygon" | "measure" | "opening" | "furniture" | "outdoor" | "meter";
 
@@ -86,6 +88,8 @@ export class Fp3dEditor extends LitElement {
     hass: { attribute: false },
     building: { attribute: false },
     narrow: { type: Boolean },
+    packs: { attribute: false },
+    _packMsg: { state: true },
     _doc: { state: true },
     _floorId: { state: true },
     _roomId: { state: true },
@@ -118,6 +122,10 @@ export class Fp3dEditor extends LitElement {
   declare hass: HomeAssistant;
   declare building: Building;
   declare narrow: boolean;
+  /** Imported furniture packs (from the panel's controller). */
+  declare packs: FurniturePack[] | undefined;
+  /** Result of the last pack import. */
+  private declare _packMsg: { ok: boolean; text: string } | null;
   private declare _doc: Building;
   private declare _floorId: string | null;
   private declare _roomId: string | null;
@@ -180,6 +188,7 @@ export class Fp3dEditor extends LitElement {
     this._outdoorId = null;
     this._floorMenu = false;
     this._openingPreset = "door";
+    this._packMsg = null;
     this._measureLen = 3;
     this._packages = false;
     this._rectSize = [4, 3];
@@ -212,6 +221,8 @@ export class Fp3dEditor extends LitElement {
   }
 
   protected willUpdate(changed: PropertyValues): void {
+    // this bundle keeps its own pack registry
+    if (changed.has("packs")) setPacks(this.packs ?? []);
     if (changed.has("building") && this.building !== this._doc) {
       this._doc = this.building;
       if (!this._doc.floors.some((f) => f.id === this._floorId)) this._floorId = this._doc.floors[0]?.id ?? null;
@@ -1171,10 +1182,10 @@ export class Fp3dEditor extends LitElement {
     this._openingId = null;
   }
 
-  private addFurniture(type: FurnitureType): void {
+  private addFurniture(type: string): void {
     const floor = this.floor;
     if (!floor || !this.isAdmin) return;
-    const [w, d, h0] = FURNITURE_SIZE[type];
+    const [w, d, h0] = furnitureSize(type);
     // stairs reach up to the next floor
     const above = this._doc.floors.filter((f) => f.elevation > floor.elevation).sort((p, q) => p.elevation - q.elevation)[0];
     const h = type === "stairs" ? round(above ? above.elevation - floor.elevation : floor.height + 0.25) : h0;
@@ -1599,7 +1610,7 @@ export class Fp3dEditor extends LitElement {
           <g class="fp3d-furn-sym">${furnitureSymbol(f.type, f.w, f.d)}</g>
           <line class="fp3d-furn-front" x1=${-f.w / 2} y1=${f.d / 2} x2=${f.w / 2} y2=${f.d / 2} />
         </g>
-        ${big ? svg`<text x=${cx} y=${cy + 4}>${this.t(`furn_${f.type}` as I18nKey)}</text>` : nothing}
+        ${big ? svg`<text x=${cx} y=${cy + 4}>${furnitureName(this.hass, f.type)}</text>` : nothing}
       </g>
       ${sel && this.isAdmin
         ? ([[-1, -1], [1, -1], [1, 1], [-1, 1]] as const).map(([sx, sz]) => {
@@ -2193,6 +2204,17 @@ export class Fp3dEditor extends LitElement {
           >${this.t("furniture_type")}
           <select ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ type: (e.target as HTMLSelectElement).value })}>
             ${FURNITURE_TYPES.map((t) => html`<option value=${t} ?selected=${t === f.type}>${this.t(`furn_${t}` as I18nKey)}</option>`)}
+            ${(this.packs ?? []).map(
+              (pack) => html`<optgroup label=${pack.name}>
+                ${pack.items.map((it) => {
+                  const t = packType(pack.id, it.id);
+                  return html`<option value=${t} ?selected=${t === f.type}>${packItemName(it, this.hass?.language ?? "en")}</option>`;
+                })}
+              </optgroup>`,
+            )}
+            ${f.type.startsWith("pack:") && !(this.packs ?? []).some((p) => f.type.startsWith(`pack:${p.id}:`))
+              ? html`<option value=${f.type} selected>${furnitureName(this.hass, f.type)}</option>`
+              : nothing}
           </select></label
         >
         ${this.num(this.t("x"), f.x, (v) => this.updateFurniture({ x: v }))} ${this.num(this.t("z"), f.z, (v) => this.updateFurniture({ z: v }))}
@@ -2214,7 +2236,7 @@ export class Fp3dEditor extends LitElement {
             >
           </div>`
         : nothing}
-      ${ELECTRIC_FURNITURE.has(f.type) ? this.renderFurnitureLinks(f) : nothing}
+      ${isElectric(f.type) ? this.renderFurnitureLinks(f) : nothing}
       ${admin
         ? html`<div class="fp3d-actions">
             <button class="fp3d-btn" @click=${() => this.rotateFurniture(-90)}>${this.t("rotate_left")}</button>
@@ -2349,7 +2371,63 @@ export class Fp3dEditor extends LitElement {
             ${types.map((t) => html`<button class="fp3d-btn" @click=${() => this.addFurniture(t)}>${this.t(`furn_${t}` as I18nKey)}</button>`)}
           </div>`,
       )}
+      ${(this.packs ?? []).map(
+        (pack) => html`<h4 class="fp3d-lib-head">${pack.name}</h4>
+          <div class="fp3d-library">
+            ${pack.items.map(
+              (it) => html`<button class="fp3d-btn" @click=${() => this.addFurniture(packType(pack.id, it.id))}>${packItemName(it, this.hass?.language ?? "en")}</button>`,
+            )}
+          </div>`,
+      )}
+    </section>
+    ${this.renderPacks()}`;
+  }
+
+  private renderPacks() {
+    const packs = this.packs ?? [];
+    return html`<section>
+      <h3>${this.t("packs")}</h3>
+      ${packs.map(
+        (p) => html`<div class="fp3d-pack">
+          <div>
+            <b>${p.name}</b>
+            <span class="fp3d-sub">${this.t("pack_by", { publisher: p.publisher, n: p.items.length })}</span>
+            ${p.licensee ? html`<span class="fp3d-sub">${this.t("pack_licensed", { name: p.licensee })}</span>` : nothing}
+          </div>
+          <button class="fp3d-btn fp3d-danger" @click=${() => this.deletePack(p)}>${this.t("pack_remove")}</button>
+        </div>`,
+      )}
+      <label class="fp3d-btn fp3d-primary fp3d-pack-import">
+        ${this.t("pack_import")}
+        <input type="file" accept=".fp3dpack,.json,application/json" hidden @change=${(e: Event) => this.importPackFile(e)} />
+      </label>
+      ${this._packMsg ? html`<p class="fp3d-sub ${this._packMsg.ok ? "fp3d-notice" : "fp3d-pack-error"}">${this._packMsg.text}</p>` : nothing}
+      <p class="fp3d-sub">${this.t("packs_hint")}</p>
     </section>`;
+  }
+
+  private async importPackFile(e: Event): Promise<void> {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file || !this.hass) return;
+    try {
+      const res = await importPack(this.hass, await file.text());
+      this._packMsg = { ok: true, text: this.t("pack_imported", { name: res.name, publisher: res.publisher, n: res.items }) };
+      this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
+    } catch (err) {
+      const { code, message } = (err ?? {}) as { code?: string; message?: string };
+      const key = `pack_error_${code}` as I18nKey;
+      const text = this.t(key, { detail: message ?? String(err) });
+      this._packMsg = { ok: false, text: text === key ? this.t("pack_error_other", { detail: message ?? String(err) }) : text };
+    }
+  }
+
+  private async deletePack(pack: FurniturePack): Promise<void> {
+    if (!this.hass || !confirm(this.t("pack_remove_confirm", { name: pack.name }))) return;
+    await removePack(this.hass, pack.id);
+    this._packMsg = null;
+    this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
   }
 
   private renderDeviceForm(pl: Placement) {
@@ -2987,6 +3065,27 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-rotate {
         cursor: grab;
+      }
+      .fp3d-pack {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--fp3d-line);
+      }
+      .fp3d-pack div {
+        display: grid;
+        gap: 2px;
+      }
+      .fp3d-pack-import {
+        display: block;
+        margin-top: 10px;
+        text-align: center;
+        cursor: pointer;
+      }
+      .fp3d-pack-error {
+        color: var(--fp3d-danger);
       }
       .fp3d-back {
         margin-bottom: 12px;

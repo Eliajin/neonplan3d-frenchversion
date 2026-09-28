@@ -1,6 +1,7 @@
 // Websocket calls to the backend (custom_components/floorplan_3d/websocket.py).
 
 import type { Building } from "./model.ts";
+import type { FurniturePack } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
 
 export async function fetchBuilding(hass: HomeAssistant): Promise<{ building: Building; revision: number; version?: string }> {
@@ -49,4 +50,26 @@ export async function takeSnapshot(hass: HomeAssistant): Promise<void> {
 export async function restoreSnapshot(hass: HomeAssistant, snapshotId: string): Promise<number> {
   const res = await hass.callWS<{ revision: number }>({ type: "floorplan_3d/history/restore", snapshot_id: snapshotId });
   return res.revision;
+}
+
+export async function listPacks(hass: HomeAssistant): Promise<FurniturePack[]> {
+  const res = await hass.callWS<{ packs: FurniturePack[] }>({ type: "floorplan_3d/packs/list" });
+  return res.packs;
+}
+
+export interface ImportedPack {
+  id: string;
+  name: string;
+  publisher: string;
+  licensee: string | null;
+  items: number;
+}
+
+/** Import a pack file; the backend checks its signature (errors carry a code, e.g. "bad_signature"). */
+export async function importPack(hass: HomeAssistant, text: string): Promise<ImportedPack> {
+  return hass.callWS<ImportedPack>({ type: "floorplan_3d/packs/import", pack: text });
+}
+
+export async function removePack(hass: HomeAssistant, packId: string): Promise<void> {
+  await hass.callWS({ type: "floorplan_3d/packs/remove", pack_id: packId });
 }

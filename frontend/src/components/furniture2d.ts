@@ -2,6 +2,7 @@
 // The editor places them with translate/rotate/scale; strokes keep their width on screen.
 
 import { nothing, svg, type SVGTemplateResult } from "lit";
+import { packItem, type PackItem } from "../packs.ts";
 
 type Part = SVGTemplateResult;
 
@@ -164,7 +165,29 @@ export function furnitureSymbol(type: string, w: number, d: number): Part[] | ty
       out.push(line(0, d / 2 - 0.1, 0, -d / 2 + 0.25, "fp3d-sym-strong"), line(-0.15, -d / 2 + 0.45, 0, -d / 2 + 0.25, "fp3d-sym-strong"), line(0.15, -d / 2 + 0.45, 0, -d / 2 + 0.25, "fp3d-sym-strong"));
       return out;
     }
-    default:
-      return nothing;
+    default: {
+      const item = packItem(type);
+      return item ? packSymbol(item, w, d) : nothing;
+    }
   }
+}
+
+/** Plan symbol of a pack item: its own symbol, or its parts seen from above (except the full-size base). */
+function packSymbol(item: PackItem, w: number, d: number): Part[] {
+  if (item.symbol?.length) {
+    return item.symbol.map((s) =>
+      s.shape === "rect"
+        ? rect((s.x - s.w / 2) * w, (s.z - s.d / 2) * d, (s.x + s.w / 2) * w, (s.z + s.d / 2) * d, s.fill ? "fp3d-sym-fill" : "")
+        : s.shape === "circle"
+          ? circle(s.x * w, s.z * d, s.r * Math.min(w, d))
+          : line(s.x1 * w, s.z1 * d, s.x2 * w, s.z2 * d),
+    );
+  }
+  return item.parts
+    .filter((p) => p.w < 0.98 || p.d < 0.98)
+    .map((p) =>
+      p.shape === "cyl"
+        ? circle(p.x * w, p.z * d, Math.min(p.w * w, p.d * d) / 2)
+        : rect((p.x - p.w / 2) * w, (p.z - p.d / 2) * d, (p.x + p.w / 2) * w, (p.z + p.d / 2) * d),
+    );
 }

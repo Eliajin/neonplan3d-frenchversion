@@ -16,7 +16,7 @@
     <floorplan-3d-panel></floorplan-3d-panel>
     <script type="module">
       // Mock of the Home Assistant frontend object with invented demo data.
-      import { DEMO_AREAS, DEMO_BUILDING, DEMO_FLOORS, DEMO_ENTITIES, DEMO_STATES } from "./demo-data.js";
+      import { DEMO_AREAS, DEMO_BUILDING, DEMO_FLOORS, DEMO_PACK, DEMO_ENTITIES, DEMO_STATES } from "./demo-data.js";
 
       const params = new URLSearchParams(location.search);
       let building = params.has("empty") ? { version: 1, floors: [], settings: { wall_exterior: 0.24, wall_interior: 0.12, grid: 0.05 } } : DEMO_BUILDING;
@@ -25,6 +25,21 @@
       const listeners = new Set();
       // invented restore points
       const history = [{ id: "s0", revision: 0, saved_at: Date.now() / 1000 - 3600, building: structuredClone(building) }];
+
+      // furniture packs: the invented demo pack, plus local pack sources from private/ (not in git)
+      let importedPacks = null;
+      async function previewPacks() {
+        if (importedPacks === null) {
+          importedPacks = [DEMO_PACK];
+          try {
+            const res = await fetch("../private/packs/starter.json");
+            if (res.ok) importedPacks.push({ licensee: null, ...(await res.json()) });
+          } catch {
+            // no local packs
+          }
+        }
+        return importedPacks;
+      }
 
       const hass = {
         language: params.get("lang") || "de",
@@ -106,6 +121,18 @@
               return { data: images[msg.image_id] };
             case "floorplan_3d/image/set":
               images[msg.image_id] = msg.data;
+              return null;
+            case "floorplan_3d/packs/list":
+              return { packs: await previewPacks() };
+            case "floorplan_3d/packs/import": {
+              // the preview cannot check signatures: a file with a payload counts as valid
+              const data = JSON.parse(msg.pack);
+              if (!data.payload || !data.signature) throw { code: "unsigned", message: "unsigned" };
+              importedPacks = [...importedPacks.filter((p) => p.id !== data.payload.id), data.payload];
+              return { id: data.payload.id, name: data.payload.name, publisher: data.payload.publisher, licensee: data.payload.licensee ?? null, items: data.payload.items.length };
+            }
+            case "floorplan_3d/packs/remove":
+              importedPacks = importedPacks.filter((p) => p.id !== msg.pack_id);
               return null;
             default:
               throw { code: "unknown_command", message: msg.type };

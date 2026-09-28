@@ -2,7 +2,7 @@
 
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import { BuildingController } from "./building-controller.ts";
-import "./components/editor.ts";
+import { loadEditor } from "./load-editor.ts";
 import "./components/room-panel.ts";
 import "./components/view3d.ts";
 import { translate, type I18nKey } from "./i18n.ts";
@@ -13,6 +13,7 @@ import type { MarkerMode } from "./components/view3d.ts";
 import type { HeatMode } from "./heatmap.ts";
 import { THEMES, type Theme } from "./themes.ts";
 import { snapToWall } from "./geometry/snap.ts";
+import { furnitureName } from "./furniture-names.ts";
 import type { Quality, WallMode } from "./viewer/viewer3d.ts";
 
 type Mode = "view" | "editor";
@@ -42,6 +43,7 @@ export class Floorplan3dPanel extends LitElement {
     route: { attribute: false },
     panel: { attribute: false },
     _mode: { state: true },
+    _editorReady: { state: true },
     _floorId: { state: true },
     _roomId: { state: true },
     _wallMode: { state: true },
@@ -60,6 +62,8 @@ export class Floorplan3dPanel extends LitElement {
   declare route: unknown;
   declare panel: unknown;
   private declare _mode: Mode;
+  /** The editor bundle is loaded (it is fetched the first time the editor opens). */
+  private declare _editorReady: boolean;
   private declare _floorId: string | null;
   private declare _roomId: string | null;
   private declare _wallMode: WallMode;
@@ -80,6 +84,7 @@ export class Floorplan3dPanel extends LitElement {
     super();
     this.narrow = false;
     this._mode = "view";
+    this._editorReady = !!customElements.get("fp3d-editor");
     this._floorId = null;
     this._roomId = null;
     this._wallMode = "auto";
@@ -151,7 +156,7 @@ export class Floorplan3dPanel extends LitElement {
 
   private furnitureName(id: string): string {
     const f = this.data.building?.floors.flatMap((fl) => fl.furniture).find((m) => m.id === id);
-    return f ? this.t(`furn_${f.type}` as I18nKey) : "";
+    return f ? furnitureName(this.hass, f.type) : "";
   }
 
   private moveFurniture(e: CustomEvent<{ id: string; x: number; z: number }>): void {
@@ -317,11 +322,20 @@ export class Floorplan3dPanel extends LitElement {
   }
 
   private renderEditor(b: Building) {
+    if (!this._editorReady) {
+      loadEditor().then(
+        () => (this._editorReady = true),
+        (err: unknown) => (this.data.error = String(err)),
+      );
+      return html`<div class="fp3d-empty"><p>${this.t("loading")}</p></div>`;
+    }
     return html`<fp3d-editor
       class="fp3d-body"
       .hass=${this.hass}
       .building=${b}
       .narrow=${this.narrow}
+      .packs=${this.data.packs}
+      @packs-changed=${() => void this.data.reloadPacks()}
       @building-changed=${(e: CustomEvent<{ building: Building }>) => this.data.edit(e.detail.building)}
     ></fp3d-editor>`;
   }
@@ -378,6 +392,7 @@ export class Floorplan3dPanel extends LitElement {
           class="fp3d-body"
           .hass=${this.hass}
           .building=${b}
+          .packs=${this.data.packs}
           .floorId=${b.floors.length > 1 ? this._floorId : (b.floors[0]?.id ?? null)}
           .roomId=${this._roomId}
           .wallMode=${this._wallMode}

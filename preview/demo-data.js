@@ -370,3 +370,24 @@ DEMO_BUILDING.floors[0].outdoor = [
   area("a9", "fence", -4, -9, 19, 14.5),
 ];
 DEMO_BUILDING.settings = { ...DEMO_BUILDING.settings, north: 0, roof: { type: "gable", pitch: 35, overhang: 0.4 } };
+
+// an invented furniture pack (the preview does not check signatures)
+export const DEMO_PACK = {
+  format: "fp3dpack",
+  version: 1,
+  id: "demo.pack",
+  name: "Demo-Pack",
+  publisher: "Demo",
+  licensee: null,
+  items: [
+    {
+      id: "cube_seat",
+      name: { de: "Sitzwürfel", en: "Seat cube" },
+      size: [0.45, 0.45, 0.45],
+      parts: [
+        { shape: "box", x: 0, z: 0, w: 1, d: 1, y: 0, h: 0.9, color: "fabric", edges: true },
+        { shape: "box", x: 0, z: 0, w: 0.9, d: 0.9, y: 0.9, h: 0.1, color: "cushion" },
+      ],
+    },
+  ],
+};

@@ -1,0 +1,168 @@
+"""Furniture packs: signed files with furniture models built from boxes and cylinders.
+
+A pack is JSON: the payload (format, id, name, publisher, items) plus a signature. Only packs signed
+with a publisher key listed in PACK_PUBLIC_KEYS are accepted. The signature covers the payload in a
+canonical form (sorted keys, no whitespace, UTF-8), so any change to the file invalidates it.
+
+This module only depends on voluptuous and cryptography, so tools/fp3dpack.py (which signs packs)
+uses the same schema and canonical form.
+"""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+from typing import Any
+
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+import voluptuous as vol
+
+PACK_FORMAT = "fp3dpack"
+PACK_VERSION = 1
+# largest pack file accepted (characters of JSON)
+MAX_PACK_SIZE = 1_000_000
+
+# Publisher keys whose packs are accepted: key id -> raw Ed25519 public key (base64).
+PACK_PUBLIC_KEYS: dict[str, str] = {
+    # Mastershort
+    "62863e45df5a": "D3sbiEQibaCVm1OWcYUrQc424c2t+pmSQqWg6l6fNSE=",
+}
+
+_ID = vol.All(str, vol.Match(r"^[a-z0-9][a-z0-9_.-]{0,39}$"))
+_TEXT = vol.All(str, vol.Length(min=1, max=80))
+# a colour: "#rrggbb" or a role of the built-in palette (so packs follow the look of the plan)
+_COLOR = vol.Any(
+    vol.Match(r"^#[0-9a-fA-F]{6}$"),
+    vol.In(["body", "fabric", "cushion", "wood", "white", "metal", "dark", "glass", "plant", "pot", "accent"]),
+)
+_FRACTION = vol.All(vol.Coerce(float), vol.Range(min=-0.5, max=0.5))
+_SPAN = vol.All(vol.Coerce(float), vol.Range(min=0.005, max=1))
+_LEVEL = vol.All(vol.Coerce(float), vol.Range(min=0, max=1))
+_METRES = vol.All(vol.Coerce(float), vol.Range(min=0.01, max=10))
+
+# Parts in fractions of the item's size: x/z centre (-0.5..0.5, front at +z), w/d extent, y/h bottom
+# and height of the item height. A cylinder's diameter is the smaller of w and d.
+PART_SCHEMA = vol.Schema(
+    {
+        vol.Required("shape"): vol.In(["box", "cyl"]),
+        vol.Required("x"): _FRACTION,
+        vol.Required("z"): _FRACTION,
+        vol.Required("w"): _SPAN,
+        vol.Required("d"): _SPAN,
+        vol.Required("y"): _LEVEL,
+        vol.Required("h"): _SPAN,
+        vol.Required("color"): _COLOR,
+        vol.Optional("top"): _COLOR,
+        vol.Optional("edges", default=False): bool,
+    }
+)
+
+# Plan symbol in the same fractions (optional: without it the parts are drawn from above).
+SYMBOL_SCHEMA = vol.Any(
+    vol.Schema(
+        {
+            vol.Required("shape"): "rect",
+            "x": _FRACTION,
+            "z": _FRACTION,
+            "w": _SPAN,
+            "d": _SPAN,
+            vol.Optional("fill", default=False): bool,
+        }
+    ),
+    vol.Schema({vol.Required("shape"): "circle", "x": _FRACTION, "z": _FRACTION, "r": _SPAN}),
+    vol.Schema({vol.Required("shape"): "line", "x1": _FRACTION, "z1": _FRACTION, "x2": _FRACTION, "z2": _FRACTION}),
+)
+
+ITEM_SCHEMA = vol.Schema(
+    {
+        vol.Required("id"): _ID,
+        # names by language ("de", "en", …); "en" or the first one is the fallback
+        vol.Required("name"): vol.All({vol.All(str, vol.Length(min=2, max=5)): _TEXT}, vol.Length(min=1, max=10)),
+        vol.Required("size"): vol.All([_METRES], vol.Length(min=3, max=3)),
+        vol.Optional("electric", default=False): bool,
+        vol.Required("parts"): vol.All([PART_SCHEMA], vol.Length(min=1, max=60)),
+        vol.Optional("symbol"): vol.All([SYMBOL_SCHEMA], vol.Length(max=40)),
+    }
+)
+
+PAYLOAD_SCHEMA = vol.Schema(
+    {
+        vol.Required("format"): PACK_FORMAT,
+        vol.Required("version"): PACK_VERSION,
+        vol.Required("id"): _ID,
+        vol.Required("name"): _TEXT,
+        vol.Required("publisher"): _TEXT,
+        # buyer the pack was signed for (shown on import)
+        vol.Optional("licensee", default=None): vol.Any(None, _TEXT),
+        vol.Optional("description", default=""): vol.All(str, vol.Length(max=400)),
+        vol.Required("items"): vol.All([ITEM_SCHEMA], vol.Length(min=1, max=200)),
+    }
+)
+
+
+class PackError(Exception):
+    """A pack that cannot be imported; `code` says why."""
+
+    def __init__(self, code: str, detail: str = "") -> None:
+        """Keep the reason."""
+        super().__init__(f"{code}: {detail}" if detail else code)
+        self.code = code
+        self.detail = detail
+
+
+def canonical(payload: dict[str, Any]) -> bytes:
+    """Bytes the signature covers."""
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def key_id(public_raw: bytes) -> str:
+    """Short name of a public key."""
+    return hashlib.sha256(public_raw).hexdigest()[:12]
+
+
+def validate_payload(payload: Any) -> dict[str, Any]:
+    """Check the content of a pack (without its signature); raises PackError."""
+    try:
+        clean = PAYLOAD_SCHEMA(payload)
+    except vol.Invalid as err:
+        raise PackError("invalid_content", str(err)) from err
+    ids = [item["id"] for item in clean["items"]]
+    if len(ids) != len(set(ids)):
+        raise PackError("invalid_content", "item ids must be unique")
+    return clean
+
+
+def verify_pack(text: str, keys: dict[str, str] | None = None) -> dict[str, Any]:
+    """Parse a pack file, check its signature against the publisher keys and return its payload."""
+    keys = PACK_PUBLIC_KEYS if keys is None else keys
+    if len(text) > MAX_PACK_SIZE:
+        raise PackError("too_large")
+    try:
+        data = json.loads(text)
+    except ValueError as err:
+        raise PackError("not_a_pack", "not JSON") from err
+    if (
+        not isinstance(data, dict)
+        or not isinstance(data.get("payload"), dict)
+        or data["payload"].get("format") != PACK_FORMAT
+    ):
+        raise PackError("not_a_pack")
+    signature = data.get("signature")
+    if (
+        not isinstance(signature, dict)
+        or not isinstance(signature.get("key"), str)
+        or not isinstance(signature.get("sig"), str)
+    ):
+        raise PackError("unsigned")
+    public = keys.get(signature["key"])
+    if public is None:
+        raise PackError("unknown_publisher")
+    try:
+        Ed25519PublicKey.from_public_bytes(base64.b64decode(public)).verify(
+            base64.b64decode(signature["sig"], validate=True), canonical(data["payload"])
+        )
+    except (InvalidSignature, ValueError) as err:
+        raise PackError("bad_signature") from err
+    return validate_payload(data["payload"])

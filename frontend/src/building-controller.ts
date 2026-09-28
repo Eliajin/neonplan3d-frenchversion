@@ -1,8 +1,9 @@
 // Loads the building, follows changes made elsewhere and saves edits (debounced).
 
 import type { ReactiveController, ReactiveControllerHost } from "lit";
-import { fetchBuilding, saveBuilding, subscribeBuilding } from "./api.ts";
+import { fetchBuilding, listPacks, saveBuilding, subscribeBuilding } from "./api.ts";
 import { normalizeBuilding, type Building } from "./model.ts";
+import { setPacks, type FurniturePack } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
 
 export type SaveState = "idle" | "saving" | "saved" | "error";
@@ -48,6 +49,8 @@ export class BuildingController implements ReactiveController {
   backendVersion: string | null = null;
   /** Unsaved edits from an earlier session, offered for restoring. */
   draft: Draft | null = null;
+  /** Imported furniture packs. */
+  packs: FurniturePack[] = [];
 
   private readonly host: ReactiveControllerHost;
   private hass: HomeAssistant | null = null;
@@ -142,7 +145,7 @@ export class BuildingController implements ReactiveController {
 
   private async start(): Promise<void> {
     if (!this.hass) return;
-    await this.reload();
+    await Promise.all([this.reloadPacks(), this.reload()]);
     if (!this.unsubscribe && this.connected) {
       try {
         this.unsubscribe = await subscribeBuilding(this.hass, (revision) => {
@@ -154,6 +157,19 @@ export class BuildingController implements ReactiveController {
         // older backend or connection loss: changes from elsewhere show after a reload
       }
     }
+  }
+
+  /** Load the furniture packs again (after an import or removal). */
+  async reloadPacks(): Promise<void> {
+    if (!this.hass) return;
+    try {
+      this.packs = await listPacks(this.hass);
+    } catch {
+      // backend without packs (before a restart): no pack furniture
+      this.packs = [];
+    }
+    setPacks(this.packs);
+    this.host.requestUpdate();
   }
 
   private async reload(): Promise<void> {

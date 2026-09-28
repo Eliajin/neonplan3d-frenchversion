@@ -23,6 +23,7 @@ from .const import (
     STORAGE_KEY_BUILDING,
     STORAGE_KEY_HISTORY,
     STORAGE_KEY_IMAGES,
+    STORAGE_KEY_PACKS,
     STORAGE_MINOR_VERSION,
     STORAGE_VERSION,
 )
@@ -50,11 +51,12 @@ class _BuildingStore(Store):
         return old_data
 
 
-def _stores(hass: HomeAssistant) -> tuple[Store, Store, Store]:
+def _stores(hass: HomeAssistant) -> tuple[Store, Store, Store, Store]:
     return (
         _BuildingStore(hass, STORAGE_VERSION, STORAGE_KEY_BUILDING, minor_version=STORAGE_MINOR_VERSION),
         Store(hass, STORAGE_VERSION, STORAGE_KEY_IMAGES),
         Store(hass, STORAGE_VERSION, STORAGE_KEY_HISTORY),
+        Store(hass, STORAGE_VERSION, STORAGE_KEY_PACKS),
     )
 
 
@@ -73,11 +75,13 @@ class FloorplanData:
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialise the stores."""
         self.hass = hass
-        self._building_store, self._image_store, self._history_store = _stores(hass)
+        self._building_store, self._image_store, self._history_store, self._pack_store = _stores(hass)
         self.building: dict[str, Any] = empty_building()
         self.revision = 0
         self._images: dict[str, str] = {}
         self._history: list[dict[str, Any]] = []
+        # imported furniture packs (checked payloads, see packs.py)
+        self.packs: list[dict[str, Any]] = []
 
     async def async_load(self) -> None:
         """Load both stores and drop images no floor refers to any more."""
@@ -85,6 +89,8 @@ class FloorplanData:
         if stored:
             self.building = complete(stored.get("building") or empty_building())
             self.revision = int(stored.get("revision", 0))
+        packs = await self._pack_store.async_load()
+        self.packs = list((packs or {}).get("packs", []))
         history = await self._history_store.async_load()
         self._history = list((history or {}).get("snapshots", []))
         images = await self._image_store.async_load()
@@ -134,6 +140,20 @@ class FloorplanData:
     def snapshot(self, snapshot_id: str) -> dict[str, Any] | None:
         """Building of a restore point."""
         return next((h["building"] for h in self._history if h["id"] == snapshot_id), None)
+
+    async def async_add_pack(self, payload: dict[str, Any]) -> None:
+        """Keep an imported pack; a newer file of the same pack replaces the old one."""
+        self.packs = [p for p in self.packs if p["id"] != payload["id"]] + [{**payload, "imported_at": time.time()}]
+        await self._pack_store.async_save({"packs": self.packs})
+
+    async def async_remove_pack(self, pack_id: str) -> bool:
+        """Remove a pack (furniture using it stays in the plan as plain boxes)."""
+        kept = [p for p in self.packs if p["id"] != pack_id]
+        if len(kept) == len(self.packs):
+            return False
+        self.packs = kept
+        await self._pack_store.async_save({"packs": self.packs})
+        return True
 
     def get_image(self, image_id: str) -> str | None:
         """Return an image as data URL."""

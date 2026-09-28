@@ -10,6 +10,7 @@ STORAGE_MINOR_VERSION = 2
 STORAGE_KEY_BUILDING = f"{DOMAIN}.building"
 STORAGE_KEY_IMAGES = f"{DOMAIN}.images"
 STORAGE_KEY_HISTORY = f"{DOMAIN}.history"
+STORAGE_KEY_PACKS = f"{DOMAIN}.packs"
 
 # restore points: at most this many, and a new one only after this pause since the last one
 HISTORY_MAX = 20

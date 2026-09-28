@@ -33,6 +33,20 @@ const candidates = [
 const executablePath = candidates.find((p) => existsSync(p));
 const browser = await puppeteer.launch({ executablePath, headless: true, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
 
+// puts the furniture of the local starter pack (private/packs) into the living room and kitchen
+const PACK_SCRIPT = `
+  const f = e._doc.floors[0];
+  const put = (item, x, z, rotation = 0) => { e._floorId = f.id; e.addFurniture('pack:mastershort.starter:' + item); const m = e._doc.floors[0].furniture.at(-1); Object.assign(m, { x, z, rotation }); };
+  e._doc.floors[0].furniture = e._doc.floors[0].furniture.filter((m) => !['sofa', 'armchair', 'rug', 'coffee_table', 'table', 'chair'].includes(m.type));
+  put('lounge_chair', 1.2, 2.4, 90);
+  put('fireplace', 0.45, 3.8, 90);
+  put('scandi_sideboard', 3.4, 4.3, 180);
+  put('gaming_desk', 4.6, 1.2, 0);
+  put('dining_set', 8.0, 3.0, 0);
+  put('side_by_side_fridge', 9.4, 0.5, 0);
+  e.setDoc(structuredClone(e._doc));
+`;
+
 const shots = [
   { name: "view-house", query: "?fp3d_stats", width: 1280, height: 800 },
   { name: "view-stacked", query: "", width: 1280, height: 800, click: "Gestapelt" },
@@ -71,6 +85,9 @@ const shots = [
   { name: "view-size-bar", query: "", width: 1280, height: 800, click: "Erdgeschoss", furnishDrag: { id: "m2", dx: 0, dy: 0 } },
   { name: "editor-opening-kinds", query: "", width: 1280, height: 900, editor: true, editorState: { _openingId: "o2", _roomId: "wohnen" } },
   { name: "view-double-door", query: "", width: 1280, height: 800, click: "Wohnzimmer" },
+  { name: "editor-packs", query: "", width: 1280, height: 1000, editor: true, editorState: { _tool: "furniture", _roomId: "wohnen" }, scrollSide: true },
+  { name: "view-packs", query: "", width: 1280, height: 800, editor: true, editorScript: PACK_SCRIPT, then3d: "Wohnzimmer" },
+  { name: "editor-packs-plan", query: "", width: 1280, height: 800, editor: true, editorScript: PACK_SCRIPT },
   { name: "editor-package", query: "", width: 1280, height: 900, editor: true, editorScript: "const f = e._doc.floors[1]; e._floorId = f.id; e.applyPackage(f.rooms.find((r) => r.id === 'gast'), 'bedroom'); e.applyPackage(f.rooms.find((r) => r.id === 'kind'), 'kids');" },
   { name: "view-package", query: "", width: 1280, height: 800, editor: true, editorScript: "const f = e._doc.floors[1]; e.applyPackage(f.rooms.find((r) => r.id === 'gast'), 'bedroom');", then3d: "Obergeschoss" },
   { name: "view-furnish", query: "", width: 1280, height: 800, click: "Erdgeschoss", furnishDrag: { id: "m2", dx: -160, dy: 60 } },

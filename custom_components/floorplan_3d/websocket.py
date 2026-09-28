@@ -11,6 +11,7 @@ from homeassistant.loader import async_get_integration
 import voluptuous as vol
 
 from .const import DOMAIN, SIGNAL_BUILDING_UPDATED
+from .packs import MAX_PACK_SIZE, PackError, verify_pack
 from .schema import BUILDING_SCHEMA, IMAGE_DATA
 from .storage import FloorplanData, complete
 
@@ -30,6 +31,9 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_history_list,
         ws_history_snapshot,
         ws_history_restore,
+        ws_packs_list,
+        ws_packs_import,
+        ws_packs_remove,
     ):
         websocket_api.async_register_command(hass, command)
 
@@ -172,3 +176,57 @@ async def ws_history_restore(
     await data.async_snapshot()
     revision = await data.async_save_building(complete(building))
     connection.send_result(msg["id"], {"revision": revision})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "floorplan_3d/packs/list"})
+@callback
+def ws_packs_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Return the imported furniture packs (every user needs them to see the furniture)."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    connection.send_result(msg["id"], {"packs": data.packs})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "floorplan_3d/packs/import",
+        vol.Required("pack"): vol.All(str, vol.Length(max=MAX_PACK_SIZE)),
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Check a pack file's signature and content, then keep it."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    try:
+        payload = verify_pack(msg["pack"])
+    except PackError as err:
+        connection.send_error(msg["id"], err.code, err.detail or err.code)
+        return
+    await data.async_add_pack(payload)
+    connection.send_result(
+        msg["id"],
+        {
+            "id": payload["id"],
+            "name": payload["name"],
+            "publisher": payload["publisher"],
+            "licensee": payload["licensee"],
+            "items": len(payload["items"]),
+        },
+    )
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "floorplan_3d/packs/remove", vol.Required("pack_id"): vol.All(str, vol.Length(max=64))}
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_packs_remove(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Remove an imported pack."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    if not await data.async_remove_pack(msg["pack_id"]):
+        connection.send_error(msg["id"], "not_found", "Pack not found")
+        return
+    connection.send_result(msg["id"])

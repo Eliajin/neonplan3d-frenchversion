@@ -5,6 +5,7 @@
 
 import { Color } from "three";
 import type { Furniture, Vec2 } from "../model.ts";
+import { packItem, type PackItem } from "../packs.ts";
 import { ALWAYS, type GeoBuffer, type LineBuffer, pushPrism, shade } from "./geo.ts";
 
 const C = {
@@ -731,8 +732,33 @@ export function pushFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuff
     case "radiator":
       radiator(b, w, d, h);
       return; // on the wall, no shadow on the floor
-    default:
-      b.box(-w / 2, w / 2, 0, h, -d / 2, d / 2, C.body, C.bodyTop, EDGE_FURN);
+    default: {
+      const item = packItem(f.type);
+      if (item) packModel(b, item, w, d, h);
+      else b.box(-w / 2, w / 2, 0, h, -d / 2, d / 2, C.body, C.bodyTop, EDGE_FURN);
+    }
   }
   contactShadow(shadow, tf, w, d, f.type === "plant" ? 0.35 : 0.5);
+}
+
+/** Colour of a pack part: a palette role (so packs follow the look) or "#rrggbb". */
+function packColor(value: string | undefined, top: boolean): number | null {
+  if (!value) return null;
+  if (value.startsWith("#")) return parseInt(value.slice(1), 16);
+  const palette = C as Record<string, number>;
+  return (top ? palette[`${value}Top`] : undefined) ?? palette[value] ?? null;
+}
+
+/** Model of a pack item: its parts scaled to the item's size. */
+function packModel(b: Builder, item: PackItem, w: number, d: number, h: number): void {
+  for (const p of item.parts) {
+    const side = packColor(p.color, false) ?? C.body;
+    // without a top colour, the top is the role's top shade or a little lighter
+    const top = packColor(p.top, false) ?? packColor(p.color, true) ?? shade(side, 1.25).getHex();
+    const y0 = p.y * h;
+    const y1 = Math.min(h, (p.y + p.h) * h);
+    const edges = p.edges ? EDGE_FURN : null;
+    if (p.shape === "cyl") b.cyl(p.x * w, p.z * d, (Math.min(p.w * w, p.d * d)) / 2, y0, y1, side, top, 14, edges);
+    else b.box((p.x - p.w / 2) * w, (p.x + p.w / 2) * w, y0, y1, (p.z - p.d / 2) * d, (p.z + p.d / 2) * d, side, top, edges);
+  }
 }

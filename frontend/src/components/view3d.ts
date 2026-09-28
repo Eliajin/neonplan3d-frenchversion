@@ -20,7 +20,9 @@ import { iconSvg } from "../icons.ts";
 import { energySummary, findConsumers, flowColor, flowSegments, powerSensorFor, readPower, type Consumer, type EnergySummary } from "../energy.ts";
 import { STAGE, type Theme } from "../themes.ts";
 import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from "../heatmap.ts";
+import { furnitureName } from "../furniture-names.ts";
 import { formatNumber, translate } from "../i18n.ts";
+import { getPacks, packsVersion } from "../packs.ts";
 import { load3d } from "../load3d.ts";
 import { buildMarkers, openMoreInfo, placedEntities, stateText, toggleEntity } from "../markers.ts";
 import { isLamp, outdoorGround, pointInPolygon, surfaceHeight, type Building, type Furniture } from "../model.ts";
@@ -58,6 +60,7 @@ export class Fp3dView3d extends LitElement {
     markerMode: { attribute: false },
     heatMode: { attribute: false },
     theme: { attribute: false },
+    packs: { attribute: false },
     furnish: { type: Boolean },
     selectedFurniture: { attribute: false },
     _sky: { state: true },
@@ -77,6 +80,8 @@ export class Fp3dView3d extends LitElement {
   declare explode: boolean;
   declare markerMode: MarkerMode;
   declare heatMode: HeatMode;
+  /** Imported furniture packs (a new list rebuilds pack furniture). */
+  declare packs: unknown;
   declare theme: Theme;
   /** Furnishing: furniture and lamps are dragged in 3D (admins, panel only). */
   declare furnish: boolean;
@@ -95,6 +100,7 @@ export class Fp3dView3d extends LitElement {
   private starting = false;
   /** States of the placed entities as last sent to the viewer. */
   private shownStates = new Map<string, HassEntity | undefined>();
+  private shownPacks = -1;
   /** Entities of each door and window, and the registry they were matched with. */
   private openingLinks: Map<string, OpeningEntities> | null = null;
   private linkedRegistry: HomeAssistant["entities"] | undefined;
@@ -172,6 +178,8 @@ export class Fp3dView3d extends LitElement {
       this.viewer.setWallMode(this.wallMode);
       this.viewer.setTheme(this.theme);
       this.viewer.setFurnishMode(this.furnish);
+      this.viewer.setPacks([...getPacks()]);
+      this.shownPacks = packsVersion();
       if (this.building) this.viewer.setBuilding(this.building);
       this.syncDevices(true);
       this.viewer.setFloor(this.floorId, false);
@@ -186,6 +194,11 @@ export class Fp3dView3d extends LitElement {
   protected updated(changed: PropertyValues): void {
     const v = this.viewer;
     if (!v) return;
+    // packs arrive with the building (or after an import): the viewer rebuilds pack furniture
+    if (this.shownPacks !== packsVersion()) {
+      this.shownPacks = packsVersion();
+      v.setPacks([...getPacks()]);
+    }
     if (changed.has("building") && this.building) v.setBuilding(this.building);
     if (changed.has("building") || changed.has("hass") || changed.has("markerMode") || changed.has("heatMode")) {
       this.syncDevices(changed.has("building") || changed.has("markerMode") || changed.has("heatMode"));
@@ -343,7 +356,7 @@ export class Fp3dView3d extends LitElement {
           z: f.z,
           y: markerHeight(f),
           icon: iconSvg(kind ?? "switch"),
-          name: link.entity ? entityName(hass, link.entity) : translate(hass, `furn_${f.type}` as Parameters<typeof translate>[1]),
+          name: link.entity ? entityName(hass, link.entity) : furnitureName(hass, f.type),
           text: st ? stateText(hass, st) : power !== null ? formatPower(hass, Math.max(0, power)) : "",
           active: st ? isActive(st) : (power ?? 0) > 5,
           unavailable: st ? isUnavailable(st) : false,
@@ -385,7 +398,7 @@ export class Fp3dView3d extends LitElement {
       z: f.z,
       y,
       icon: iconSvg("light"),
-      name: entity ? entityName(hass, entity) : translate(hass, `furn_${f.type}` as Parameters<typeof translate>[1]),
+      name: entity ? entityName(hass, entity) : furnitureName(hass, f.type),
       text: st ? stateText(hass, st) : "",
       active: st ? isActive(st) : false,
       unavailable: st ? isUnavailable(st) : false,
