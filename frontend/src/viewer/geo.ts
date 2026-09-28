@@ -14,7 +14,10 @@ export const EDGE_BASE = shade(0x5b7cff, 0.22);
 const LIGHT: Vec2 = [-0.55, 0.83];
 
 export const ALWAYS = -1;
+/** Fold kinds (value = kind * 16 + bucket), see build.ts. */
 export const CUT_OFFSET = 16;
+export const LOWER_OFFSET = 32;
+export const CAP_OFFSET = 48;
 
 export class GeoBuffer {
   p: number[] = [];
@@ -114,7 +117,7 @@ export function pushPrism(
   y1: number,
   side: number,
   top: number,
-  opts: { aoFrom?: number; fold?: number; bottom?: boolean; topFace?: boolean } = {},
+  opts: { aoFrom?: number; fold?: number; topFold?: number; bottom?: boolean; topFace?: boolean } = {},
 ): void {
   const aoFrom = opts.aoFrom ?? y0;
   const fold = opts.fold ?? ALWAYS;
@@ -127,7 +130,7 @@ export function pushPrism(
       const a = poly[i];
       const b = poly[j];
       const c = poly[l];
-      buf.tri([a[0], y1, a[1]], [c[0], y1, c[1]], [b[0], y1, b[1]], topC, topC, topC, undefined, fold);
+      buf.tri([a[0], y1, a[1]], [c[0], y1, c[1]], [b[0], y1, b[1]], topC, topC, topC, undefined, opts.topFold ?? fold);
     }
   }
   if (opts.bottom) {

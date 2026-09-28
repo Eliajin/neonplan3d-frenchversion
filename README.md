@@ -22,7 +22,7 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
 - **Devices**: the area's lights, switches, covers, thermostats, media players, sensors and cameras can be placed in the room automatically and moved by hand in the plan.
 - **Floor plan image as template**: an image of your floor plan can be placed under the drawing, with scale and opacity.
 - **3D view (neon look)**:
-  - Walls in front of the camera fold down automatically; a "Cut" mode shows all walls low.
+  - Walls stay full height; the ones in front of the camera turn into tinted glass, so rooms, doors and windows stay whole. A "Cut" mode shows all walls cut at hip height instead.
   - Fine glowing top edges, faint corner lines and wall shadows baked into the floor.
   - Three levels: the whole house (floors pulled apart or stacked, with a label per floor), one floor (floors above fly away, floors below stay dimmed) and one room.
   - Tap a floor label or a room to go in; double tap, Esc or *Back* goes one level up.

@@ -36,7 +36,7 @@ import type { Building, Floor } from "../model.ts";
 import { centroid } from "../model.ts";
 import { buildFloorGeometry, SLAB, stairHoles, type FloorGeometry } from "./build.ts";
 import { OrbitControls } from "./controls.ts";
-import { makeFoldable, type FoldMask } from "./fold.ts";
+import { makeFoldable, type FoldMasks } from "./fold.ts";
 import { buildOpeningParts, CLOSED, type OpeningState } from "./openings.ts";
 
 export type { OpeningState } from "./openings.ts";
@@ -135,6 +135,7 @@ interface FloorMaterials {
   floor: MeshBasicMaterial;
   pattern: MeshBasicMaterial;
   wall: MeshBasicMaterial;
+  glassWall: MeshBasicMaterial;
   shadow: MeshBasicMaterial;
   lines: LineBasicMaterial;
   glow: MeshBasicMaterial;
@@ -158,8 +159,8 @@ interface FloorView {
   blindsMesh: Mesh;
   flowMesh: Mesh;
   materials: FloorMaterials;
-  /** Bit mask of the wall buckets that currently stand (read by the fold shader patch). */
-  mask: FoldMask;
+  /** Bit masks of the wall buckets that stand and that are drawn as glass (read by the fold shader). */
+  mask: FoldMasks;
   /** Shown opening states (animated towards the targets set from Home Assistant). */
   openings: Map<string, OpeningState>;
   /** Current and target height offset and opacity. */
@@ -568,11 +569,12 @@ export class FloorplanViewer {
     fv.glowMesh.visible = p.length > 0;
   }
 
-  private makeMaterials(mask: FoldMask): FloorMaterials {
+  private makeMaterials(mask: FoldMasks): FloorMaterials {
     return {
       floor: new MeshBasicMaterial({ vertexColors: true }),
       pattern: patternMaterial(this.patternTexture),
-      wall: makeFoldable(new MeshBasicMaterial({ vertexColors: true }), mask),
+      wall: makeFoldable(new MeshBasicMaterial({ vertexColors: true }), mask, "solid"),
+      glassWall: makeFoldable(new MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false }), mask, "glass"),
       // result = floor colour * vertex colour (white leaves the floor untouched)
       shadow: new MeshBasicMaterial({
         vertexColors: true,
@@ -614,7 +616,7 @@ export class FloorplanViewer {
     const ordered = [...b.floors].sort((p, q) => p.elevation - q.elevation);
     for (const floor of b.floors) {
       const geo = buildFloorGeometry(floor, b.settings.wall_exterior, b.settings.wall_interior, stairHoles(b.floors, floor));
-      const mask: FoldMask = { value: 0xffff };
+      const mask: FoldMasks = { standing: { value: 0xffff }, glass: { value: 0 } };
       const materials = this.makeMaterials(mask);
       const group = new Group();
       const floorMesh = new Mesh(geo.floor, materials.floor);
@@ -634,7 +636,22 @@ export class FloorplanViewer {
       flowMesh.frustumCulled = false;
       // the fold shader moves hidden parts, so the bounding spheres must not cull them early
       for (const m of [framesMesh, blindsMesh, glassMesh]) m.frustumCulled = false;
-      group.add(floorMesh, shadowMesh, pattern, glowMesh, new Mesh(geo.walls, materials.wall), new LineSegments(geo.lines, materials.lines), framesMesh, blindsMesh, glassMesh, flowMesh);
+      // glass walls are drawn after everything opaque in the room, so doors and furniture show through
+      const glassWalls = new Mesh(geo.walls, materials.glassWall);
+      glassWalls.renderOrder = 6;
+      group.add(
+        floorMesh,
+        shadowMesh,
+        pattern,
+        glowMesh,
+        new Mesh(geo.walls, materials.wall),
+        new LineSegments(geo.lines, materials.lines),
+        framesMesh,
+        blindsMesh,
+        glassMesh,
+        flowMesh,
+        glassWalls,
+      );
       this.root.add(group);
 
       const label = document.createElement("button");
@@ -744,6 +761,7 @@ export class FloorplanViewer {
     m.glow.opacity = fv.o;
     m.lines.opacity = fv.o;
     m.glass.opacity = fv.o;
+    m.glassWall.opacity = fv.o;
     m.flow.opacity = fv.o;
   }
 
@@ -992,7 +1010,10 @@ export class FloorplanViewer {
     }
   }
 
-  /** Upper wall parts facing the camera fold down to the cut height (bit mask for the fold shader). */
+  /**
+   * Walls facing the camera: in the tall view they turn into glass (rooms stay whole, doors and windows
+   * stay visible); in the cut view every wall is cut at the cut height.
+   */
   private updateWalls(): void {
     const cam = this.camera.position;
     const t = this.controls.view.target;
@@ -1000,16 +1021,16 @@ export class FloorplanViewer {
     const dz = cam.z - t.z;
     const l = Math.hypot(dx, dz) || 1;
     for (const fv of this.floors) {
-      // in a room, its floor's interior walls fold down as well
+      // in a room, its floor's interior walls turn into glass as well
       const inRoom = this.roomId !== null && fv.floor.rooms.some((r) => r.id === this.roomId);
-      let mask = 0;
+      const cut = this.wallMode === "cut";
+      let glass = 0;
       fv.geo.buckets.forEach((normal, b) => {
-        let show = this.wallMode !== "cut";
-        if (show && normal) show = (normal[0] * dx) / l + (normal[1] * dz) / l < 0.25;
-        else if (show && inRoom) show = false;
-        if (show) mask |= 1 << b;
+        const facing = normal ? (normal[0] * dx) / l + (normal[1] * dz) / l >= 0.25 : inRoom;
+        if (!cut && facing) glass |= 1 << b;
       });
-      fv.mask.value = mask;
+      fv.mask.standing.value = cut ? 0 : 0xffff;
+      fv.mask.glass.value = glass;
     }
   }
 

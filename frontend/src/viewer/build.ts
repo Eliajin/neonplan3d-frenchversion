@@ -1,19 +1,21 @@
 // Builds merged, vertex-coloured geometry for one floor: room floors with material patterns, walls
 // with door and window openings, edge lines and baked wall shadows.
 //
-// Walls are split into a lower part (always visible) and an upper part that folds away when it faces
-// the camera. Instead of one mesh per wall direction, every vertex carries a "fold" value and a shader
-// patch (see fold.ts) hides the parts of the buckets turned towards the camera:
-//   fold = -1        always visible
-//   fold = b         visible while bucket b stands (upper wall parts, their edges)
-//   fold = 16 + b    visible while bucket b is folded down (cut edges)
+// Walls are grouped into buckets by the direction they face. Every vertex carries a "fold" value and a
+// shader patch (see fold.ts) decides per bucket: in the cut view the upper parts disappear; in the tall
+// view the walls turned towards the camera are drawn as tinted glass instead.
+//   fold = -1        always visible, never glass (furniture, lines of the lower part)
+//   fold = b         upper wall part: visible while bucket b stands
+//   fold = 16 + b    cut edge: visible while bucket b is cut
+//   fold = 32 + b    lower wall part: always visible, glass when the bucket is
+//   fold = 48 + b    top face of the lower part at the cut height: visible while bucket b is cut
 
 import { Color, type BufferGeometry } from "three";
 import type { Floor, Opening, Room, Vec2 } from "../model.ts";
 import { furnitureFootprint, pointInPolygon } from "../model.ts";
 import { generateWalls, locateOnWalls, type Wall } from "../geometry/walls.ts";
 import { pushFurniture } from "./furniture.ts";
-import { ALWAYS, CUT_OFFSET, EDGE_BASE, EDGE_CUT, EDGE_SOFT, EDGE_TOP, GeoBuffer, LineBuffer, pushPrism, triangulate } from "./geo.ts";
+import { ALWAYS, CAP_OFFSET, CUT_OFFSET, EDGE_BASE, EDGE_CUT, EDGE_SOFT, EDGE_TOP, GeoBuffer, LineBuffer, LOWER_OFFSET, pushPrism, triangulate } from "./geo.ts";
 
 export { ALWAYS, CUT_OFFSET, GeoBuffer, LineBuffer, pushPrism, shade } from "./geo.ts";
 
@@ -217,7 +219,11 @@ export function buildFloorGeometry(floor: Floor, wallExterior: number, wallInter
       for (const [y0, y1] of piece.ranges) {
         if (y1 - y0 < 1e-4) continue;
         const lintel = y0 > 0.01;
-        if (y0 < cut - 1e-6) pushPrism(wallBuf, poly, y0, Math.min(y1, cut), NEON.wall, NEON.wallTop, { aoFrom: 0, bottom: lintel });
+        if (y0 < cut - 1e-6) {
+          // the top face at the cut height is only seen while the wall is cut
+          const topFold = y1 > cut + 1e-6 ? CAP_OFFSET + b : LOWER_OFFSET + b;
+          pushPrism(wallBuf, poly, y0, Math.min(y1, cut), NEON.wall, NEON.wallTop, { aoFrom: 0, bottom: lintel, fold: LOWER_OFFSET + b, topFold });
+        }
         if (y1 > cut + 1e-6) pushPrism(wallBuf, poly, Math.max(y0, cut), y1, NEON.wall, NEON.wallTop, { aoFrom: 0, fold: b, bottom: lintel && y0 >= cut });
       }
     }
