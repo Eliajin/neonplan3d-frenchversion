@@ -17,6 +17,8 @@ interface CardConfig {
   /** Pull floors apart in the house view (default true). */
   explode?: boolean;
   quality?: Quality;
+  /** Show the performance display (frames per second, draw calls). */
+  stats?: boolean;
 }
 
 export class Floorplan3dCard extends LitElement {
@@ -85,6 +87,7 @@ export class Floorplan3dCard extends LitElement {
               .wallMode=${this._config?.walls ?? "auto"}
               .explode=${this._config?.explode ?? true}
               .quality=${this._config?.quality ?? "auto"}
+              ?showStats=${this._config?.stats ?? false}
               @room-tap=${(e: CustomEvent<{ floorId: string; roomId: string | null }>) => {
                 if (!e.detail.roomId) return;
                 if (!floorId && !this._config?.floor) this._floorId = e.detail.floorId;

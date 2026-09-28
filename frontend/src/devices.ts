@@ -1,7 +1,7 @@
 // Devices of a room: which entities belong to an area, what kind they are, how they are placed and
 // what their state looks like. Pure functions (no Lit, no three.js) so they can be tested directly.
 
-import type { Floor, Opening, Placement, Room, Vec2 } from "./model.ts";
+import type { Floor, LampMount, Opening, Placement, Room, Vec2 } from "./model.ts";
 import { centroid, pointInPolygon } from "./model.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
 
@@ -154,7 +154,13 @@ export function kelvinToRgb(k: number): [number, number, number] {
 }
 
 /** Default mounting height of a device marker (metres above the floor). */
-export function defaultHeight(kind: DeviceKind, floorHeight: number): number {
+export function defaultHeight(kind: DeviceKind, floorHeight: number, mount: LampMount | null = null): number {
+  if (kind === "light" && mount) {
+    // markers sit just above floor and table lamps and next to wall lamps
+    if (mount === "floor") return 1.95;
+    if (mount === "table") return 1.25;
+    if (mount === "wall") return 1.95;
+  }
   switch (kind) {
     case "light":
     case "camera":
@@ -229,7 +235,7 @@ export function autoPlace(room: Room, entityIds: readonly string[], taken: reado
       const free = used.length ? Math.min(...used.map((q) => Math.hypot(p[0] - q[0], p[1] - q[1]))) : 3;
       const fromLabel = Math.hypot(p[0] - label[0], p[1] - label[1]);
       let score = Math.min(free, 3) * 2;
-      if (fromLabel < labelFree) score -= 10;
+      if (fromLabel < labelFree && !light) score -= 10;
       // lights prefer the middle of the room, other devices a spot near a wall
       score -= light ? fromLabel * 0.35 : wall * 1.2;
       if (score > bestScore + 1e-9) {
@@ -239,7 +245,7 @@ export function autoPlace(room: Room, entityIds: readonly string[], taken: reado
     }
     const p: Vec2 = [Math.round(best[0] * 100) / 100, Math.round(best[1] * 100) / 100];
     used.push(p);
-    out.push({ entity_id, x: p[0], z: p[1], y: null });
+    out.push({ entity_id, x: p[0], z: p[1], y: null, mount: null });
   }
   return out;
 }
@@ -330,4 +336,44 @@ export function openingState(hass: HomeAssistant, e: OpeningEntities, type: Open
     return { open: 0, tilt: 0, cover };
   }
   return { open, tilt: tilted ? 1 : 0, cover };
+}
+
+// ------------------------------------------------------------------ grouping by device
+
+export interface DeviceGroup {
+  /** The device's main entity (the one carrying the device name), or the entity itself. */
+  primary: string;
+  /** Further entities of the same device (indicators, effects, extra channels, …). */
+  others: string[];
+}
+
+/**
+ * Groups entities by device. The main entity is the one without a name of its own (Home Assistant's
+ * convention for a device's main feature); otherwise the first in kind order. Groups keep the order
+ * of their main entities in `ids`.
+ */
+export function groupByDevice(hass: HomeAssistant, ids: readonly string[]): DeviceGroup[] {
+  const byDevice = new Map<string, string[]>();
+  const order: string[] = [];
+  for (const id of ids) {
+    const device = hass.entities?.[id]?.device_id ?? `entity:${id}`;
+    let list = byDevice.get(device);
+    if (!list) {
+      byDevice.set(device, (list = []));
+      order.push(device);
+    }
+    list.push(id);
+  }
+  const groups = order.map((device) => {
+    const list = byDevice.get(device)!;
+    const main = list.find((id) => !hass.entities?.[id]?.name) ?? list[0];
+    return { primary: main, others: list.filter((id) => id !== main) };
+  });
+  const rank = new Map(ids.map((id, i) => [id, i]));
+  return groups.sort((a, b) => rank.get(a.primary)! - rank.get(b.primary)!);
+}
+
+/** Main entities only (one per device). */
+export function primaryEntities(hass: HomeAssistant, ids: readonly string[]): string[] {
+  return groupByDevice(hass, ids).map((g) => g.primary);
 }

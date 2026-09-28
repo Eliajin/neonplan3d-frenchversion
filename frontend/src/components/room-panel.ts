@@ -2,7 +2,7 @@
 // scenes and scripts). Shown next to the 3D view when a room is selected.
 
 import { css, html, LitElement, nothing, type TemplateResult } from "lit";
-import { areaEntities, entityName, isUnavailable, kindOf, type DeviceKind } from "../devices.ts";
+import { areaEntities, entityName, groupByDevice, isUnavailable, kindOf, type DeviceKind } from "../devices.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { iconPath } from "../icons.ts";
 import { openMoreInfo, stateText } from "../markers.ts";
@@ -42,14 +42,18 @@ export class Fp3dRoomPanel extends LitElement {
   static properties = {
     hass: { attribute: false },
     room: { attribute: false },
+    _showAll: { state: true },
   };
 
   declare hass: HomeAssistant;
   declare room: Room | null;
+  /** Show every entity of the area, not only each device's main entity. */
+  private declare _showAll: boolean;
 
   constructor() {
     super();
     this.room = null;
+    this._showAll = false;
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
@@ -86,7 +90,11 @@ export class Fp3dRoomPanel extends LitElement {
   protected render() {
     const room = this.room;
     if (!room || !this.hass) return nothing;
-    const ids = areaEntities(this.hass, room.area_id);
+    const all = areaEntities(this.hass, room.area_id);
+    // devices with many entities (LED indicators, effects, …) show their main entity first
+    const groups = groupByDevice(this.hass, all);
+    const hiddenCount = groups.reduce((n, g) => n + g.others.length, 0);
+    const ids = this._showAll ? all : groups.map((g) => g.primary);
     const by = (kinds: DeviceKind[]) => ids.filter((id) => kinds.includes(kindOf(id)!)).map((id) => this.hass.states[id]);
     const lights = by(["light"]);
     const covers = by(["cover"]);
@@ -146,6 +154,11 @@ export class Fp3dRoomPanel extends LitElement {
                 </div>`,
               ],
             )
+          : nothing}
+        ${hiddenCount
+          ? html`<button class="fp3d-btn fp3d-rp-small fp3d-rp-more" @click=${() => (this._showAll = !this._showAll)}>
+              ${this._showAll ? this.t("panel_less") : this.t("panel_more", { n: hiddenCount })}
+            </button>`
           : nothing}
       </div>
     </section>`;
@@ -554,6 +567,9 @@ export class Fp3dRoomPanel extends LitElement {
         background: var(--c);
         box-shadow: 0 0 10px var(--c);
         cursor: pointer;
+      }
+      .fp3d-rp-more {
+        justify-self: start;
       }
       .fp3d-rp-small {
         display: inline-flex;

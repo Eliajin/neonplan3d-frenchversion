@@ -66,6 +66,8 @@ PLACEMENT_SCHEMA = vol.Schema(
         vol.Required("x"): _COORD,
         vol.Required("z"): _COORD,
         vol.Required("y"): vol.Any(None, _LENGTH),
+        # lights: how the lamp is mounted (None = ceiling)
+        vol.Optional("mount", default=None): vol.Any(None, vol.In(["ceiling", "floor", "table", "wall"])),
     }
 )
 

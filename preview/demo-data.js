@@ -154,6 +154,20 @@ const DEVICES = [
   entity("sensor.tom_raum", null, "Küche", { friendly_name: "Tom Raum" }),
   entity("sensor.lea_raum", null, "not_home", { friendly_name: "Lea Raum" }),
 ];
+// a LED matrix with many light entities: only the main one (without a name of its own) is shown first
+for (const [suffix, name] of [
+  ["", null],
+  ["_indicator_1", "Indicator 1"],
+  ["_indicator_2", "Indicator 2"],
+  ["_indicator_3", "Indicator 3"],
+  ["_matrix", "Matrix"],
+]) {
+  const id = `light.pixeluhr${suffix}`;
+  DEVICES.push({
+    entry: { entity_id: id, area_id: "wohnzimmer", device_id: "d_pixeluhr", ...(name ? { name } : {}) },
+    state: { entity_id: id, state: "off", attributes: { friendly_name: name ? `Pixeluhr ${name}` : "Pixeluhr", supported_color_modes: ["hs"] } },
+  });
+}
 // devices with a power sensor of their own
 for (const [id, device] of [
   ["media_player.fernseher", "d_tv"],

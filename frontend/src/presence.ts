@@ -1,7 +1,7 @@
 // Presence and floor summaries: which room a person is in (from a room sensor such as ESPresense or
 // Bermuda, whose state names a room or area), and the counts shown on the floor labels.
 
-import { areaEntities, kindOf, openingState, type OpeningEntities } from "./devices.ts";
+import { areaEntities, kindOf, openingState, primaryEntities, type OpeningEntities } from "./devices.ts";
 import { translate } from "./i18n.ts";
 import type { Building, Room } from "./model.ts";
 import { centroid } from "./model.ts";
@@ -86,7 +86,8 @@ export function floorCounts(hass: HomeAssistant, building: Building, links: Map<
   const on = (id: string | null) => !!id && hass.states[id]?.state === "on";
   for (const floor of building.floors) {
     const lights = new Set<string>();
-    for (const room of floor.rooms) for (const id of areaEntities(hass, room.area_id)) if (kindOf(id) === "light") lights.add(id);
+    // main entities only: a LED strip with 30 segment entities is one light
+    for (const room of floor.rooms) for (const id of primaryEntities(hass, areaEntities(hass, room.area_id))) if (kindOf(id) === "light") lights.add(id);
     for (const pl of floor.placements) if (kindOf(pl.entity_id) === "light") lights.add(pl.entity_id);
     const open = floor.openings.filter((o) => {
       const l = links.get(o.id);

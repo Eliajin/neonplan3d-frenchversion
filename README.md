@@ -10,6 +10,7 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
   - Floors with name, elevation and ceiling height.
   - Rooms as rectangles or free shapes.
   - Snapping to the grid, to corners and edges of other rooms, and to corner alignments.
+  - "Close gaps" joins rooms drawn up to 60 cm apart (e.g. measured inside dimensions) at one shared wall and takes the gap as interior wall thickness.
   - Exact values can be typed in, in metres.
   - Undo and redo, duplicate, delete.
   - Mouse and touch: pinch to zoom, pan with two fingers.
@@ -20,6 +21,8 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
 - **Floor materials** (wood, oak, tiles, carpet, stone, concrete) show as subtle patterns in 3D.
 - **Area link**: each room can be linked to a Home Assistant area.
 - **Devices**: the area's lights, switches, covers, thermostats, media players, sensors and cameras can be placed in the room automatically and moved by hand in the plan.
+  - Lists are grouped by device: the main entity first, further entities (LED indicators, effects, …) behind "+n more"; with a search field.
+  - Lights are ceiling, floor, table or wall lamps with a lamp model in 3D whose shade glows in the light colour; ceiling lights go to the room centre or can be spread evenly.
 - **Floor plan image as template**: an image of your floor plan can be placed under the drawing, with scale and opacity.
 - **3D view (neon look)**:
   - Walls stay full height; the ones in front of the camera turn into tinted glass, so rooms, doors and windows stay whole. A "Cut" mode shows all walls cut at hip height instead.
@@ -31,7 +34,7 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
   - Blinds are drawn in front of their windows and follow the cover position; window contacts open or tilt the sash (a second sensor can mark "tilted"); open windows glow warm. Blinds and contacts are matched with windows automatically by area and can be set by hand.
   - Device markers with their state; lights that are on cast a glow on the floor that follows brightness and colour.
   - Tap a light or switch to toggle it; a long press opens Home Assistant's details dialog.
-  - Quality levels *Auto*, *Tablet* and *High* (remembered per device).
+  - Quality levels *Auto*, *Tablet* and *High* and an *FPS* display (frame rate, slowest frame, draw calls, quality level), both remembered per device.
 - **Room panel** (next to the 3D view, at the bottom on phones and portrait tablets): lights with brightness, colour temperature and colours, covers, heating, media, switches, sensors, scenes and scripts of the room's area.
   - Only renders when something changes, so it uses no GPU while idle.
 - **Energy flow**: place the meter in the editor and choose power sensors for grid, solar, battery (with charge level) and an optional tariff sensor.
@@ -62,6 +65,7 @@ height: 420             # optional: height in pixels
 walls: auto             # optional: auto | cut
 explode: true           # optional: pull floors apart in the house view (default true)
 quality: auto           # optional: auto | low | high
+stats: false            # optional: show the performance display
 ```
 
 ## Development

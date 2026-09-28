@@ -47,11 +47,16 @@ export interface Furniture {
   variant: string | null;
 }
 
+export type LampMount = "ceiling" | "floor" | "table" | "wall";
+
 export interface Placement {
   entity_id: string;
   x: number;
   z: number;
+  /** Height above the floor; null = default for the device kind (and lamp mount). */
   y: number | null;
+  /** Lights: how the lamp is mounted; null = ceiling. */
+  mount?: LampMount | null;
 }
 
 export interface Background {
@@ -203,6 +208,7 @@ export function normalizeBuilding(b: Building): Building {
   b.energy = { ...DEFAULT_ENERGY, ...(b.energy ?? {}) };
   b.presence = b.presence ?? [];
   for (const f of b.floors) {
+    f.placements = f.placements.map((p) => ({ ...p, mount: p.mount ?? null }));
     f.openings = f.openings.map((o) => ({ ...o, hinge: o.hinge ?? "left", cover: o.cover ?? null, contact: o.contact ?? null, tilt: o.tilt ?? null }));
   }
   return b;

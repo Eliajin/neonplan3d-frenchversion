@@ -95,7 +95,10 @@ export class Fp3dView3d extends LitElement {
         onBack: () => this.fire("back", {}),
         onDeviceTap: (id) => this.onDeviceTap(id),
         onDeviceHold: (id) => openMoreInfo(this, id),
-        onStats: this.showStats ? (s) => (this._stats = s) : undefined,
+        // stats can be switched on at any time; they only cause updates while shown
+        onStats: (s) => {
+          if (this.showStats) this._stats = s;
+        },
       });
       this.viewer.setWallMode(this.wallMode);
       if (this.building) this.viewer.setBuilding(this.building);
@@ -219,7 +222,9 @@ export class Fp3dView3d extends LitElement {
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.renderEnergy()}
       ${this.showStats && this._stats
         ? html`<span class="fp3d-stats"
-            >${translate(this.hass, "stats", { fps: this._stats.fps, calls: this._stats.calls, tris: this._stats.triangles.toLocaleString() })}</span
+            ><b>${this._stats.fps ? translate(this.hass, "stats_fps", { fps: this._stats.fps, ms: this._stats.worstMs }) : translate(this.hass, "stats_idle")}</b> ·
+            ${translate(this.hass, "stats", { calls: this._stats.calls, tris: this._stats.triangles.toLocaleString() })} ·
+            ${translate(this.hass, this._stats.low ? "stats_low" : "stats_full", { r: formatNumber(this.hass, this._stats.pixelRatio, 2) })}</span
           >`
         : nothing}
     </div>`;
@@ -447,7 +452,14 @@ export class Fp3dView3d extends LitElement {
         border-color: transparent;
         box-shadow: 0 0 18px rgba(55, 224, 255, 0.45);
       }
+      .fp3d-stats b {
+        color: var(--fp3d-accent);
+        font-weight: 700;
+      }
       .fp3d-stats {
+        padding: 4px 9px;
+        border-radius: 8px;
+        background: var(--fp3d-chrome);
         position: absolute;
         right: 10px;
         bottom: 8px;

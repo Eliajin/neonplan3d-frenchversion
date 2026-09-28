@@ -50,6 +50,8 @@ const shots = [
   { name: "editor-opening", query: "", width: 1280, height: 800, editor: true, editorState: { _openingId: "o2", _roomId: "wohnen" } },
   { name: "editor-furniture", query: "", width: 1280, height: 800, editor: true, editorState: { _furnitureId: "m2" } },
   { name: "editor-energy", query: "", width: 1280, height: 1400, editor: true, openDetails: true, scrollSide: true },
+  { name: "editor-device", query: "", width: 1280, height: 900, editor: true, editorState: { _deviceId: "light.wohnzimmer_decke", _roomId: "wohnen" } },
+  { name: "editor-devlist", query: "", width: 1280, height: 1100, editor: true, editorState: { _roomId: "wohnen" }, scrollSide: true },
   { name: "tablet", query: "", width: 800, height: 1280, click: "Obergeschoss" },
   { name: "empty", query: "?empty", width: 1280, height: 800 },
 ];

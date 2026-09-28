@@ -37,6 +37,7 @@ import { centroid } from "../model.ts";
 import { buildFloorGeometry, SLAB, stairHoles, type FloorGeometry } from "./build.ts";
 import { OrbitControls } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
+import { GeoBuffer, pushPrism } from "./geo.ts";
 import { buildOpeningParts, CLOSED, type OpeningState } from "./openings.ts";
 
 export type { OpeningState } from "./openings.ts";
@@ -81,6 +82,8 @@ export interface DeviceMarker {
   glow: { color: [number, number, number]; level: number } | null;
   /** Power drawn (W) when the device reports it. */
   power?: number | null;
+  /** Lights: lamp model drawn at the device position. */
+  lamp?: "ceiling" | "floor" | "table" | "wall" | null;
   /** Formatted power, e.g. "85 W". */
   powerText?: string;
 }
@@ -108,9 +111,15 @@ export interface PersonPin {
 }
 
 export interface ViewerStats {
+  /** Frames per second while something moves; 0 at rest (nothing is drawn then). */
   fps: number;
+  /** Slowest frame of the last measuring window (ms). */
+  worstMs: number;
   calls: number;
   triangles: number;
+  /** The low quality level is active (tablet). */
+  low: boolean;
+  pixelRatio: number;
 }
 
 /** Extra gap between floors in the pulled-apart house view (metres). */
@@ -130,6 +139,8 @@ const FLOW_FRAME_MS = 33;
 /** Cable core and the soft glow around it (m). */
 const CABLE_WIDTH = 0.07;
 const CABLE_HALO = 0.34;
+const LAMP_BODY = 0x2a3a60;
+const LAMP_SHADE = 0x1d2946;
 
 interface FloorMaterials {
   floor: MeshBasicMaterial;
@@ -143,6 +154,7 @@ interface FloorMaterials {
   glass: MeshBasicMaterial;
   blinds: MeshBasicMaterial;
   flow: MeshBasicMaterial;
+  lamps: MeshBasicMaterial;
 }
 
 interface FloorView {
@@ -158,6 +170,7 @@ interface FloorView {
   glassMesh: Mesh;
   blindsMesh: Mesh;
   flowMesh: Mesh;
+  lampMesh: Mesh;
   materials: FloorMaterials;
   /** Bit masks of the wall buckets that stand and that are drawn as glass (read by the fold shader). */
   mask: FoldMasks;
@@ -219,6 +232,9 @@ export class FloorplanViewer {
   private disposed = false;
   private readonly resizeObserver: ResizeObserver;
   private fpsFrames = 0;
+  private worstFrame = 0;
+  private lastStatsFrame = 0;
+  private lowQuality = false;
   private fpsStart = 0;
 
   constructor(host: HTMLElement, options: ViewerOptions = {}) {
@@ -305,6 +321,8 @@ export class FloorplanViewer {
 
   setWallMode(mode: WallMode): void {
     this.wallMode = mode;
+    // ceiling lamps would float above cut walls
+    for (const fv of this.floors) this.buildLamps(fv);
     this.invalidate();
   }
 
@@ -341,7 +359,10 @@ export class FloorplanViewer {
       pin.remove();
       this.devicePins.delete(id);
     }
-    for (const fv of this.floors) this.buildGlow(fv);
+    for (const fv of this.floors) {
+      this.buildGlow(fv);
+      this.buildLamps(fv);
+    }
     this.invalidate();
   }
 
@@ -448,6 +469,7 @@ export class FloorplanViewer {
 
   private makeRenderer(quality: Quality): WebGLRenderer {
     const low = quality === "low" || (quality === "auto" && isLowEnd());
+    this.lowQuality = low;
     const renderer = new WebGLRenderer({ antialias: !low, alpha: true, powerPreference: low ? "low-power" : "default" });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, low ? 1 : quality === "high" ? 2.5 : 2));
     renderer.setClearColor(0x000000, 0);
@@ -604,6 +626,7 @@ export class FloorplanViewer {
       ),
       blinds: makeFoldable(new MeshBasicMaterial({ map: this.blindTexture, vertexColors: true, side: DoubleSide }), mask),
       flow: flowMaterial(this.flowTime),
+      lamps: new MeshBasicMaterial({ vertexColors: true }),
     };
   }
 
@@ -631,6 +654,8 @@ export class FloorplanViewer {
       const blindsMesh = new Mesh(new Geometry(), materials.blinds);
       const glassMesh = new Mesh(new Geometry(), materials.glass);
       glassMesh.renderOrder = 4;
+      const lampMesh = new Mesh(new Geometry(), materials.lamps);
+      lampMesh.visible = false;
       const flowMesh = new Mesh(new Geometry(), materials.flow);
       flowMesh.renderOrder = 5;
       flowMesh.frustumCulled = false;
@@ -650,6 +675,7 @@ export class FloorplanViewer {
         blindsMesh,
         glassMesh,
         flowMesh,
+        lampMesh,
         glassWalls,
       );
       this.root.add(group);
@@ -678,6 +704,7 @@ export class FloorplanViewer {
         glassMesh,
         blindsMesh,
         flowMesh,
+        lampMesh,
         materials,
         mask,
         openings: new Map(),
@@ -701,6 +728,7 @@ export class FloorplanViewer {
     if (this.floorId && !b.floors.some((f) => f.id === this.floorId)) this.floorId = null;
     for (const fv of this.floors) {
       this.buildGlow(fv);
+      this.buildLamps(fv);
       const prev = previousOpenings.get(fv.floor.id);
       for (const info of fv.geo.openings) fv.openings.set(info.opening.id, prev?.get(info.opening.id) ?? this.openingTargets.get(info.opening.id) ?? CLOSED);
       this.buildOpenings(fv);
@@ -749,7 +777,7 @@ export class FloorplanViewer {
     fv.appliedO = fv.o;
     const m = fv.materials;
     const solid = fv.o > 0.999;
-    for (const mat of [m.floor, m.wall, m.frames, m.blinds]) {
+    for (const mat of [m.floor, m.wall, m.frames, m.blinds, m.lamps]) {
       if (mat.transparent === solid) {
         mat.transparent = !solid;
         mat.depthWrite = solid;
@@ -763,6 +791,7 @@ export class FloorplanViewer {
     m.glass.opacity = fv.o;
     m.glassWall.opacity = fv.o;
     m.flow.opacity = fv.o;
+    m.lamps.opacity = fv.o;
   }
 
   /** Advance the floor animation; returns true while something still moves. */
@@ -824,6 +853,49 @@ export class FloorplanViewer {
       if (changed) this.buildOpenings(fv);
     }
     return moving;
+  }
+
+  /** Lamp models of the lights on a floor, merged into one mesh; lit shades take the light colour. */
+  private buildLamps(fv: FloorView): void {
+    const buf = new GeoBuffer();
+    const H = fv.floor.height;
+    for (const d of this.devices) {
+      if (d.floorId !== fv.floor.id || !d.lamp) continue;
+      if (d.lamp === "ceiling" && this.wallMode === "cut") continue;
+      // a lit shade glows in the light's colour, brighter with more brightness
+      const k = d.glow ? 0.55 + 0.45 * d.glow.level : 0;
+      const shadeCol = d.glow ? new Color(...(d.glow.color.map((c) => Math.min(1, c * k)) as [number, number, number])).getHex() : LAMP_SHADE;
+      const cyl = (r: number, y0: number, y1: number, side: number, top: number, n = 14) => {
+        const poly: [number, number][] = [];
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2;
+          poly.push([d.x + Math.cos(a) * r, d.z - Math.sin(a) * r]);
+        }
+        pushPrism(buf, poly, y0, y1, side, top, { aoFrom: 0, bottom: true });
+      };
+      switch (d.lamp) {
+        case "ceiling":
+          cyl(0.05, H - 0.04, H, LAMP_BODY, LAMP_BODY, 8);
+          cyl(0.2, H - 0.075, H - 0.04, shadeCol, shadeCol);
+          break;
+        case "floor":
+          cyl(0.15, 0, 0.03, LAMP_BODY, LAMP_BODY);
+          cyl(0.014, 0.03, 1.5, LAMP_BODY, LAMP_BODY, 6);
+          cyl(0.21, 1.45, 1.75, shadeCol, shadeCol);
+          break;
+        case "table":
+          cyl(0.08, 0.72, 0.75, LAMP_BODY, LAMP_BODY);
+          cyl(0.012, 0.75, 1.02, LAMP_BODY, LAMP_BODY, 6);
+          cyl(0.13, 0.98, 1.16, shadeCol, shadeCol);
+          break;
+        case "wall":
+          cyl(0.09, 1.68, 1.86, shadeCol, shadeCol, 10);
+          break;
+      }
+    }
+    fv.lampMesh.geometry.dispose();
+    fv.lampMesh.geometry = buf.geometry();
+    fv.lampMesh.visible = buf.count > 0;
   }
 
   private flowSeconds(): number {
@@ -999,7 +1071,8 @@ export class FloorplanViewer {
     this.updateWalls();
     this.renderer.render(this.scene, this.camera);
     this.updateLabels();
-    this.reportStats(now, moving);
+    // the energy flow counts as motion here, so its frame rate shows too
+    this.reportStats(now, moving || this.flowActive);
     if (moving) this.invalidate();
     else if (this.flowActive && !this.flowTimer) {
       // only the energy flow moves: about 30 frames per second are enough
@@ -1122,13 +1195,23 @@ export class FloorplanViewer {
   private reportStats(now: number, moving: boolean): void {
     if (!this.options.onStats) return;
     if (!this.fpsStart) this.fpsStart = now;
+    if (this.lastStatsFrame && moving) this.worstFrame = Math.max(this.worstFrame, now - this.lastStatsFrame);
+    this.lastStatsFrame = moving ? now : 0;
     this.fpsFrames++;
     const elapsed = now - this.fpsStart;
     if (elapsed > 500 || !moving) {
       const info = this.renderer.info.render;
-      this.options.onStats({ fps: moving ? Math.round((this.fpsFrames * 1000) / elapsed) : 0, calls: info.calls, triangles: info.triangles });
+      this.options.onStats({
+        fps: moving ? Math.round((this.fpsFrames * 1000) / elapsed) : 0,
+        worstMs: Math.round(this.worstFrame),
+        calls: info.calls,
+        triangles: info.triangles,
+        low: this.lowQuality,
+        pixelRatio: this.renderer.getPixelRatio(),
+      });
       this.fpsFrames = 0;
       this.fpsStart = now;
+      this.worstFrame = 0;
     }
   }
 }

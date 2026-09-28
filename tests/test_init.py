@@ -109,6 +109,21 @@ async def test_opening_fields_get_defaults(hass: HomeAssistant, hass_ws_client) 
     assert got[1]["hinge"] == "right" and got[1]["cover"] == "cover.x" and got[1]["contact"] == "none"
 
 
+async def test_placement_mount_defaults_to_none(hass: HomeAssistant, hass_ws_client) -> None:
+    await _setup(hass)
+    client = await hass_ws_client(hass)
+    building = copy.deepcopy(BUILDING)
+    building["floors"][0]["placements"] = [
+        {"entity_id": "light.a", "x": 1, "z": 1, "y": None},
+        {"entity_id": "light.b", "x": 2, "z": 1, "y": None, "mount": "floor"},
+    ]
+    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": building})
+    assert (await client.receive_json())["success"]
+    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    got = (await client.receive_json())["result"]["building"]["floors"][0]["placements"]
+    assert [p["mount"] for p in got] == [None, "floor"]
+
+
 async def test_energy_and_presence_get_defaults(hass: HomeAssistant, hass_ws_client) -> None:
     await _setup(hass)
     client = await hass_ws_client(hass)

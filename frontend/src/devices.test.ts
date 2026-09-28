@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { areaEntities, autoPlace, entityName, isActive, kindOf, lightGlow, openingEntities, openingState } from "./devices.ts";
+import { areaEntities, autoPlace, entityName, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, primaryEntities } from "./devices.ts";
 import type { Floor, Opening, Room } from "./model.ts";
 import { centroid, newFloor, pointInPolygon } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -74,8 +74,11 @@ test("automatic placement keeps devices inside the room, apart, and off the room
   const label = centroid(room.points);
   for (const p of out) {
     assert.ok(pointInPolygon([p.x, p.z], room.points));
-    assert.ok(Math.hypot(p.x - label[0], p.z - label[1]) >= 0.69, "room label stays free");
+    // lamps hang from the ceiling and may sit above the room label; other markers keep it free
+    if (!p.entity_id.startsWith("light.")) assert.ok(Math.hypot(p.x - label[0], p.z - label[1]) >= 0.69, "room label stays free");
   }
+  const first = autoPlace(room, ["light.a"])[0];
+  assert.ok(Math.hypot(first.x - label[0], first.z - label[1]) < 0.3, "a single ceiling light goes to the middle");
   for (let i = 0; i < out.length; i++) {
     for (let j = i + 1; j < out.length; j++) assert.ok(Math.hypot(out[i].x - out[j].x, out[i].z - out[j].z) > 0.8);
   }
@@ -151,4 +154,23 @@ test("garage doors use garage covers and contacts; door leaves follow their cont
   assert.equal(openingState(hass, links.get("g")!, "garage").cover, 0.5);
   assert.equal(openingState(hass, links.get("d")!, "door").open, 1);
   assert.equal(openingState(hass, { cover: null, contact: null, tilt: null }, "door").open, 0.5);
+});
+
+test("entities are grouped by device; the entity without a name of its own is the main one", () => {
+  const hass = hassWith();
+  const add = (id: string, device: string, name?: string) => {
+    hass.entities![id] = { entity_id: id, area_id: "wohnen", device_id: device, ...(name ? { name } : {}) };
+    hass.states[id] = { entity_id: id, state: "on", attributes: { friendly_name: name ?? "Awtrix" } };
+  };
+  add("light.awtrix_indicator_1", "awtrix", "Indicator 1");
+  add("light.awtrix_matrix", "awtrix", "Matrix");
+  add("light.awtrix", "awtrix");
+  add("light.awtrix_indicator_2", "awtrix", "Indicator 2");
+  const ids = areaEntities(hass, "wohnen").filter((id) => kindOf(id) === "light");
+  const groups = groupByDevice(hass, ids);
+  const awtrix = groups.find((g) => g.primary === "light.awtrix")!;
+  assert.deepEqual([...awtrix.others].sort(), ["light.awtrix_indicator_1", "light.awtrix_indicator_2", "light.awtrix_matrix"]);
+  // entities without a device are their own group
+  assert.ok(groups.some((g) => g.primary === "light.decke" && g.others.length === 0));
+  assert.deepEqual(primaryEntities(hass, ids).length, groups.length);
 });

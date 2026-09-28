@@ -43,6 +43,7 @@ export class Floorplan3dPanel extends LitElement {
     _wallMode: { state: true },
     _explode: { state: true },
     _quality: { state: true },
+    _stats: { state: true },
   };
 
   declare hass: HomeAssistant;
@@ -55,9 +56,11 @@ export class Floorplan3dPanel extends LitElement {
   private declare _wallMode: WallMode;
   private declare _explode: boolean;
   private declare _quality: Quality;
+  /** Performance display (per device; also switched on by ?fp3d_stats in the URL). */
+  private declare _stats: boolean;
 
   private readonly data = new BuildingController(this);
-  private readonly showStats = new URLSearchParams(location.search).has("fp3d_stats");
+
 
   constructor() {
     super();
@@ -69,6 +72,7 @@ export class Floorplan3dPanel extends LitElement {
     this._explode = prefs.get("explode") !== "0";
     const quality = prefs.get("quality");
     this._quality = quality === "low" || quality === "high" ? quality : "auto";
+    this._stats = prefs.get("stats") === "1" || new URLSearchParams(location.search).has("fp3d_stats");
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
@@ -151,6 +155,18 @@ export class Floorplan3dPanel extends LitElement {
                 ${(["auto", "low", "high"] as Quality[]).map(
                   (q) => html`<button aria-pressed=${this._quality === q} @click=${() => this.setQuality(q)}>${this.t(`quality_${q}`)}</button>`,
                 )}
+              </div>
+              <div class="fp3d-seg fp3d-quality">
+                <button
+                  aria-pressed=${this._stats}
+                  title=${this.t("fps_title")}
+                  @click=${() => {
+                    this._stats = !this._stats;
+                    prefs.set("stats", this._stats ? "1" : "0");
+                  }}
+                >
+                  ${this.t("fps")}
+                </button>
               </div>`
             : nothing}
           ${this._mode === "editor" && saveState !== "idle"
@@ -231,7 +247,7 @@ export class Floorplan3dPanel extends LitElement {
           .wallMode=${this._wallMode}
           .explode=${this._explode}
           .quality=${this._quality}
-          ?showStats=${this.showStats}
+          ?showStats=${this._stats}
           @room-tap=${this.onRoomTap}
           @floor-tap=${(e: CustomEvent<{ floorId: string }>) => {
             this._floorId = e.detail.floorId;

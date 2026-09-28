@@ -2,7 +2,8 @@
 
 import { css, html, LitElement, nothing, svg, type PropertyValues, type TemplateResult } from "lit";
 import { fetchImage, storeImage } from "../api.ts";
-import { areaEntities, autoPlace, entityName, isPlaceable, kindOf, openingEntities } from "../devices.ts";
+import { areaEntities, autoPlace, defaultHeight, entityName, groupByDevice, isPlaceable, kindOf, openingEntities } from "../devices.ts";
+import { closeGaps, suggestedThickness } from "../geometry/gaps.ts";
 import { generateWalls, locateOnWalls, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { iconPath } from "../icons.ts";
@@ -24,6 +25,8 @@ import {
   type Floor,
   type Furniture,
   type FurnitureType,
+  type LampMount,
+  type Placement,
   type Opening,
   type OpeningType,
   type Room,
@@ -68,6 +71,10 @@ export class Fp3dEditor extends LitElement {
     _vertex: { state: true },
     _openingId: { state: true },
     _furnitureId: { state: true },
+    _deviceId: { state: true },
+    _deviceQuery: { state: true },
+    _expanded: { state: true },
+    _notice: { state: true },
     _tool: { state: true },
     _draft: { state: true },
     _cursor: { state: true },
@@ -88,6 +95,12 @@ export class Fp3dEditor extends LitElement {
   private declare _vertex: number | null;
   private declare _openingId: string | null;
   private declare _furnitureId: string | null;
+  private declare _deviceId: string | null;
+  private declare _deviceQuery: string;
+  /** Devices whose further entities are unfolded in the device list. */
+  private declare _expanded: Set<string>;
+  /** Short confirmation shown after an action (e.g. closed gaps). */
+  private declare _notice: string | null;
   private declare _tool: Tool;
   private declare _draft: Vec2[];
   private declare _cursor: Vec2 | null;
@@ -115,6 +128,10 @@ export class Fp3dEditor extends LitElement {
     this._vertex = null;
     this._openingId = null;
     this._furnitureId = null;
+    this._deviceId = null;
+    this._deviceQuery = "";
+    this._expanded = new Set();
+    this._notice = null;
     this._tool = "select";
     this._draft = [];
     this._cursor = null;
@@ -592,12 +609,8 @@ export class Fp3dEditor extends LitElement {
         break;
       case "device":
         if (drag.moved) this.pushHistory(drag.base);
-        else {
-          // a tap on a device selects the room it stands in
-          const pl = this.floor?.placements.find((x) => x.entity_id === drag.entityId);
-          const roomId = pl ? this.roomAt([pl.x, pl.z]) : null;
-          if (roomId) this._roomId = roomId;
-        }
+        // a tap on a device selects it (and the room it stands in)
+        else this.selectItem("device", drag.entityId);
         break;
       case "vertex":
       case "room":
@@ -718,7 +731,10 @@ export class Fp3dEditor extends LitElement {
       e.preventDefault();
       this.duplicateRoom();
     } else if (e.key === "Delete" || (e.key === "Backspace" && this._tool === "select")) {
-      if (this._openingId) this.deleteOpening();
+      if (this._deviceId) {
+        this.removeDevice(this._deviceId);
+        this._deviceId = null;
+      } else if (this._openingId) this.deleteOpening();
       else if (this._furnitureId) this.deleteFurniture();
       else if (this._vertex !== null) this.deleteVertex(this._vertex);
       else this.deleteRoom();
@@ -792,11 +808,17 @@ export class Fp3dEditor extends LitElement {
   }
 
   /** Select a room, an opening or a furniture item (only one at a time). */
-  private selectItem(kind: "room" | "opening" | "furniture", id: string | null): void {
+  private selectItem(kind: "room" | "opening" | "furniture" | "device", id: string | null): void {
+    this._notice = null;
     if (kind !== "room" || id !== this._roomId) this._vertex = null;
     this._roomId = kind === "room" ? id : this._roomId;
     this._openingId = kind === "opening" ? id : null;
     this._furnitureId = kind === "furniture" ? id : null;
+    this._deviceId = kind === "device" ? id : null;
+    if (kind === "device" && id) {
+      const pl = this.floor?.placements.find((x) => x.entity_id === id);
+      this._roomId = (pl && this.roomAt([pl.x, pl.z])) ?? this._roomId;
+    }
     if (kind === "opening" && id) this._roomId = this.floor?.openings.find((o) => o.id === id)?.room_id ?? this._roomId;
   }
 
@@ -924,6 +946,70 @@ export class Fp3dEditor extends LitElement {
       for (const f of doc.floors) f.placements = f.placements.filter((pl) => !ids.has(pl.entity_id));
       floor.placements.push(...autoPlace(room, entityIds, floor.placements.map((pl) => [pl.x, pl.z] as Vec2)));
     });
+  }
+
+  private get device(): Placement | undefined {
+    return this._deviceId ? this.floor?.placements.find((p) => p.entity_id === this._deviceId) : undefined;
+  }
+
+  private updateDevice(patch: Partial<Placement>): void {
+    const id = this._deviceId;
+    this.change((_, floor) => Object.assign(floor.placements.find((p) => p.entity_id === id)!, patch));
+  }
+
+  /** Move the selected device to the middle of its room. */
+  private centreDevice(): void {
+    const pl = this.device;
+    const roomId = pl ? this.roomAt([pl.x, pl.z]) : null;
+    const room = this.floor?.rooms.find((r) => r.id === roomId);
+    if (!pl || !room) return;
+    const [x, z] = centroid(room.points);
+    this.updateDevice({ x: round(x), z: round(z) });
+  }
+
+  /** Spread the room's ceiling lights evenly over it (grid of cells, one light per cell). */
+  private spreadCeilingLights(room: Room): void {
+    const floor = this.floor;
+    if (!floor) return;
+    const lights = floor.placements.filter(
+      (p) => kindOf(p.entity_id) === "light" && (p.mount ?? "ceiling") === "ceiling" && pointInPolygon([p.x, p.z], room.points),
+    );
+    if (lights.length < 2) return;
+    const b = bounds(room.points);
+    const w = b.x1 - b.x0;
+    const d = b.z1 - b.z0;
+    const cols = Math.max(1, Math.round(Math.sqrt((lights.length * w) / Math.max(0.1, d))));
+    const rows = Math.ceil(lights.length / cols);
+    const spots = lights.map((_, i) => {
+      const r = Math.floor(i / cols);
+      // a last row that is not full is spread over the whole width as well
+      const inRow = r === rows - 1 ? lights.length - cols * (rows - 1) : cols;
+      const c = i - r * cols;
+      return [round(b.x0 + (w / inRow) * (c + 0.5)), round(b.z0 + (d / rows) * (r + 0.5))] as Vec2;
+    });
+    const ids = lights.map((l) => l.entity_id);
+    this.change((_, f) => {
+      ids.forEach((id, i) => Object.assign(f.placements.find((p) => p.entity_id === id)!, { x: spots[i][0], z: spots[i][1] }));
+    });
+  }
+
+  /** Close gaps between rooms of this floor and take the gap as interior wall thickness. */
+  private closeFloorGaps(): void {
+    const floor = this.floor;
+    if (!floor || !this.isAdmin) return;
+    const { rooms, gaps } = closeGaps(floor.rooms);
+    if (!gaps.length) {
+      this._notice = this.t("gaps_none");
+      return;
+    }
+    const thickness = suggestedThickness(gaps);
+    this.change((doc, f) => {
+      f.rooms = rooms;
+      if (thickness) doc.settings.wall_interior = thickness;
+    });
+    this._notice = thickness
+      ? this.t("gaps_closed_wall", { n: gaps.length, t: formatNumber(this.hass, thickness, 2) })
+      : this.t("gaps_closed", { n: gaps.length });
   }
 
   private removeDevice(entityId: string): void {
@@ -1226,7 +1312,8 @@ export class Fp3dEditor extends LitElement {
       if (!kind) return nothing;
       const [x, y] = this.toScreen([pl.x, pl.z]);
       const on = this.hass?.states[pl.entity_id]?.state === "on";
-      return svg`<g data-device=${pl.entity_id} class=${on ? "fp3d-device fp3d-device-on" : "fp3d-device"} transform="translate(${x} ${y})">
+      const cls = `fp3d-device${on ? " fp3d-device-on" : ""}${pl.entity_id === this._deviceId ? " fp3d-device-sel" : ""}`;
+      return svg`<g data-device=${pl.entity_id} class=${cls} transform="translate(${x} ${y})">
         <title>${entityName(this.hass, pl.entity_id)}</title>
         <circle r="18" class="fp3d-hit" /><circle r="12" />
         <path d=${iconPath(kind)} transform="translate(-7.2 -7.2) scale(0.6)" />
@@ -1359,7 +1446,13 @@ export class Fp3dEditor extends LitElement {
                     <button class="fp3d-btn" @click=${() => this.moveFloor(1)}>${this.t("move_up")}</button>
                     <button class="fp3d-btn" @click=${() => this.moveFloor(-1)}>${this.t("move_down")}</button>
                     <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteFloor()}>${this.t("delete_floor")}</button>
-                  </div>`
+                  </div>
+                  <div class="fp3d-actions fp3d-wide">
+                    <button class="fp3d-btn" title=${this.t("gaps_hint")} ?disabled=${floor.rooms.length < 2} @click=${() => this.closeFloorGaps()}>
+                      ${this.t("gaps_close")}
+                    </button>
+                  </div>
+                  ${this._notice ? html`<p class="fp3d-sub fp3d-wide fp3d-notice">${this._notice}</p>` : nothing}`
                 : nothing}
             </div>`
           : nothing}
@@ -1368,6 +1461,8 @@ export class Fp3dEditor extends LitElement {
         ? this.renderOpeningForm(this.opening)
         : this.furnitureItem
           ? this.renderFurnitureForm(this.furnitureItem)
+          : this.device
+            ? this.renderDeviceForm(this.device)
           : room
             ? html`${this.renderRoomForm(room, areas)} ${this.renderDeviceList(room)}`
             : floor
@@ -1651,37 +1746,121 @@ export class Fp3dEditor extends LitElement {
     </details>`;
   }
 
+  private renderDeviceForm(pl: Placement) {
+    const admin = this.isAdmin;
+    const kind = kindOf(pl.entity_id);
+    const light = kind === "light";
+    const mount = pl.mount ?? "ceiling";
+    const auto = kind ? defaultHeight(kind, this.floor?.height ?? 2.5, light ? mount : null) : 1;
+    return html`<section>
+      <h3>${this.t("device")}</h3>
+      <p class="fp3d-dev-title">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d=${kind ? iconPath(kind) : ""} />
+        </svg>
+        ${entityName(this.hass, pl.entity_id)}
+      </p>
+      <div class="fp3d-form">
+        ${light
+          ? html`<label class="fp3d-field fp3d-wide"
+              >${this.t("lamp_mount")}
+              <select ?disabled=${!admin} @change=${(e: Event) => this.updateDevice({ mount: (e.target as HTMLSelectElement).value as LampMount, y: null })}>
+                ${(["ceiling", "floor", "table", "wall"] as const).map((m) => html`<option value=${m} ?selected=${m === mount}>${this.t(`lamp_${m}`)}</option>`)}
+              </select></label
+            >`
+          : nothing}
+        ${this.num(this.t("x"), pl.x, (v) => this.updateDevice({ x: v }))} ${this.num(this.t("z"), pl.z, (v) => this.updateDevice({ z: v }))}
+        ${this.num(this.t("marker_height"), pl.y ?? auto, (v) => this.updateDevice({ y: Math.max(0, v) }), 0.05, 0)}
+      </div>
+      ${admin
+        ? html`<div class="fp3d-actions">
+            <button class="fp3d-btn" @click=${() => this.centreDevice()}>${this.t("device_centre")}</button>
+            ${pl.y !== null ? html`<button class="fp3d-btn" @click=${() => this.updateDevice({ y: null })}>${this.t("height_auto")}</button>` : nothing}
+            <button
+              class="fp3d-btn fp3d-danger"
+              @click=${() => {
+                this.removeDevice(pl.entity_id);
+                this._deviceId = null;
+              }}
+            >
+              ${this.t("devices_remove")}
+            </button>
+          </div>`
+        : nothing}
+    </section>`;
+  }
+
   private renderDeviceList(room: Room) {
     const admin = this.isAdmin;
-    const areaName = room.area_id ? this.hass?.areas?.[room.area_id]?.name : undefined;
-    const ids = this.hass ? areaEntities(this.hass, room.area_id).filter((id) => isPlaceable(kindOf(id))) : [];
+    const hass = this.hass;
+    const areaName = room.area_id ? hass?.areas?.[room.area_id]?.name : undefined;
+    const ids = hass ? areaEntities(hass, room.area_id).filter((id) => isPlaceable(kindOf(id))) : [];
     const placedHere = new Set(this.floor?.placements.filter((pl) => pointInPolygon([pl.x, pl.z], room.points)).map((pl) => pl.entity_id));
-    const unplaced = ids.filter((id) => !placedHere.has(id));
+    const groups = hass ? groupByDevice(hass, ids) : [];
+    // the automatic placement only takes each device's main entity
+    const unplacedMain = groups.map((g) => g.primary).filter((id) => !placedHere.has(id));
+    const q = this._deviceQuery.trim().toLowerCase();
+    const matches = (id: string) => !q || entityName(hass, id, areaName).toLowerCase().includes(q) || id.includes(q);
+    const ceilingLights = this.floor?.placements.filter(
+      (p) => kindOf(p.entity_id) === "light" && (p.mount ?? "ceiling") === "ceiling" && pointInPolygon([p.x, p.z], room.points),
+    ).length;
+    const row = (id: string, extra = false) => {
+      const placed = placedHere.has(id);
+      return html`<div class="fp3d-row fp3d-dev-row ${extra ? "fp3d-dev-extra" : ""}">
+        <button class="fp3d-dev-name ${placed ? "" : "fp3d-muted"}" ?disabled=${!placed} @click=${() => this.selectItem("device", id)}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d=${iconPath(kindOf(id)!)} />
+          </svg>
+          <span>${entityName(hass, id, areaName)}</span>
+        </button>
+        ${admin
+          ? placed
+            ? html`<button class="fp3d-link" @click=${() => this.removeDevice(id)}>${this.t("devices_remove")}</button>`
+            : html`<button class="fp3d-link" @click=${() => this.placeDevices([id])}>${this.t("devices_place")}</button>`
+          : nothing}
+      </div>`;
+    };
     return html`<section>
       <h3>${this.t("devices")}</h3>
       ${!room.area_id
         ? html`<p class="fp3d-sub">${this.t("devices_none_area")}</p>`
         : !ids.length
           ? html`<p class="fp3d-sub">${this.t("devices_none")}</p>`
-          : html`${admin && unplaced.length
-                ? html`<button class="fp3d-btn fp3d-primary fp3d-wide-btn" @click=${() => this.placeDevices(unplaced)}>${this.t("devices_place_all")}</button>`
+          : html`${admin && unplacedMain.length
+                ? html`<button class="fp3d-btn fp3d-primary fp3d-wide-btn" @click=${() => this.placeDevices(unplacedMain)}>${this.t("devices_place_all")}</button>`
+                : nothing}
+              ${admin && (ceilingLights ?? 0) >= 2
+                ? html`<button class="fp3d-btn fp3d-wide-btn" @click=${() => this.spreadCeilingLights(room)}>${this.t("lights_spread")}</button>`
+                : nothing}
+              ${ids.length > 8
+                ? html`<input
+                    class="fp3d-search"
+                    type="search"
+                    placeholder=${this.t("devices_search")}
+                    .value=${this._deviceQuery}
+                    @input=${(e: Event) => (this._deviceQuery = (e.target as HTMLInputElement).value)}
+                  />`
                 : nothing}
               <div class="fp3d-room-list">
-                ${ids.map((id) => {
-                  const placed = placedHere.has(id);
-                  return html`<div class="fp3d-row fp3d-dev-row">
-                    <span class="fp3d-dev-name ${placed ? "" : "fp3d-muted"}">
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d=${iconPath(kindOf(id)!)} />
-                      </svg>
-                      ${entityName(this.hass, id, areaName)}
-                    </span>
-                    ${admin
-                      ? placed
-                        ? html`<button class="fp3d-link" @click=${() => this.removeDevice(id)}>${this.t("devices_remove")}</button>`
-                        : html`<button class="fp3d-link" @click=${() => this.placeDevices([id])}>${this.t("devices_place")}</button>`
-                      : nothing}
-                  </div>`;
+                ${groups.map((g) => {
+                  const others = g.others.filter(matches);
+                  const open = this._expanded.has(g.primary) || (!!q && others.length > 0);
+                  if (!matches(g.primary) && !others.length) return nothing;
+                  return html`${row(g.primary)}
+                  ${g.others.length
+                    ? html`<button
+                        class="fp3d-more"
+                        @click=${() => {
+                          const next = new Set(this._expanded);
+                          if (next.has(g.primary)) next.delete(g.primary);
+                          else next.add(g.primary);
+                          this._expanded = next;
+                        }}
+                      >
+                        ${open ? this.t("devices_less") : this.t("devices_more", { n: g.others.length })}
+                      </button>`
+                    : nothing}
+                  ${open ? (q ? others : g.others).map((id) => row(id, true)) : nothing}`;
                 })}
               </div>
               <p class="fp3d-sub">${this.t("devices_hint")}</p>`}
@@ -2065,6 +2244,49 @@ export class Fp3dEditor extends LitElement {
       .fp3d-open-sel line {
         stroke-width: 2.4;
       }
+      .fp3d-search {
+        width: 100%;
+        box-sizing: border-box;
+        font: inherit;
+        font-size: 14px;
+        color: var(--fp3d-text);
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--fp3d-line);
+        border-radius: 8px;
+        padding: 7px 9px;
+        margin: 2px 0 6px;
+      }
+      .fp3d-more {
+        font: inherit;
+        font-size: 12px;
+        color: var(--fp3d-muted);
+        background: none;
+        border: none;
+        text-align: left;
+        padding: 2px 26px 8px;
+        cursor: pointer;
+      }
+      .fp3d-more:hover {
+        color: var(--fp3d-accent);
+      }
+      .fp3d-dev-extra {
+        padding-left: 18px;
+        font-size: 13px;
+      }
+      .fp3d-dev-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 8px;
+        font-weight: 600;
+      }
+      .fp3d-notice {
+        color: var(--fp3d-accent);
+      }
+      .fp3d-device-sel circle:not(.fp3d-hit) {
+        stroke: var(--fp3d-accent);
+        stroke-width: 3;
+      }
       .fp3d-dev-row {
         align-items: center;
         cursor: default;
@@ -2077,6 +2299,20 @@ export class Fp3dEditor extends LitElement {
         align-items: center;
         gap: 8px;
         min-width: 0;
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: none;
+        padding: 0;
+        text-align: left;
+        cursor: pointer;
+      }
+      .fp3d-dev-name:disabled {
+        cursor: default;
+      }
+      .fp3d-dev-name span {
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .fp3d-dev-name svg {
         flex: none;
