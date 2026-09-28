@@ -579,11 +579,12 @@ export class FloorplanViewer {
     const h = this.host.clientHeight;
     const v = new Vector3();
     const house = this.houseView;
+    const placed: { fv: FloorView; left: number; y: number; h: number }[] = [];
     for (const fv of this.floors) {
       const show = house && fv.o > 0.5 && fv.floor.rooms.length > 0;
       fv.label.hidden = !show;
       if (!show) continue;
-      // left of the leftmost corner of the floor's bounding box, at wall-cut height
+      // left of the leftmost corner of the floor's bounding box, at half the cut height
       let best: { x: number; y: number } | null = null;
       const xs = fv.floor.rooms.flatMap((r) => r.points.map((p) => p[0]));
       const zs = fv.floor.rooms.flatMap((r) => r.points.map((p) => p[1]));
@@ -596,9 +597,15 @@ export class FloorplanViewer {
         }
       }
       const lw = fv.label.offsetWidth;
-      const left = Math.max(8, Math.min(w - lw - 8, best!.x - lw - 14));
-      fv.label.style.transform = `translate(${left}px, ${best!.y}px) translate(0, -50%)`;
+      placed.push({ fv, left: Math.max(8, Math.min(w - lw - 8, best!.x - lw - 14)), y: best!.y, h: fv.label.offsetHeight });
     }
+    // top floor first; each lower label keeps below the one above so labels never cover each other
+    placed.sort((a, b) => b.fv.rank - a.fv.rank);
+    for (let i = 1; i < placed.length; i++) {
+      const above = placed[i - 1];
+      placed[i].y = Math.max(placed[i].y, above.y + (above.h + placed[i].h) / 2 + 8);
+    }
+    for (const p of placed) p.fv.label.style.transform = `translate(${p.left}px, ${p.y}px) translate(0, -50%)`;
     for (const pin of this.labels.querySelectorAll<HTMLElement>(".fp3d-pin[data-room]")) {
       const fv = this.floors.find((f) => f.floor.id === pin.dataset.floor);
       const room = fv?.floor.rooms.find((r) => r.id === pin.dataset.room);
