@@ -41,6 +41,7 @@ import { OrbitControls } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
 import { screenRect } from "./furniture.ts";
 import { GeoBuffer, pushPrism } from "./geo.ts";
+import { buildLightSurface, lightColors, roomIndexAt, type LightKind, type LightSource, type LightSurface } from "./lighting.ts";
 import { buildOpeningParts, CLOSED, type OpeningState } from "./openings.ts";
 
 export type { OpeningState } from "./openings.ts";
@@ -99,7 +100,7 @@ export interface DeviceMarker {
   powerText?: string;
 }
 
-export type LampModel = "ceiling" | "pendant" | "floor" | "table" | "wall" | "strip";
+export type LampModel = "ceiling" | "downlight" | "spot" | "panel" | "pendant" | "floor" | "uplight" | "table" | "wall" | "strip";
 
 /** Piece of energy cable (floor-local coordinates); the flow runs from a to b. */
 export interface FlowPiece {
@@ -163,9 +164,15 @@ const CABLE_HALO = 0.34;
 const LAMP_BODY = 0x2a3a60;
 const LAMP_SHADE = 0x1d2946;
 const WALL_LAMP_Y = 1.75;
+/** Lamps that hang from the ceiling (hidden in the cut view). */
+const HANGING = new Set<LampModel>(["ceiling", "downlight", "spot", "panel", "pendant", "strip"]);
 const FLASH_MS = 450;
 const LAMP_SIZE: Record<LampModel, [number, number, number]> = {
   ceiling: [0.4, 0.4, 0.08],
+  downlight: [0.1, 0.1, 0.02],
+  spot: [0.1, 0.1, 0.14],
+  panel: [0.6, 0.6, 0.03],
+  uplight: [0.35, 0.35, 1.8],
   pendant: [0.4, 0.4, 0.8],
   floor: [0.42, 0.42, 1.7],
   table: [0.26, 0.26, 0.45],
@@ -198,7 +205,9 @@ interface FloorView {
   floorMesh: Mesh;
   shadowMesh: Mesh;
   patternMesh: Mesh;
+  /** Room lighting on floors and wall faces (see lighting.ts). */
   glowMesh: Mesh;
+  lightSurface: LightSurface | null;
   framesMesh: Mesh;
   glassMesh: Mesh;
   blindsMesh: Mesh;
@@ -271,7 +280,6 @@ export class FloorplanViewer {
   private readonly personPins = new Map<string, HTMLDivElement>();
   private floorInfo = new Map<string, string>();
   private readonly groundTexture: CanvasTexture;
-  private readonly glowTexture: CanvasTexture;
   private devices: DeviceMarker[] = [];
   private readonly devicePins = new Map<string, HTMLButtonElement>();
   private readonly ground: Mesh;
@@ -302,7 +310,6 @@ export class FloorplanViewer {
     this.patternTexture = makePatternTexture();
     this.blindTexture = makeBlindTexture();
     this.groundTexture = makeGroundTexture();
-    this.glowTexture = makeGlowTexture();
     this.ground = new Mesh(
       new PlaneGeometry(1, 1),
       new MeshBasicMaterial({ map: this.groundTexture, transparent: true, blending: AdditiveBlending, depthWrite: false }),
@@ -526,7 +533,6 @@ export class FloorplanViewer {
     this.patternTexture.dispose();
     this.blindTexture.dispose();
     this.groundTexture.dispose();
-    this.glowTexture.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.labels.remove();
@@ -634,52 +640,86 @@ export class FloorplanViewer {
   }
 
   /** Light cones of the lights that are on, merged into one mesh per floor. */
-  private buildGlow(fv: FloorView): void {
-    const sig = this.devices
-      .filter((d) => d.floorId === fv.floor.id && d.glow)
-      .map((d) => `${d.x},${d.z},${d.rotation ?? 0},${d.lamp},${d.size?.[0] ?? 0},${d.glow!.level.toFixed(3)},${d.glow!.color.map((c) => c.toFixed(3)).join("/")}`)
-      .join(";");
-    if (sig === fv.glowSig && fv.glowMesh.geometry.getAttribute("position")) return;
-    fv.glowSig = sig;
-    const p: number[] = [];
-    const c: number[] = [];
-    const uv: number[] = [];
-    for (const d of this.devices) {
-      if (d.floorId !== fv.floor.id || !d.glow) continue;
-      const r = 0.9 + 1.7 * d.glow.level;
-      const k = 0.3 + 0.5 * d.glow.level;
-      // additive light on a blue floor washes out; a gamma > 1 keeps warm light warm
-      const [cr, cg, cb] = d.glow.color.map((v) => Math.min(1, Math.pow(v, 1.7) * k));
-      const y = 0.012;
-      // strips light a band along their length; wall lights throw their light into the room
-      const hx = r + (d.lamp === "strip" ? (d.size?.[0] ?? 1) / 2 : 0);
-      const hz = d.lamp === "strip" ? r * 0.7 : r;
-      const oz = d.lamp === "wall" || d.lamp === "strip" ? r * 0.45 : 0;
-      const ang = ((d.rotation ?? 0) * Math.PI) / 180;
-      const ca = Math.cos(ang);
-      const sa = Math.sin(ang);
-      const at = (lx: number, lz: number) => [d.x + lx * ca - (lz + oz) * sa, d.z + lx * sa + (lz + oz) * ca];
-      const quad = [
-        [...at(-hx, -hz), 0, 0],
-        [...at(hx, -hz), 1, 0],
-        [...at(hx, hz), 1, 1],
-        [...at(-hx, hz), 0, 1],
-      ];
-      for (const i of [0, 2, 1, 0, 3, 2]) {
-        const [x, z, u, v] = quad[i];
-        p.push(x, y, z);
-        c.push(cr, cg, cb);
-        uv.push(u, v);
-      }
-    }
+  /** Light surface of a floor (rebuilt with the floor plan and when the detail level changes). */
+  private buildLightSurface(fv: FloorView): void {
+    const cell = this.lowQuality ? 0.5 : 0.25;
+    const surface = buildLightSurface(fv.floor, fv.geo.walls2d, fv.geo.wallBuckets, fv.geo.openings, cell);
+    fv.lightSurface = surface;
     const g = new Geometry();
-    g.setAttribute("position", new Float32BufferAttribute(p, 3));
-    g.setAttribute("color", new Float32BufferAttribute(c, 3));
-    g.setAttribute("uv", new Float32BufferAttribute(uv, 2));
+    g.setAttribute("position", new Float32BufferAttribute(surface.pos, 3));
+    g.setAttribute("color", new Float32BufferAttribute(new Float32Array(surface.pos.length), 3));
+    g.setAttribute("fold", new Float32BufferAttribute(surface.fold, 1));
     g.computeBoundingSphere();
     fv.glowMesh.geometry.dispose();
     fv.glowMesh.geometry = g;
-    fv.glowMesh.visible = p.length > 0;
+    fv.glowSig = "";
+    this.buildGlow(fv);
+  }
+
+  /** Light sources of the lights that are on, with the height and characteristic of their lamp. */
+  private lightSources(fv: FloorView): LightSource[] {
+    const H = fv.floor.height;
+    const out: LightSource[] = [];
+    for (const d of this.devices) {
+      if (d.floorId !== fv.floor.id || !d.glow) continue;
+      const room = roomIndexAt(fv.floor, d.x, d.z);
+      if (room < 0) continue;
+      const [w, , h] = d.size ?? (d.lamp ? LAMP_SIZE[d.lamp] : [0.3, 0.3, 0.3]);
+      const base = d.base ?? 0;
+      const kinds: Record<LampModel, [number, LightKind]> = {
+        ceiling: [H - 0.12, "ceiling"],
+        downlight: [H - 0.03, "spot"],
+        spot: [H - h, "spot"],
+        panel: [H - 0.05, "ceiling"],
+        pendant: [Math.max(0.5, H - h), "pendant"],
+        floor: [h - 0.15, "omni"],
+        uplight: [h, "up"],
+        table: [base + h - 0.1, "omni"],
+        wall: [WALL_LAMP_Y + 0.1, "wall"],
+        strip: [H - 0.05, "ceiling"],
+      };
+      const [y, kind] = d.lamp ? kinds[d.lamp] : [d.y, "omni" as LightKind];
+      const color = d.glow.color;
+      if (d.lamp === "strip") {
+        // a strip lights along its length: three sources spread over it
+        const a = ((d.rotation ?? 0) * Math.PI) / 180;
+        for (const t of [-1 / 3, 0, 1 / 3]) {
+          out.push({ x: d.x + Math.cos(a) * w * t, y, z: d.z + Math.sin(a) * w * t, color, level: d.glow.level * 0.55, kind, room });
+        }
+      } else out.push({ x: d.x, y, z: d.z, color, level: d.glow.level, kind, room });
+    }
+    return out;
+  }
+
+  /** Colours of the light surface for the current lights and doors. */
+  private buildGlow(fv: FloorView): void {
+    const surface = fv.lightSurface;
+    if (!surface) return;
+    const sources = this.lightSources(fv);
+    const doorOpen = surface.doors.map((d) => fv.openings.get(d.id)?.open ?? 0.5);
+    const sig =
+      sources.map((l) => `${l.x.toFixed(2)},${l.y.toFixed(2)},${l.z.toFixed(2)},${l.kind},${l.level.toFixed(3)},${l.color.map((c) => c.toFixed(3)).join("/")}`).join(";") +
+      "|" +
+      doorOpen.map((o) => o.toFixed(1)).join(",");
+    if (sig === fv.glowSig) return;
+    fv.glowSig = sig;
+    const attr = fv.glowMesh.geometry.getAttribute("color") as Float32BufferAttribute;
+    if (!sources.length) {
+      fv.glowMesh.visible = false;
+      return;
+    }
+    const colors = lightColors(surface, sources, 0.42, doorOpen);
+    (attr.array as Float32Array).set(colors);
+    attr.needsUpdate = true;
+    // only quads that receive light are drawn (dark ones would cost fill rate for nothing)
+    const index: number[] = [];
+    for (let q = 0; q < colors.length / 18; q++) {
+      let lit = false;
+      for (let k = q * 18; k < q * 18 + 18 && !lit; k++) lit = colors[k] > 0.004;
+      if (lit) for (let v = 0; v < 6; v++) index.push(q * 6 + v);
+    }
+    fv.glowMesh.geometry.setIndex(index);
+    fv.glowMesh.visible = index.length > 0;
   }
 
   private makeMaterials(mask: FoldMasks): FloorMaterials {
@@ -700,16 +740,20 @@ export class FloorplanViewer {
         polygonOffsetFactor: -1,
       }),
       lines: makeFoldable(new LineBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false }), mask),
-      glow: new MeshBasicMaterial({
-        map: this.glowTexture,
-        vertexColors: true,
-        transparent: true,
-        blending: AdditiveBlending,
-        depthWrite: false,
-        side: DoubleSide,
-        polygonOffset: true,
-        polygonOffsetFactor: -3,
-      }),
+      // light on floors and walls follows cut and glass walls like the walls themselves
+      glow: makeFoldable(
+        new MeshBasicMaterial({
+          vertexColors: true,
+          transparent: true,
+          blending: AdditiveBlending,
+          depthWrite: false,
+          side: DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: -3,
+        }),
+        mask,
+        "solid",
+      ),
       frames: makeFoldable(new MeshBasicMaterial({ vertexColors: true, side: DoubleSide }), mask),
       glass: makeFoldable(
         new MeshBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false, side: DoubleSide }),
@@ -798,6 +842,7 @@ export class FloorplanViewer {
         shadowMesh,
         patternMesh: pattern,
         glowMesh,
+        lightSurface: null,
         framesMesh,
         glassMesh,
         blindsMesh,
@@ -836,13 +881,13 @@ export class FloorplanViewer {
     }
     if (this.floorId && !b.floors.some((f) => f.id === this.floorId)) this.floorId = null;
     for (const fv of this.floors) {
-      this.buildGlow(fv);
       this.buildLamps(fv);
       this.buildScreens(fv);
       const prev = previousOpenings.get(fv.floor.id);
       for (const info of fv.geo.openings) fv.openings.set(info.opening.id, prev?.get(info.opening.id) ?? this.openingTargets.get(info.opening.id) ?? CLOSED);
       this.buildOpenings(fv);
       this.buildFlows(fv);
+      this.buildLightSurface(fv);
     }
     this.applyTargets(previous.size === 0);
     this.applyHighlight();
@@ -861,6 +906,7 @@ export class FloorplanViewer {
       fv.shadowMesh.visible = !low && fv.o > 0.98;
       fv.flowLayout = "";
       this.buildFlows(fv);
+      this.buildLightSurface(fv);
     }
     this.invalidate();
   }
@@ -984,7 +1030,10 @@ export class FloorplanViewer {
         }
         moving ||= busy;
       }
-      if (changed) this.buildOpenings(fv);
+      if (changed) {
+        this.buildOpenings(fv);
+        this.buildGlow(fv);
+      }
     }
     return moving;
   }
@@ -1013,7 +1062,7 @@ export class FloorplanViewer {
     for (const d of this.devices) {
       if (d.floorId !== fv.floor.id || !d.lamp) continue;
       // hanging lamps would float above cut walls
-      if ((d.lamp === "ceiling" || d.lamp === "pendant") && this.wallMode === "cut") continue;
+      if (HANGING.has(d.lamp) && this.wallMode === "cut") continue;
       const start = buf.count;
       // a lit shade glows in the light's colour, brighter with more brightness; a tap flashes it white
       const k = d.glow ? 0.55 + 0.45 * d.glow.level : 0;
@@ -1051,6 +1100,27 @@ export class FloorplanViewer {
           cyl(r, bottom, bottom + 0.14, shadeCol, shadeCol, 16);
           break;
         }
+        case "downlight":
+          // flush ring in the ceiling with a glowing lens
+          cyl(r, H - 0.012, H, LAMP_BODY, LAMP_BODY, 12);
+          cyl(r * 0.7, H - 0.02, H - 0.012, shadeCol, shadeCol, 12);
+          break;
+        case "spot":
+          cyl(r * 0.6, H - 0.02, H, LAMP_BODY, LAMP_BODY, 10);
+          cyl(r, H - Math.max(0.06, h), H - 0.02, LAMP_BODY, LAMP_BODY, 12);
+          cyl(r * 0.8, H - Math.max(0.06, h) - 0.008, H - Math.max(0.06, h), shadeCol, shadeCol, 12);
+          break;
+        case "panel":
+          box(-w / 2, w / 2, -dd / 2, dd / 2, H - Math.max(0.015, h), H, LAMP_BODY, LAMP_BODY);
+          box(-w / 2 + 0.02, w / 2 - 0.02, -dd / 2 + 0.02, dd / 2 - 0.02, H - Math.max(0.015, h) - 0.004, H - Math.max(0.015, h), shadeCol);
+          break;
+        case "uplight":
+          cyl(Math.max(0.1, r * 0.6), 0, 0.03, LAMP_BODY, LAMP_BODY);
+          cyl(0.014, 0.03, h - 0.12, LAMP_BODY, LAMP_BODY, 6);
+          // bowl open to the top: dark outside, glowing rim
+          cyl(r, h - 0.14, h - 0.02, LAMP_BODY, LAMP_BODY);
+          cyl(r * 0.92, h - 0.02, h, shadeCol, shadeCol);
+          break;
         case "floor":
           cyl(Math.max(0.1, r * 0.7), 0, 0.03, LAMP_BODY, LAMP_BODY);
           cyl(0.014, 0.03, h - 0.28, LAMP_BODY, LAMP_BODY, 6);
@@ -1724,25 +1794,6 @@ function flowMaterial(time: { value: number }): MeshBasicMaterial {
   };
   m.customProgramCacheKey = () => "fp3d-flow";
   return m;
-}
-
-/** Soft round light cone: bright core, long falloff. */
-function makeGlowTexture(): CanvasTexture {
-  const size = 128;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
-  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  g.addColorStop(0, "rgba(255,255,255,1)");
-  g.addColorStop(0.3, "rgba(255,255,255,0.5)");
-  g.addColorStop(0.65, "rgba(255,255,255,0.14)");
-  g.addColorStop(1, "rgba(255,255,255,0)");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, size, size);
-  const tex = new CanvasTexture(canvas);
-  tex.colorSpace = SRGBColorSpace;
-  return tex;
 }
 
 /** Ground below the house: a wide 1 m grid that fades out towards the edges. */

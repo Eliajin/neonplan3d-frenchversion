@@ -72,6 +72,8 @@ export interface FloorGeometry {
   buckets: (Vec2 | null)[];
   openings: OpeningInfo[];
   walls2d: Wall[];
+  /** Fold bucket of each wall in walls2d. */
+  wallBuckets: number[];
   /** Triangle ranges of furniture in `walls`, for tapping furniture in 3D. */
   furnitureTris: { id: string; start: number; end: number }[];
 }
@@ -273,6 +275,7 @@ export function buildFloorGeometry(floor: Floor, wallExterior: number, wallInter
     buckets,
     openings,
     walls2d: walls,
+    wallBuckets: walls.map((w) => wallBucket.get(w)!),
     furnitureTris,
   };
 }

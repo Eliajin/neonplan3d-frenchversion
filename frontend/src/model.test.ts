@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { emptyBuilding, newFloor, normalizeBuilding, surfaceHeight, type Furniture } from "./model.ts";
+import { emptyBuilding, newFloor, normalizeBuilding, spotGrid, surfaceHeight, type Furniture } from "./model.ts";
 
 const item = (type: string, x: number, z: number, h: number, extra: Partial<Furniture> = {}): Furniture => ({
   id: `${type}_${x}`,
@@ -47,4 +47,15 @@ test("a table lamp stands on the furniture below it", () => {
   assert.equal(surfaceHeight(floor, 4, 1.2), 0.75);
   assert.equal(surfaceHeight(floor, 7, 1), 0, "no lamps on the sofa");
   assert.equal(surfaceHeight(floor, 10, 10), 0);
+});
+
+test("a spot grid spreads lamps evenly and leaves out cells outside an L-shaped room", () => {
+  const square = { id: "r", name: "R", area_id: null, points: [[0, 0], [4, 0], [4, 2], [0, 2]] as [number, number][], floor_material: "wood" };
+  assert.deepEqual(spotGrid(square, 1, 2), [
+    [1, 1],
+    [3, 1],
+  ]);
+  const l = { ...square, points: [[0, 0], [4, 0], [4, 2], [2, 2], [2, 4], [0, 4]] as [number, number][] };
+  // 2 × 2 cells, the one at the bottom right lies outside the L
+  assert.equal(spotGrid(l, 2, 2).length, 3);
 });

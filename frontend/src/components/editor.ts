@@ -20,6 +20,7 @@ import {
   isLamp,
   isAxisRect,
   OPENING_DEFAULTS,
+  spotGrid,
   signedArea,
   newFloor,
   pointInPolygon,
@@ -83,6 +84,7 @@ export class Fp3dEditor extends LitElement {
     _expanded: { state: true },
     _notice: { state: true },
     _history: { state: true },
+    _spots: { state: true },
     _tool: { state: true },
     _draft: { state: true },
     _cursor: { state: true },
@@ -111,6 +113,8 @@ export class Fp3dEditor extends LitElement {
   private declare _notice: string | null;
   /** Restore points, loaded when the backup section is opened. */
   private declare _history: Snapshot[] | null;
+  /** Open "place spots" form of the selected room. */
+  private declare _spots: { type: FurnitureType; rows: number; cols: number; entity: string | null } | null;
   private declare _tool: Tool;
   private declare _draft: Vec2[];
   private declare _cursor: Vec2 | null;
@@ -143,6 +147,7 @@ export class Fp3dEditor extends LitElement {
     this._expanded = new Set();
     this._notice = null;
     this._history = null;
+    this._spots = null;
     this._tool = "select";
     this._draft = [];
     this._cursor = null;
@@ -1655,11 +1660,73 @@ export class Fp3dEditor extends LitElement {
       </details>
       ${admin
         ? html`<div class="fp3d-actions">
+            <button class="fp3d-btn" @click=${() => this.openSpotForm(room)}>${this.t("spots_place")}</button>
             <button class="fp3d-btn" @click=${() => this.duplicateRoom()}>${this.t("duplicate")}</button>
             <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteRoom()}>${this.t("delete")}</button>
           </div>`
         : nothing}
+      ${this._spots ? this.renderSpotForm(room) : nothing}
     </section>`;
+  }
+
+  /** Suggests about one spot per 1.2 m in each direction, and the room's first light. */
+  private openSpotForm(room: Room): void {
+    const b = bounds(room.points);
+    const lights = this.hass ? areaEntities(this.hass, room.area_id).filter((id) => id.startsWith("light.")) : [];
+    this._spots = {
+      type: "lamp_downlight",
+      rows: Math.max(1, Math.round((b.z1 - b.z0) / 1.2)),
+      cols: Math.max(1, Math.round((b.x1 - b.x0) / 1.2)),
+      entity: lights[0] ?? null,
+    };
+  }
+
+  private placeSpots(room: Room): void {
+    const f = this._spots;
+    if (!f || !this.isAdmin) return;
+    const [w, d, h] = FURNITURE_SIZE[f.type];
+    const items = spotGrid(room, f.rows, f.cols).map(([x, z]) => ({
+      id: uid("furniture"),
+      type: f.type,
+      x,
+      z,
+      rotation: 0,
+      w,
+      d,
+      h,
+      variant: null,
+      // every spot of the grid follows the same light (spots on one dimmer); "none" = not linked
+      entity: f.entity ?? "none",
+      power: null,
+    }));
+    this.change((_, floor) => floor.furniture.push(...items));
+    this._spots = null;
+    this._notice = this.t("spots_placed", { n: items.length });
+  }
+
+  private renderSpotForm(room: Room) {
+    const f = this._spots!;
+    const count = spotGrid(room, f.rows, f.cols).length;
+    const lights = this.entityOptions((id) => id.startsWith("light."));
+    const set = (patch: Partial<NonNullable<Fp3dEditor["_spots"]>>) => (this._spots = { ...f, ...patch });
+    return html`<div class="fp3d-form fp3d-spot-form">
+      <label class="fp3d-field fp3d-wide"
+        >${this.t("spots_type")}
+        <select @change=${(e: Event) => set({ type: (e.target as HTMLSelectElement).value as FurnitureType })}>
+          ${(["lamp_downlight", "lamp_spot", "lamp_panel", "lamp_ceiling"] as FurnitureType[]).map(
+            (t) => html`<option value=${t} ?selected=${t === f.type}>${this.t(`furn_${t}` as I18nKey)}</option>`,
+          )}
+        </select></label
+      >
+      ${this.num(this.t("spots_cols"), f.cols, (v) => set({ cols: Math.max(1, Math.min(12, Math.round(v))) }), 1, 1)}
+      ${this.num(this.t("spots_rows"), f.rows, (v) => set({ rows: Math.max(1, Math.min(12, Math.round(v))) }), 1, 1)}
+      ${this.entitySelect(this.t("furn_entity_light"), f.entity, undefined, lights, (v) => set({ entity: v === "none" ? null : v }))}
+      <div class="fp3d-actions fp3d-wide">
+        <button class="fp3d-btn fp3d-primary" ?disabled=${!count} @click=${() => this.placeSpots(room)}>${this.t("spots_add", { n: count })}</button>
+        <button class="fp3d-btn" @click=${() => (this._spots = null)}>${this.t("cancel")}</button>
+      </div>
+      <p class="fp3d-sub fp3d-wide">${this.t("spots_hint")}</p>
+    </div>`;
   }
 
   private entityOptions(filter: (id: string) => boolean) {

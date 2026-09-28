@@ -399,6 +399,10 @@ const MEDIA_FURNITURE = new Set(["tv_board", "tv_wall"]);
 /** Name hints for picking a lamp's light (a light that fits the name wins, otherwise any free one). */
 const LAMP_NAMES: Record<string, RegExp> = {
   lamp_ceiling: /(decke|ceiling|haupt|main)/i,
+  lamp_downlight: /(spot|strahler|downlight|einbau)/i,
+  lamp_spot: /(spot|strahler)/i,
+  lamp_panel: /(panel|decke|ceiling)/i,
+  lamp_uplight: /(fluter|uplight|steh)/i,
   lamp_pendant: /(pendel|pendant|hänge|esstisch|dining)/i,
   lamp_floor: /(steh|floor)/i,
   lamp_table: /(tisch|nacht|table|bedside|lese|reading)/i,

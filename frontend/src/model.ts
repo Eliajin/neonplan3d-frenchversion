@@ -152,11 +152,15 @@ export function newFloor(id: string, name: string, elevation: number): Floor {
 
 export const FURNITURE_TYPES = [
   "lamp_ceiling",
+  "lamp_downlight",
+  "lamp_spot",
+  "lamp_panel",
   "lamp_pendant",
   "lamp_floor",
   "lamp_table",
   "lamp_wall",
   "led_strip",
+  "lamp_uplight",
   "sofa",
   "armchair",
   "stool",
@@ -201,7 +205,7 @@ export const FURNITURE_TYPES = [
 
 /** Furniture library sections (the editor lists them in this order). */
 export const FURNITURE_GROUPS: Record<string, FurnitureType[]> = {
-  lights: ["lamp_ceiling", "lamp_pendant", "lamp_floor", "lamp_table", "lamp_wall", "led_strip"],
+  lights: ["lamp_ceiling", "lamp_downlight", "lamp_spot", "lamp_panel", "lamp_pendant", "lamp_floor", "lamp_uplight", "lamp_table", "lamp_wall", "led_strip"],
   living: ["sofa", "armchair", "stool", "coffee_table", "tv_board", "tv_wall", "sideboard", "shelf", "plant", "rug"],
   dining: ["table", "table_round", "chair", "bench", "corner_bench", "bar_stool"],
   kitchen: ["kitchen", "kitchen_wall", "kitchen_tall", "island", "sink", "stove", "dishwasher", "fridge"],
@@ -212,7 +216,18 @@ export const FURNITURE_GROUPS: Record<string, FurnitureType[]> = {
 
 /** Furniture that can show a linked entity (TV state, power, …). */
 /** Lamps: drawn live (they glow with their light) and tapped directly in 3D. */
-export const LAMP_TYPES = new Set<string>(["lamp_ceiling", "lamp_pendant", "lamp_floor", "lamp_table", "lamp_wall", "led_strip"]);
+export const LAMP_TYPES = new Set<string>([
+  "lamp_ceiling",
+  "lamp_downlight",
+  "lamp_spot",
+  "lamp_panel",
+  "lamp_pendant",
+  "lamp_floor",
+  "lamp_uplight",
+  "lamp_table",
+  "lamp_wall",
+  "led_strip",
+]);
 
 export function isLamp(type: string): boolean {
   return LAMP_TYPES.has(type);
@@ -234,6 +249,24 @@ const SURFACES = new Set<string>([
   "washer",
   "dryer",
 ]);
+
+/**
+ * Positions of a rows × cols grid of lamps in a room: cells of equal size over the room's bounding box,
+ * one lamp per cell centre that lies inside the room (L-shaped rooms simply leave cells out).
+ */
+export function spotGrid(room: Room, rows: number, cols: number, inset = 0): Vec2[] {
+  const b = bounds(room.points);
+  const w = b.x1 - b.x0 - 2 * inset;
+  const d = b.z1 - b.z0 - 2 * inset;
+  const out: Vec2[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const p: Vec2 = [Math.round((b.x0 + inset + (w / cols) * (c + 0.5)) * 1000) / 1000, Math.round((b.z0 + inset + (d / rows) * (r + 0.5)) * 1000) / 1000];
+      if (pointInPolygon(p, room.points)) out.push(p);
+    }
+  }
+  return out;
+}
 
 /** Height of the highest furniture top under a point (0 = the floor). */
 export function surfaceHeight(floor: Floor, x: number, z: number): number {
@@ -288,6 +321,10 @@ export const FURNITURE_SIZE: Record<FurnitureType, [number, number, number]> = {
   stairs: [1.0, 3.2, 2.75],
   stool: [0.55, 0.55, 0.42],
   lamp_ceiling: [0.4, 0.4, 0.08],
+  lamp_downlight: [0.1, 0.1, 0.02],
+  lamp_spot: [0.1, 0.1, 0.14],
+  lamp_panel: [0.6, 0.6, 0.03],
+  lamp_uplight: [0.35, 0.35, 1.8],
   lamp_pendant: [0.4, 0.4, 0.8],
   lamp_floor: [0.4, 0.4, 1.7],
   lamp_table: [0.28, 0.28, 0.45],

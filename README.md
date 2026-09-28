@@ -26,6 +26,8 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
 - **Devices**: the area's lights, switches, covers, thermostats, media players, sensors and cameras can be placed in the room automatically and moved by hand in the plan.
   - Lists are grouped by device: the main entity first, further entities (LED indicators, effects, …) behind "+n more"; with a search field.
   - Lights are placed as lamps from the furniture library (ceiling, pendant, floor, table, wall light, LED strip), linked to a light automatically or by hand. Their 3D model glows in the light colour; table lamps stand on the furniture below, wall lights and strips snap to the wall. Lights placed as devices in earlier versions become lamps automatically.
+  - More lamp types: downlight, surface spot, LED panel and floor uplight; "Place spots" puts a grid of lamps into a room at once, all following one light (spots on one dimmer). Several lamps can follow the same light.
+  - Room lighting: floors and the inner faces of walls are lit by the lamps of their room, in the lamps' colours and brightness (two RGB ceiling lights mix in between); light reaches the next room only through doors. Computed on the CPU when a light changes – no real-time lights, so it stays light for wall tablets.
   - Tap a lamp in 3D to switch it (it flashes briefly), long press for details; linked furniture (TV, …), windows, doors and garage doors can be tapped directly as well.
   - Markers: *None*, *Important* (default: only devices without a 3D object and values such as watts or the running app) or *All*; remembered per device, card option `markers`.
 - **Floor plan image as template**: an image of your floor plan can be placed under the drawing, with scale and opacity.

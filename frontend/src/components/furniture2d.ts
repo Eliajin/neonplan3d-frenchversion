@@ -117,6 +117,12 @@ export function furnitureSymbol(type: string, w: number, d: number): Part[] | ty
       return [line(-Math.min(w * 0.4, 0.72), -d / 2 + 0.14, Math.min(w * 0.4, 0.72), -d / 2 + 0.14, "fp3d-sym-strong"), ...fronts(w, d, Math.max(2, Math.round(w / 0.6)))];
     case "tv_wall":
       return [line(-w / 2, 0, w / 2, 0, "fp3d-sym-strong")];
+    case "lamp_downlight":
+    case "lamp_spot":
+      return [circle(0, 0, Math.min(w, d) * 0.45, "fp3d-sym-fill"), circle(0, 0, Math.min(w, d) * 1.4)];
+    case "lamp_panel":
+      return [rect(-w / 2 + 0.03, -d / 2 + 0.03, w / 2 - 0.03, d / 2 - 0.03, "fp3d-sym-fill")];
+    case "lamp_uplight":
     case "lamp_ceiling":
     case "lamp_pendant":
     case "lamp_floor":

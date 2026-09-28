@@ -32,6 +32,10 @@ export type MarkerMode = "none" | "important" | "all";
 
 const LAMP_MODEL: Record<string, LampModel> = {
   lamp_ceiling: "ceiling",
+  lamp_downlight: "downlight",
+  lamp_spot: "spot",
+  lamp_panel: "panel",
+  lamp_uplight: "uplight",
   lamp_pendant: "pendant",
   lamp_floor: "floor",
   lamp_table: "table",
@@ -288,7 +292,18 @@ export class Fp3dView3d extends LitElement {
     const base = model === "table" ? surfaceHeight(floor, f.x, f.z) : 0;
     const room = floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon([f.x, f.z], r.points));
     const H = floor.height;
-    const y = { ceiling: H - 0.3, pendant: Math.max(0.6, H - f.h - 0.25), floor: f.h + 0.25, table: base + f.h + 0.2, wall: 2.1, strip: H - 0.25 }[model];
+    const y = {
+      ceiling: H - 0.3,
+      downlight: H - 0.25,
+      spot: H - 0.35,
+      panel: H - 0.25,
+      pendant: Math.max(0.6, H - f.h - 0.25),
+      floor: f.h + 0.25,
+      uplight: f.h + 0.25,
+      table: base + f.h + 0.2,
+      wall: 2.1,
+      strip: H - 0.25,
+    }[model];
     return {
       // a lamp without a light keeps a key of its own (it is drawn, but not tappable)
       id: entity ?? `lamp:${f.id}`,
