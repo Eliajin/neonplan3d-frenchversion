@@ -1,7 +1,8 @@
 // 2D editor: floors, rooms (rectangles and free shapes), snapping, undo, background template.
 
 import { css, html, LitElement, nothing, svg, type PropertyValues, type TemplateResult } from "lit";
-import { fetchImage, storeImage } from "../api.ts";
+import { fetchImage, listHistory, restoreSnapshot, storeImage, takeSnapshot, type Snapshot } from "../api.ts";
+import { download, exportFile, parseExport } from "../transfer.ts";
 import { areaEntities, autoPlace, defaultHeight, entityName, furnitureEntities, groupByDevice, isPlaceable, kindOf, openingEntities } from "../devices.ts";
 import { furnitureSymbol } from "./furniture2d.ts";
 import { closeGaps, suggestedThickness } from "../geometry/gaps.ts";
@@ -81,6 +82,7 @@ export class Fp3dEditor extends LitElement {
     _deviceQuery: { state: true },
     _expanded: { state: true },
     _notice: { state: true },
+    _history: { state: true },
     _tool: { state: true },
     _draft: { state: true },
     _cursor: { state: true },
@@ -107,6 +109,8 @@ export class Fp3dEditor extends LitElement {
   private declare _expanded: Set<string>;
   /** Short confirmation shown after an action (e.g. closed gaps). */
   private declare _notice: string | null;
+  /** Restore points, loaded when the backup section is opened. */
+  private declare _history: Snapshot[] | null;
   private declare _tool: Tool;
   private declare _draft: Vec2[];
   private declare _cursor: Vec2 | null;
@@ -138,6 +142,7 @@ export class Fp3dEditor extends LitElement {
     this._deviceQuery = "";
     this._expanded = new Set();
     this._notice = null;
+    this._history = null;
     this._tool = "select";
     this._draft = [];
     this._cursor = null;
@@ -1586,6 +1591,7 @@ export class Fp3dEditor extends LitElement {
       ${floor && admin ? this.renderFurnitureLibrary() : nothing} ${admin ? this.renderEnergySettings() : nothing}
       ${admin ? this.renderPresenceSettings() : nothing}
       ${floor && admin ? this.renderBackgroundForm(floor) : nothing} ${admin ? this.renderSettings() : nothing}
+      ${admin ? this.renderBackup() : nothing}
     `;
   }
 
@@ -2039,6 +2045,86 @@ export class Fp3dEditor extends LitElement {
               <button class="fp3d-btn fp3d-danger fp3d-wide" @click=${() => this.updateFloor({ background: null })}>${this.t("background_remove")}</button>`
           : nothing}
       </div>
+    </details>`;
+  }
+
+  private async loadHistory(): Promise<void> {
+    if (!this.hass) return;
+    try {
+      this._history = await listHistory(this.hass);
+    } catch {
+      this._history = [];
+    }
+  }
+
+  private async restoreFromHistory(snap: Snapshot): Promise<void> {
+    if (!this.hass || !confirm(this.t("backup_restore_confirm", { time: this.snapshotTime(snap) }))) return;
+    await restoreSnapshot(this.hass, snap.id);
+    this._notice = this.t("backup_restored");
+    await this.loadHistory();
+  }
+
+  private exportPlan(shareable: boolean): void {
+    const day = new Date().toISOString().slice(0, 10);
+    download(`floorplan-3d-${shareable ? "vorlage" : "sicherung"}-${day}.json`, JSON.stringify(exportFile(this._doc, shareable), null, 2));
+  }
+
+  private async importPlan(e: Event): Promise<void> {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file || !this.hass) return;
+    let building: Building;
+    try {
+      building = parseExport(await file.text());
+    } catch (err) {
+      alert(this.t("backup_import_error", { error: (err as Error).message }));
+      return;
+    }
+    if (!confirm(this.t("backup_import_confirm"))) return;
+    // the current plan stays available as a restore point
+    await takeSnapshot(this.hass).catch(() => undefined);
+    this.setDoc(building);
+    this._floorId = building.floors[0]?.id ?? null;
+    this.selectItem("room", null);
+    this.fit();
+    this._notice = this.t("backup_imported");
+  }
+
+  private snapshotTime(snap: Snapshot): string {
+    return new Date(snap.saved_at * 1000).toLocaleString(this.hass?.language, { dateStyle: "short", timeStyle: "short" });
+  }
+
+  private renderBackup() {
+    return html`<details
+      class="fp3d-section"
+      @toggle=${(e: Event) => {
+        if ((e.target as HTMLDetailsElement).open) void this.loadHistory();
+      }}
+    >
+      <summary>${this.t("backup")}</summary>
+      <h4 class="fp3d-lib-head">${this.t("backup_history")}</h4>
+      ${this._history === null
+        ? html`<p class="fp3d-sub">${this.t("loading")}</p>`
+        : this._history.length
+          ? html`<div class="fp3d-room-list">
+              ${this._history.map(
+                (h) => html`<div class="fp3d-row fp3d-dev-row">
+                  <span>${this.snapshotTime(h)} <span class="fp3d-muted">· ${this.t("backup_summary", { rooms: h.rooms, furniture: h.furniture })}</span></span>
+                  <button class="fp3d-link" @click=${() => this.restoreFromHistory(h)}>${this.t("backup_restore")}</button>
+                </div>`,
+              )}
+            </div>`
+          : html`<p class="fp3d-sub">${this.t("backup_none")}</p>`}
+      <h4 class="fp3d-lib-head">${this.t("backup_file")}</h4>
+      <div class="fp3d-actions">
+        <button class="fp3d-btn" @click=${() => this.exportPlan(false)}>${this.t("backup_export")}</button>
+        <button class="fp3d-btn" title=${this.t("backup_export_share_hint")} @click=${() => this.exportPlan(true)}>${this.t("backup_export_share")}</button>
+        <label class="fp3d-btn fp3d-upload"
+          >${this.t("backup_import")}<input type="file" accept="application/json,.json" @change=${this.importPlan}
+        /></label>
+      </div>
+      <p class="fp3d-sub">${this.t("backup_hint")}</p>
     </details>`;
   }
 

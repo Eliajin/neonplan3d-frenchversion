@@ -12,7 +12,7 @@ import voluptuous as vol
 
 from .const import DOMAIN, SIGNAL_BUILDING_UPDATED
 from .schema import BUILDING_SCHEMA, IMAGE_DATA
-from .storage import FloorplanData
+from .storage import FloorplanData, complete
 
 _IMAGE_ID = vol.All(str, vol.Length(min=1, max=64), vol.Match(r"^[A-Za-z0-9_\-.]+$"))
 
@@ -27,6 +27,9 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_get_image,
         ws_set_image,
         ws_delete_image,
+        ws_history_list,
+        ws_history_snapshot,
+        ws_history_restore,
     ):
         websocket_api.async_register_command(hass, command)
 
@@ -126,3 +129,46 @@ async def ws_delete_image(hass: HomeAssistant, connection: websocket_api.ActiveC
         return
     await data.async_delete_image(msg["image_id"])
     connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command({vol.Required("type"): "floorplan_3d/history/list"})
+@websocket_api.require_admin
+@callback
+def ws_history_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """List the restore points (newest first)."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    connection.send_result(msg["id"], {"snapshots": data.history()})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "floorplan_3d/history/snapshot"})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_history_snapshot(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Keep the current building as a restore point (e.g. before an import)."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    await data.async_snapshot()
+    connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "floorplan_3d/history/restore", vol.Required("snapshot_id"): _IMAGE_ID}
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_history_restore(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Go back to a restore point; the current state becomes a restore point itself."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    building = data.snapshot(msg["snapshot_id"])
+    if building is None:
+        connection.send_error(msg["id"], "not_found", "Restore point not found")
+        return
+    await data.async_snapshot()
+    revision = await data.async_save_building(complete(building))
+    connection.send_result(msg["id"], {"revision": revision})

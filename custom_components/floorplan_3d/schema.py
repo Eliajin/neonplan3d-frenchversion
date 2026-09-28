@@ -1,4 +1,8 @@
-"""Validation schemas for the building data (mirrors frontend/src/model.ts)."""
+"""Validation schemas for the building data (mirrors frontend/src/model.ts).
+
+Known fields are checked; fields added by newer frontends are passed through (extra=ALLOW_EXTRA),
+so saving keeps working after a frontend update until Home Assistant restarts with the new backend.
+"""
 
 from __future__ import annotations
 
@@ -24,7 +28,8 @@ ROOM_SCHEMA = vol.Schema(
         vol.Required("area_id"): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Required("points"): vol.All([_POINT], vol.Length(min=3, max=MAX_POINTS)),
         vol.Required("floor_material"): vol.All(str, vol.Length(max=32)),
-    }
+    },
+    extra=vol.ALLOW_EXTRA,
 )
 
 OPENING_SCHEMA = vol.Schema(
@@ -43,7 +48,8 @@ OPENING_SCHEMA = vol.Schema(
         vol.Optional("cover", default=None): _ENTITY_REF,
         vol.Optional("contact", default=None): _ENTITY_REF,
         vol.Optional("tilt", default=None): _ENTITY_REF,
-    }
+    },
+    extra=vol.ALLOW_EXTRA,
 )
 
 FURNITURE_SCHEMA = vol.Schema(
@@ -60,7 +66,8 @@ FURNITURE_SCHEMA = vol.Schema(
         # linked entities (e.g. the TV's media player, a power sensor): None = automatic, "none" = no entity
         vol.Optional("entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Optional("power", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
-    }
+    },
+    extra=vol.ALLOW_EXTRA,
 )
 
 PLACEMENT_SCHEMA = vol.Schema(
@@ -71,7 +78,8 @@ PLACEMENT_SCHEMA = vol.Schema(
         vol.Required("y"): vol.Any(None, _LENGTH),
         # lights: how the lamp is mounted (None = ceiling)
         vol.Optional("mount", default=None): vol.Any(None, vol.In(["ceiling", "floor", "table", "wall"])),
-    }
+    },
+    extra=vol.ALLOW_EXTRA,
 )
 
 BACKGROUND_SCHEMA = vol.Schema(
@@ -81,7 +89,8 @@ BACKGROUND_SCHEMA = vol.Schema(
         vol.Required("z"): _COORD,
         vol.Required("width"): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=1000)),
         vol.Required("opacity"): vol.All(vol.Coerce(float), vol.Range(min=0, max=1)),
-    }
+    },
+    extra=vol.ALLOW_EXTRA,
 )
 
 FLOOR_SCHEMA = vol.Schema(
@@ -96,7 +105,8 @@ FLOOR_SCHEMA = vol.Schema(
         vol.Required("furniture"): vol.All([FURNITURE_SCHEMA], vol.Length(max=MAX_ITEMS)),
         vol.Required("placements"): vol.All([PLACEMENT_SCHEMA], vol.Length(max=MAX_ITEMS)),
         vol.Required("background"): vol.Any(None, BACKGROUND_SCHEMA),
-    }
+    },
+    extra=vol.ALLOW_EXTRA,
 )
 
 SETTINGS_SCHEMA = vol.Schema(
@@ -104,12 +114,15 @@ SETTINGS_SCHEMA = vol.Schema(
         vol.Required("wall_exterior"): vol.All(vol.Coerce(float), vol.Range(min=0.02, max=1)),
         vol.Required("wall_interior"): vol.All(vol.Coerce(float), vol.Range(min=0.02, max=1)),
         vol.Required("grid"): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=1)),
-    }
+    },
+    extra=vol.ALLOW_EXTRA,
 )
 
 _ENTITY = vol.Any(None, vol.All(str, vol.Length(max=255)))
 
-METER_SCHEMA = vol.Schema({vol.Required("floor_id"): _ID, vol.Required("x"): _COORD, vol.Required("z"): _COORD})
+METER_SCHEMA = vol.Schema(
+    {vol.Required("floor_id"): _ID, vol.Required("x"): _COORD, vol.Required("z"): _COORD}, extra=vol.ALLOW_EXTRA
+)
 
 ENERGY_DEFAULTS = {
     "meter": None,
@@ -133,12 +146,14 @@ ENERGY_SCHEMA = vol.Schema(
         vol.Optional("battery_invert", default=False): bool,
         vol.Optional("battery_soc", default=None): _ENTITY,
         vol.Optional("tariff", default=None): _ENTITY,
-    }
+    },
+    extra=vol.ALLOW_EXTRA,
 )
 
 # Which sensor tells the room of a person (ESPresense, Bermuda: the state is a room or area name)
 PRESENCE_SCHEMA = vol.Schema(
-    {vol.Required("person"): vol.All(str, vol.Length(max=255)), vol.Required("sensor"): _ENTITY}
+    {vol.Required("person"): vol.All(str, vol.Length(max=255)), vol.Required("sensor"): _ENTITY},
+    extra=vol.ALLOW_EXTRA,
 )
 
 BUILDING_SCHEMA = vol.Schema(
@@ -148,7 +163,8 @@ BUILDING_SCHEMA = vol.Schema(
         vol.Required("settings"): SETTINGS_SCHEMA,
         vol.Optional("energy", default=lambda: dict(ENERGY_DEFAULTS)): ENERGY_SCHEMA,
         vol.Optional("presence", default=list): vol.All([PRESENCE_SCHEMA], vol.Length(max=50)),
-    }
+    },
+    extra=vol.ALLOW_EXTRA,
 )
 
 IMAGE_DATA = vol.All(

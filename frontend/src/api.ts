@@ -26,3 +26,27 @@ export async function fetchImage(hass: HomeAssistant, imageId: string): Promise<
 export async function storeImage(hass: HomeAssistant, imageId: string, data: string): Promise<void> {
   await hass.callWS({ type: "floorplan_3d/image/set", image_id: imageId, data });
 }
+
+export interface Snapshot {
+  id: string;
+  revision: number;
+  /** Unix time in seconds. */
+  saved_at: number;
+  floors: number;
+  rooms: number;
+  furniture: number;
+}
+
+export async function listHistory(hass: HomeAssistant): Promise<Snapshot[]> {
+  const res = await hass.callWS<{ snapshots: Snapshot[] }>({ type: "floorplan_3d/history/list" });
+  return res.snapshots;
+}
+
+export async function takeSnapshot(hass: HomeAssistant): Promise<void> {
+  await hass.callWS({ type: "floorplan_3d/history/snapshot" });
+}
+
+export async function restoreSnapshot(hass: HomeAssistant, snapshotId: string): Promise<number> {
+  const res = await hass.callWS<{ revision: number }>({ type: "floorplan_3d/history/restore", snapshot_id: snapshotId });
+  return res.revision;
+}

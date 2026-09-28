@@ -10,7 +10,7 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.floorplan_3d.const import DOMAIN, STORAGE_KEY_BUILDING, STORAGE_KEY_IMAGES
+from custom_components.floorplan_3d.const import DOMAIN, STORAGE_KEY_BUILDING, STORAGE_KEY_HISTORY, STORAGE_KEY_IMAGES
 
 BUILDING = {
     "version": 1,
@@ -171,6 +171,49 @@ async def test_energy_and_presence_get_defaults(hass: HomeAssistant, hass_ws_cli
     assert got["presence"] == [{"person": "person.mia", "sensor": "sensor.mia_area"}]
 
 
+async def test_unknown_fields_from_newer_frontends_are_kept(hass: HomeAssistant, hass_ws_client) -> None:
+    await _setup(hass)
+    client = await hass_ws_client(hass)
+    building = copy.deepcopy(BUILDING)
+    building["future_setting"] = {"a": 1}
+    building["floors"][0]["rooms"][0]["ceiling_color"] = "#ffffff"
+    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": building})
+    assert (await client.receive_json())["success"]
+    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    got = (await client.receive_json())["result"]["building"]
+    assert got["future_setting"] == {"a": 1}
+    assert got["floors"][0]["rooms"][0]["ceiling_color"] == "#ffffff"
+
+
+async def test_restore_points(hass: HomeAssistant, hass_ws_client, hass_storage) -> None:
+    await _setup(hass)
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": BUILDING})
+    assert (await client.receive_json())["success"]
+    # an empty building is no restore point
+    await client.send_json_auto_id({"type": "floorplan_3d/history/list"})
+    assert (await client.receive_json())["result"]["snapshots"] == []
+
+    changed = copy.deepcopy(BUILDING)
+    changed["floors"][0]["rooms"][0]["name"] = "Changed"
+    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": changed})
+    assert (await client.receive_json())["success"]
+    await client.send_json_auto_id({"type": "floorplan_3d/history/list"})
+    snapshots = (await client.receive_json())["result"]["snapshots"]
+    assert len(snapshots) == 1 and snapshots[0]["rooms"] == 1
+
+    await client.send_json_auto_id({"type": "floorplan_3d/history/restore", "snapshot_id": snapshots[0]["id"]})
+    assert (await client.receive_json())["success"]
+    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    got = (await client.receive_json())["result"]["building"]
+    assert got["floors"][0]["rooms"][0]["name"] == "Living"
+    # the state before restoring is a restore point as well
+    await client.send_json_auto_id({"type": "floorplan_3d/history/list"})
+    assert len((await client.receive_json())["result"]["snapshots"]) == 2
+    await hass.async_block_till_done()
+    assert STORAGE_KEY_HISTORY in hass_storage
+
+
 async def test_invalid_building_is_rejected(hass: HomeAssistant, hass_ws_client) -> None:
     await _setup(hass)
     client = await hass_ws_client(hass)
@@ -246,6 +289,7 @@ async def test_remove_entry_deletes_all_stores(hass: HomeAssistant, hass_ws_clie
     await hass.async_block_till_done()
     assert STORAGE_KEY_BUILDING not in hass_storage
     assert STORAGE_KEY_IMAGES not in hass_storage
+    assert STORAGE_KEY_HISTORY not in hass_storage
     assert DOMAIN not in hass.data
 
 

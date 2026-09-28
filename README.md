@@ -48,6 +48,8 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
   - Stripes move with the power (still at 0 W); grid import is cyan, solar and export yellow, battery green. The animation runs at about 30 fps and stops when nothing flows or the page is hidden.
   - Watt labels at the devices and an energy bar with consumption, grid, solar, battery and tariff.
 - **Presence**: per person a room sensor (e.g. ESPresense, Bermuda) whose state names the room or area; people at home show as pink markers in their room. Floor labels count rooms, lights on, open windows and people.
+- **Backup**: restore points while editing (at most one every 10 minutes, the last 20 are kept), export and import as a JSON file, and "share as template" without areas, devices, sensors and images.
+- **Updates without restart trouble**: fields added by newer versions are passed through, so saving keeps working after an update until Home Assistant restarts.
 - **Sidebar page and dashboard card**: `custom:floorplan-3d-card` is loaded automatically, no resource needed.
 
 ## Installation
