@@ -35,8 +35,8 @@ const DOMAIN_KIND: Record<string, DeviceKind> = {
   script: "script",
 };
 
-/** Sensors worth showing: room climate now, power follows with the energy flow. */
-const SENSOR_CLASSES = new Set(["temperature", "humidity"]);
+/** Sensors worth showing: room climate, and power (consumers of the energy flow). */
+const SENSOR_CLASSES = new Set(["temperature", "humidity", "power"]);
 const BINARY_CLASSES = new Set(["door", "window", "opening", "garage_door", "motion", "occupancy", "presence", "smoke", "moisture", "gas"]);
 
 /** Order in lists and panels. */

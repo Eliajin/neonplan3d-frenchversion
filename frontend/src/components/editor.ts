@@ -31,7 +31,7 @@ import {
 import { controls, tokens } from "../styles.ts";
 import type { HomeAssistant } from "../types.ts";
 
-type Tool = "select" | "rect" | "polygon" | "door" | "window";
+type Tool = "select" | "rect" | "polygon" | "door" | "window" | "meter";
 
 type Drag =
   | { kind: "pan"; last: [number, number] }
@@ -374,6 +374,15 @@ export class Fp3dEditor extends LitElement {
     }
     if (this._tool === "door" || this._tool === "window") {
       if (!this.placeOpening(this._tool, local)) this.drag = { kind: "pan", last: local };
+      return;
+    }
+    if (this._tool === "meter") {
+      if (this.isAdmin && this._floorId) {
+        const g = this._doc.settings.grid;
+        const [x, z] = world.map((v) => round(Math.round(v / g) * g));
+        this.setEnergy({ meter: { floor_id: this._floorId, x, z } });
+      }
+      this._tool = "select";
       return;
     }
     const deviceEl = target.closest("[data-device]");
@@ -1052,7 +1061,7 @@ export class Fp3dEditor extends LitElement {
             >
               ${this.renderBackground(floor)} ${this.renderGrid()} ${this.renderGhost()} ${walls ? this.renderWalls(walls.walls) : nothing}
               ${floor ? this.renderRooms(floor) : nothing} ${floor ? this.renderFurniture(floor) : nothing}
-              ${floor && walls ? this.renderOpenings(floor, walls.walls) : nothing}
+              ${floor && walls ? this.renderOpenings(floor, walls.walls) : nothing} ${floor ? this.renderMeter(floor) : nothing}
               ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
               ${this.room && this.isAdmin && this._tool === "select" && !this._openingId && !this._furnitureId ? this.renderHandles(this.room) : nothing}
               ${this.renderDraft()} ${this.renderGuides()}
@@ -1127,6 +1136,16 @@ export class Fp3dEditor extends LitElement {
           <text class="fp3d-room-area" x=${cx} y=${cy + 14}>${this.t("area_m2", { a: formatNumber(this.hass, polygonArea(r.points), 1) })}</text>`;
       })}</g>
     `;
+  }
+
+  private renderMeter(floor: Floor) {
+    const m = this._doc.energy?.meter;
+    if (!m || m.floor_id !== floor.id) return nothing;
+    const [x, y] = this.toScreen([m.x, m.z]);
+    return svg`<g class="fp3d-meter" transform="translate(${x} ${y})" pointer-events="none">
+      <rect x="-11" y="-11" width="22" height="22" rx="5" />
+      <path d="M1.5 -7 L-4 1 H0 L-1.5 7 L4 -1 H0 Z" />
+    </g>`;
   }
 
   private renderFurniture(floor: Floor) {
@@ -1345,7 +1364,8 @@ export class Fp3dEditor extends LitElement {
             : floor
               ? this.renderRoomList(floor)
               : nothing}
-      ${floor && admin ? this.renderFurnitureLibrary() : nothing}
+      ${floor && admin ? this.renderFurnitureLibrary() : nothing} ${admin ? this.renderEnergySettings() : nothing}
+      ${admin ? this.renderPresenceSettings() : nothing}
       ${floor && admin ? this.renderBackgroundForm(floor) : nothing} ${admin ? this.renderSettings() : nothing}
     `;
   }
@@ -1526,6 +1546,88 @@ export class Fp3dEditor extends LitElement {
           </div>`
         : nothing}
     </section>`;
+  }
+
+  private setEnergy(patch: Partial<Building["energy"]>): void {
+    const next = structuredClone(this._doc);
+    next.energy = { ...next.energy, ...patch };
+    this.setDoc(next);
+  }
+
+  private renderEnergySettings() {
+    const e = this._doc.energy;
+    const attr = (id: string, key: string) => this.hass?.states[id]?.attributes[key] as string | undefined;
+    const power = this.entityOptions((id) => id.startsWith("sensor.") && attr(id, "device_class") === "power");
+    const soc = this.entityOptions((id) => id.startsWith("sensor.") && attr(id, "device_class") === "battery");
+    const tariff = this.entityOptions(
+      (id) => id.startsWith("sensor.") && (attr(id, "device_class") === "monetary" || /\/(kWh|MWh)$/.test(attr(id, "unit_of_measurement") ?? "")),
+    );
+    const pick = (key: "grid" | "solar" | "battery" | "battery_soc" | "tariff") => (v: string | null) => this.setEnergy({ [key]: v === "none" ? null : v });
+    const floorName = e.meter ? this._doc.floors.find((f) => f.id === e.meter!.floor_id)?.name : null;
+    return html`<details class="fp3d-section">
+      <summary>${this.t("energy")}</summary>
+      <div class="fp3d-form">
+        <div class="fp3d-actions fp3d-wide">
+          <button class="fp3d-btn ${this._tool === "meter" ? "fp3d-primary" : ""}" ?disabled=${!this.floor} @click=${() => (this._tool = "meter")}>
+            ${this.t("energy_meter_set")}
+          </button>
+          ${e.meter ? html`<button class="fp3d-btn fp3d-danger" @click=${() => this.setEnergy({ meter: null })}>${this.t("energy_meter_remove")}</button>` : nothing}
+        </div>
+        <p class="fp3d-sub fp3d-wide">
+          ${e.meter ? `${this.t("energy_meter")}: ${floorName ?? ""} · ${formatNumber(this.hass, e.meter.x, 2)} / ${formatNumber(this.hass, e.meter.z, 2)} m` : this.t("energy_meter_hint")}
+        </p>
+        ${this.entitySelect(this.t("energy_grid"), e.grid, undefined, power, pick("grid"))}
+        <label class="fp3d-check fp3d-wide"
+          ><input type="checkbox" .checked=${e.grid_invert} @change=${(ev: Event) => this.setEnergy({ grid_invert: (ev.target as HTMLInputElement).checked })} />
+          ${this.t("energy_invert")}</label
+        >
+        ${this.entitySelect(this.t("energy_solar_sensor"), e.solar, undefined, power, pick("solar"))}
+        ${this.entitySelect(this.t("energy_battery_sensor"), e.battery, undefined, power, pick("battery"))}
+        <label class="fp3d-check fp3d-wide"
+          ><input type="checkbox" .checked=${e.battery_invert} @change=${(ev: Event) => this.setEnergy({ battery_invert: (ev.target as HTMLInputElement).checked })} />
+          ${this.t("energy_invert")}</label
+        >
+        ${this.entitySelect(this.t("energy_battery_soc"), e.battery_soc, undefined, soc, pick("battery_soc"))}
+        ${this.entitySelect(this.t("energy_tariff_sensor"), e.tariff, undefined, tariff, pick("tariff"))}
+      </div>
+      <p class="fp3d-sub">${this.t("energy_hint")}</p>
+    </details>`;
+  }
+
+  private renderPresenceSettings() {
+    const persons = Object.keys(this.hass?.states ?? {})
+      .filter((id) => id.startsWith("person."))
+      .sort();
+    const sensors = (person: string) => {
+      // likely room sensors of this person first (ESPresense / Bermuda name them after the device)
+      const slug = person.slice("person.".length);
+      const all = this.entityOptions((id) => id.startsWith("sensor."));
+      const likely = (id: string) => id.includes(slug) && /(area|room|raum|bermuda|espresense)/.test(id);
+      return [...all.filter((o) => likely(o.id)), ...all.filter((o) => !likely(o.id))];
+    };
+    const set = (person: string, sensor: string | null) => {
+      const next = structuredClone(this._doc);
+      next.presence = next.presence.filter((p) => p.person !== person);
+      if (sensor && sensor !== "none") next.presence.push({ person, sensor });
+      this.setDoc(next);
+    };
+    return html`<details class="fp3d-section">
+      <summary>${this.t("presence")}</summary>
+      <div class="fp3d-form">
+        ${persons.length
+          ? persons.map((id) =>
+              this.entitySelect(
+                `${entityName(this.hass, id)} · ${this.t("presence_sensor")}`,
+                this._doc.presence.find((p) => p.person === id)?.sensor ?? null,
+                undefined,
+                sensors(id),
+                (v) => set(id, v),
+              ),
+            )
+          : html`<p class="fp3d-sub fp3d-wide">${this.t("no_persons")}</p>`}
+      </div>
+      <p class="fp3d-sub">${this.t("presence_hint")}</p>
+    </details>`;
   }
 
   private renderFurnitureLibrary() {
@@ -1862,6 +1964,24 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-row:hover {
         color: var(--fp3d-accent);
+      }
+      .fp3d-check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--fp3d-muted);
+      }
+      .fp3d-check input {
+        accent-color: var(--fp3d-accent);
+      }
+      .fp3d-meter rect {
+        fill: #2a2a10;
+        stroke: #ffc633;
+        stroke-width: 1.5;
+      }
+      .fp3d-meter path {
+        fill: #ffc633;
       }
       .fp3d-library {
         display: grid;

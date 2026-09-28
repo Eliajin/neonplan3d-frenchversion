@@ -79,6 +79,32 @@ export interface DeviceMarker {
   unavailable: boolean;
   /** Light cone on the floor for lights that are on. */
   glow: { color: [number, number, number]; level: number } | null;
+  /** Power drawn (W) when the device reports it. */
+  power?: number | null;
+  /** Formatted power, e.g. "85 W". */
+  powerText?: string;
+}
+
+/** Piece of energy cable (floor-local coordinates); the flow runs from a to b. */
+export interface FlowPiece {
+  floorId: string;
+  a: [number, number, number];
+  b: [number, number, number];
+  /** Cable length from the source to a (m), so stripes continue along the path. */
+  dist: number;
+  power: number;
+  color: [number, number, number];
+}
+
+export interface PersonPin {
+  id: string;
+  name: string;
+  initials: string;
+  picture: string | null;
+  floorId: string;
+  roomId: string;
+  x: number;
+  z: number;
 }
 
 export interface ViewerStats {
@@ -99,6 +125,11 @@ const GROUND_CELLS = 32;
 const HOLD_MS = 500;
 /** Time constant of window and blind movements (ms). */
 const OPENING_TAU = 160;
+/** Frame interval while only the energy flow moves (ms): about 30 frames per second. */
+const FLOW_FRAME_MS = 33;
+/** Cable core and the soft glow around it (m). */
+const CABLE_WIDTH = 0.07;
+const CABLE_HALO = 0.34;
 
 interface FloorMaterials {
   floor: MeshBasicMaterial;
@@ -110,6 +141,7 @@ interface FloorMaterials {
   frames: MeshBasicMaterial;
   glass: MeshBasicMaterial;
   blinds: MeshBasicMaterial;
+  flow: MeshBasicMaterial;
 }
 
 interface FloorView {
@@ -124,6 +156,7 @@ interface FloorView {
   framesMesh: Mesh;
   glassMesh: Mesh;
   blindsMesh: Mesh;
+  flowMesh: Mesh;
   materials: FloorMaterials;
   /** Bit mask of the wall buckets that currently stand (read by the fold shader patch). */
   mask: FoldMask;
@@ -159,6 +192,16 @@ export class FloorplanViewer {
   private readonly patternTexture: CanvasTexture;
   private readonly blindTexture: CanvasTexture;
   private openingTargets = new Map<string, OpeningState>();
+  private flows: FlowPiece[] = [];
+  /** Stripe phase per cable piece, kept when its speed changes so the stripes do not jump. */
+  private flowPhase = new Map<string, { speed: number; offset: number }>();
+  private readonly flowTime = { value: 0 };
+  private readonly flowStart = performance.now();
+  private flowActive = false;
+  private flowTimer: ReturnType<typeof setTimeout> | undefined;
+  private persons: PersonPin[] = [];
+  private readonly personPins = new Map<string, HTMLDivElement>();
+  private floorInfo = new Map<string, string>();
   private readonly groundTexture: CanvasTexture;
   private readonly glowTexture: CanvasTexture;
   private devices: DeviceMarker[] = [];
@@ -281,6 +324,8 @@ export class FloorplanViewer {
         pin.querySelector(".fp3d-dev-icon")!.innerHTML = d.icon;
       }
       pin.querySelector(".fp3d-dev-text")!.textContent = d.text;
+      const watt = pin.querySelector(".fp3d-dev-watt")!;
+      watt.textContent = d.power !== null && d.power !== undefined && d.power >= 1 ? (d.powerText ?? `${Math.round(d.power)} W`) : "";
       pin.title = d.name;
       pin.setAttribute("aria-label", `${d.name}: ${d.text}`);
       pin.classList.toggle("fp3d-dev-on", d.active);
@@ -299,6 +344,71 @@ export class FloorplanViewer {
     this.invalidate();
   }
 
+  /** Energy cables; the stripes run while any cable carries power. */
+  setFlows(flows: FlowPiece[]): void {
+    this.flows = flows;
+    const now = this.flowSeconds();
+    const next = new Map<string, { speed: number; offset: number }>();
+    for (const f of flows) {
+      const key = flowKey(f);
+      const speed = flowSpeed(f.power);
+      const prev = this.flowPhase.get(key);
+      // keep time * speed + offset continuous across the change
+      next.set(key, { speed, offset: prev ? now * (prev.speed - speed) + prev.offset : 0 });
+    }
+    this.flowPhase = next;
+    this.flowActive = flows.some((f) => f.power > 0.5);
+    for (const fv of this.floors) this.buildFlows(fv);
+    this.invalidate();
+  }
+
+  /** People in their rooms (pink markers in the floor and room views). */
+  setPersons(persons: PersonPin[]): void {
+    this.persons = persons;
+    const seen = new Set<string>();
+    for (const p of persons) {
+      seen.add(p.id);
+      let pin = this.personPins.get(p.id);
+      if (!pin) {
+        pin = document.createElement("div");
+        pin.className = "fp3d-person";
+        pin.dataset.entity = p.id;
+        this.personPins.set(p.id, pin);
+        this.labels.append(pin);
+      }
+      pin.title = p.name;
+      pin.setAttribute("aria-label", p.name);
+      if (pin.dataset.picture !== (p.picture ?? "") || pin.dataset.initials !== p.initials) {
+        pin.dataset.picture = p.picture ?? "";
+        pin.dataset.initials = p.initials;
+        pin.replaceChildren();
+        if (p.picture) {
+          const img = document.createElement("img");
+          img.src = p.picture;
+          img.alt = "";
+          img.addEventListener("error", () => img.replaceWith(document.createTextNode(p.initials)));
+          pin.append(img);
+        } else pin.textContent = p.initials;
+      }
+    }
+    for (const [id, pin] of this.personPins) {
+      if (seen.has(id)) continue;
+      pin.remove();
+      this.personPins.delete(id);
+    }
+    this.invalidate();
+  }
+
+  /** Text under the floor names in the house view, e.g. "5 rooms · 3 lights on · 1 open". */
+  setFloorInfo(info: Map<string, string>): void {
+    this.floorInfo = info;
+    for (const fv of this.floors) {
+      const span = fv.label.querySelector("span");
+      if (span) span.textContent = info.get(fv.floor.id) ?? this.options.floorInfo?.(fv.floor) ?? "";
+    }
+    this.invalidate();
+  }
+
   /** Target states of doors and windows (sashes and blinds move there smoothly). */
   setOpeningStates(states: Map<string, OpeningState>): void {
     this.openingTargets = states;
@@ -312,6 +422,7 @@ export class FloorplanViewer {
   dispose(): void {
     this.disposed = true;
     cancelAnimationFrame(this.frame);
+    clearTimeout(this.flowTimer);
     this.resizeObserver.disconnect();
     document.removeEventListener("visibilitychange", this.onVisibility);
     this.controls.dispose();
@@ -388,7 +499,9 @@ export class FloorplanViewer {
     icon.className = "fp3d-dev-icon";
     const text = document.createElement("span");
     text.className = "fp3d-dev-text";
-    pin.append(icon, text);
+    const watt = document.createElement("span");
+    watt.className = "fp3d-dev-watt";
+    pin.append(icon, text, watt);
     let timer: ReturnType<typeof setTimeout> | undefined;
     let held = false;
     pin.addEventListener("pointerdown", (e) => {
@@ -488,6 +601,7 @@ export class FloorplanViewer {
         mask,
       ),
       blinds: makeFoldable(new MeshBasicMaterial({ map: this.blindTexture, side: DoubleSide }), mask),
+      flow: flowMaterial(this.flowTime),
     };
   }
 
@@ -515,9 +629,12 @@ export class FloorplanViewer {
       const blindsMesh = new Mesh(new Geometry(), materials.blinds);
       const glassMesh = new Mesh(new Geometry(), materials.glass);
       glassMesh.renderOrder = 4;
+      const flowMesh = new Mesh(new Geometry(), materials.flow);
+      flowMesh.renderOrder = 5;
+      flowMesh.frustumCulled = false;
       // the fold shader moves hidden parts, so the bounding spheres must not cull them early
       for (const m of [framesMesh, blindsMesh, glassMesh]) m.frustumCulled = false;
-      group.add(floorMesh, shadowMesh, pattern, glowMesh, new Mesh(geo.walls, materials.wall), new LineSegments(geo.lines, materials.lines), framesMesh, blindsMesh, glassMesh);
+      group.add(floorMesh, shadowMesh, pattern, glowMesh, new Mesh(geo.walls, materials.wall), new LineSegments(geo.lines, materials.lines), framesMesh, blindsMesh, glassMesh, flowMesh);
       this.root.add(group);
 
       const label = document.createElement("button");
@@ -526,7 +643,7 @@ export class FloorplanViewer {
       const name = document.createElement("b");
       name.textContent = floor.name || "–";
       const info = document.createElement("span");
-      info.textContent = this.options.floorInfo?.(floor) ?? "";
+      info.textContent = this.floorInfo.get(floor.id) ?? this.options.floorInfo?.(floor) ?? "";
       label.append(name, info);
       label.addEventListener("click", () => this.options.onFloorTap?.(floor.id));
       this.labels.append(label);
@@ -543,6 +660,7 @@ export class FloorplanViewer {
         framesMesh,
         glassMesh,
         blindsMesh,
+        flowMesh,
         materials,
         mask,
         openings: new Map(),
@@ -569,6 +687,7 @@ export class FloorplanViewer {
       const prev = previousOpenings.get(fv.floor.id);
       for (const info of fv.geo.openings) fv.openings.set(info.opening.id, prev?.get(info.opening.id) ?? this.openingTargets.get(info.opening.id) ?? CLOSED);
       this.buildOpenings(fv);
+      this.buildFlows(fv);
     }
     this.applyTargets(previous.size === 0);
     this.applyHighlight();
@@ -625,6 +744,7 @@ export class FloorplanViewer {
     m.glow.opacity = fv.o;
     m.lines.opacity = fv.o;
     m.glass.opacity = fv.o;
+    m.flow.opacity = fv.o;
   }
 
   /** Advance the floor animation; returns true while something still moves. */
@@ -686,6 +806,68 @@ export class FloorplanViewer {
       if (changed) this.buildOpenings(fv);
     }
     return moving;
+  }
+
+  private flowSeconds(): number {
+    return (performance.now() - this.flowStart) / 1000;
+  }
+
+  /** Energy cables of a floor as flat glowing ribbons (vertical pieces as two crossed ribbons). */
+  private buildFlows(fv: FloorView): void {
+    const p: number[] = [];
+    const c: number[] = [];
+    const uv: number[] = [];
+    const sp: number[] = [];
+    const off: number[] = [];
+    for (const f of this.flows) {
+      if (f.floorId !== fv.floor.id) continue;
+      const phase = this.flowPhase.get(flowKey(f)) ?? { speed: flowSpeed(f.power), offset: 0 };
+      const level = f.power > 0.5 ? Math.min(1, 0.5 + f.power / 2500) : 0.22;
+      const col = f.color.map((v) => v * level);
+      const len = Math.hypot(f.b[0] - f.a[0], f.b[1] - f.a[1], f.b[2] - f.a[2]);
+      if (len < 1e-4) continue;
+      const dir = [(f.b[0] - f.a[0]) / len, (f.b[1] - f.a[1]) / len, (f.b[2] - f.a[2]) / len];
+      // ribbon sides: flat on the floor for horizontal cables, two crossed planes for risers
+      const sides: number[][] = [];
+      if (Math.abs(dir[1]) < 0.5) {
+        const l = Math.hypot(dir[0], dir[2]) || 1;
+        sides.push([-dir[2] / l, 0, dir[0] / l]);
+      } else sides.push([1, 0, 0], [0, 0, 1]);
+      // a wide, faint halo under a bright core
+      const layers: [number, number][] = [
+        [CABLE_HALO, 0.3],
+        [CABLE_WIDTH, 1],
+      ];
+      for (const [width, strength] of layers) {
+        for (const n of sides) {
+          const h = width / 2;
+          const v = (q: number[], k: number) => [q[0] + n[0] * h * k, q[1] + n[1] * h * k, q[2] + n[2] * h * k];
+          const quad = [
+            [v(f.a, -1), f.dist, 0],
+            [v(f.b, -1), f.dist + len, 0],
+            [v(f.b, 1), f.dist + len, 1],
+            [v(f.a, 1), f.dist, 1],
+          ] as const;
+          for (const i of [0, 1, 2, 0, 2, 3]) {
+            const [pos, u, w] = quad[i];
+            p.push(pos[0], pos[1], pos[2]);
+            c.push(col[0] * strength, col[1] * strength, col[2] * strength);
+            uv.push(u, w);
+            sp.push(phase.speed);
+            off.push(phase.offset);
+          }
+        }
+      }
+    }
+    const g = new Geometry();
+    g.setAttribute("position", new Float32BufferAttribute(p, 3));
+    g.setAttribute("color", new Float32BufferAttribute(c, 3));
+    g.setAttribute("uv", new Float32BufferAttribute(uv, 2));
+    g.setAttribute("flowSpeed", new Float32BufferAttribute(sp, 1));
+    g.setAttribute("flowOffset", new Float32BufferAttribute(off, 1));
+    fv.flowMesh.geometry.dispose();
+    fv.flowMesh.geometry = g;
+    fv.flowMesh.visible = p.length > 0;
   }
 
   private buildOpenings(fv: FloorView): void {
@@ -795,11 +977,19 @@ export class FloorplanViewer {
     const openingsMoving = this.stepOpenings(dt);
     const moving = cameraMoving || floorsMoving || openingsMoving;
     this.lastFrame = moving ? now : 0;
+    this.flowTime.value = this.flowSeconds();
     this.updateWalls();
     this.renderer.render(this.scene, this.camera);
     this.updateLabels();
     this.reportStats(now, moving);
     if (moving) this.invalidate();
+    else if (this.flowActive && !this.flowTimer) {
+      // only the energy flow moves: about 30 frames per second are enough
+      this.flowTimer = setTimeout(() => {
+        this.flowTimer = undefined;
+        this.invalidate();
+      }, FLOW_FRAME_MS);
+    }
   }
 
   /** Upper wall parts facing the camera fold down to the cut height (bit mask for the fold shader). */
@@ -875,6 +1065,19 @@ export class FloorplanViewer {
   private updateDevicePins(w: number, h: number): void {
     const v = new Vector3();
     const house = this.houseView;
+    for (const p of this.persons) {
+      const pin = this.personPins.get(p.id);
+      const fv = this.floors.find((f) => f.floor.id === p.floorId);
+      if (!pin) continue;
+      if (!fv || house || fv.to < 0.99 || fv.o < 0.9) {
+        pin.hidden = true;
+        continue;
+      }
+      v.set(p.x, fv.floor.elevation + fv.y + 0.9, p.z).project(this.camera);
+      const off = v.z > 1 || Math.abs(v.x) > 1.05 || Math.abs(v.y) > 1.05;
+      pin.hidden = off;
+      if (!off) pin.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -50%)`;
+    }
     for (const d of this.devices) {
       const pin = this.devicePins.get(d.id);
       if (!pin) continue;
@@ -1030,6 +1233,40 @@ function makeBlindTexture(): CanvasTexture {
   tex.wrapT = RepeatWrapping;
   tex.colorSpace = SRGBColorSpace;
   return tex;
+}
+
+function flowKey(f: FlowPiece): string {
+  const r = (n: number) => Math.round(n * 100);
+  return `${f.floorId}:${f.a.map(r).join(",")}>${f.b.map(r).join(",")}`;
+}
+
+/** Stripe speed (m/s): still at 0 W, faster with more power (square root, so 2 kW is not 20 × 100 W). */
+function flowSpeed(power: number): number {
+  return power > 0.5 ? Math.min(2.4, 0.3 + Math.sqrt(power) / 28) : 0;
+}
+
+/** Glowing cable with stripes running along it (uv.x = metres along the cable, uv.y = across). */
+function flowMaterial(time: { value: number }): MeshBasicMaterial {
+  const m = new MeshBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false, side: DoubleSide });
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uFlowTime = time;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nattribute float flowSpeed;\nattribute float flowOffset;\nvarying float vFlowSpeed;\nvarying float vFlowOffset;\nvarying vec2 vFlowUv;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFlowSpeed = flowSpeed;\nvFlowOffset = flowOffset;\nvFlowUv = uv;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nuniform float uFlowTime;\nvarying float vFlowSpeed;\nvarying float vFlowOffset;\nvarying vec2 vFlowUv;")
+      .replace(
+        "#include <color_fragment>",
+        `#include <color_fragment>
+        float fp3dAcross = 1.0 - abs(vFlowUv.y * 2.0 - 1.0);
+        float fp3dMoving = step(0.001, abs(vFlowSpeed));
+        float fp3dPhase = (vFlowUv.x - uFlowTime * abs(vFlowSpeed) - vFlowOffset) * 2.5;
+        float fp3dStripe = smoothstep(0.5, 0.85, fract(fp3dPhase)) * fp3dMoving;
+        diffuseColor.rgb *= (0.4 + 1.1 * fp3dStripe) * (0.35 + 0.65 * fp3dAcross);`,
+      );
+  };
+  m.customProgramCacheKey = () => "fp3d-flow";
+  return m;
 }
 
 /** Soft round light cone: bright core, long falloff. */

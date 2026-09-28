@@ -102,11 +102,47 @@ SETTINGS_SCHEMA = vol.Schema(
     }
 )
 
+_ENTITY = vol.Any(None, vol.All(str, vol.Length(max=255)))
+
+METER_SCHEMA = vol.Schema({vol.Required("floor_id"): _ID, vol.Required("x"): _COORD, vol.Required("z"): _COORD})
+
+ENERGY_DEFAULTS = {
+    "meter": None,
+    "grid": None,
+    "grid_invert": False,
+    "solar": None,
+    "battery": None,
+    "battery_invert": False,
+    "battery_soc": None,
+    "tariff": None,
+}
+
+# Power sensors in watts: grid positive = import, battery positive = discharging (both can be inverted)
+ENERGY_SCHEMA = vol.Schema(
+    {
+        vol.Optional("meter", default=None): vol.Any(None, METER_SCHEMA),
+        vol.Optional("grid", default=None): _ENTITY,
+        vol.Optional("grid_invert", default=False): bool,
+        vol.Optional("solar", default=None): _ENTITY,
+        vol.Optional("battery", default=None): _ENTITY,
+        vol.Optional("battery_invert", default=False): bool,
+        vol.Optional("battery_soc", default=None): _ENTITY,
+        vol.Optional("tariff", default=None): _ENTITY,
+    }
+)
+
+# Which sensor tells the room of a person (ESPresense, Bermuda: the state is a room or area name)
+PRESENCE_SCHEMA = vol.Schema(
+    {vol.Required("person"): vol.All(str, vol.Length(max=255)), vol.Required("sensor"): _ENTITY}
+)
+
 BUILDING_SCHEMA = vol.Schema(
     {
         vol.Required("version"): 1,
         vol.Required("floors"): vol.All([FLOOR_SCHEMA], vol.Length(max=MAX_FLOORS)),
         vol.Required("settings"): SETTINGS_SCHEMA,
+        vol.Optional("energy", default=lambda: dict(ENERGY_DEFAULTS)): ENERGY_SCHEMA,
+        vol.Optional("presence", default=list): vol.All([PRESENCE_SCHEMA], vol.Length(max=50)),
     }
 )
 
@@ -123,6 +159,8 @@ def empty_building() -> dict:
         "version": 1,
         "floors": [],
         "settings": {"wall_exterior": 0.24, "wall_interior": 0.12, "grid": 0.05},
+        "energy": dict(ENERGY_DEFAULTS),
+        "presence": [],
     }
 
 

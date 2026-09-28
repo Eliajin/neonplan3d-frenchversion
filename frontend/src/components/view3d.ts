@@ -1,11 +1,13 @@
 // Lit wrapper around the lazily loaded 3D viewer.
 
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
-import { translate } from "../i18n.ts";
-import { kindOf, openingEntities, openingState, TOGGLE_KINDS, type OpeningEntities } from "../devices.ts";
+import { areaEntities, kindOf, openingEntities, openingState, TOGGLE_KINDS, type OpeningEntities } from "../devices.ts";
+import { energySummary, findConsumers, flowColor, flowSegments, powerSensorFor, type EnergySummary } from "../energy.ts";
+import { formatNumber, translate } from "../i18n.ts";
 import { load3d } from "../load3d.ts";
 import { buildMarkers, openMoreInfo, placedEntities, toggleEntity } from "../markers.ts";
 import type { Building } from "../model.ts";
+import { floorCounts, floorInfoText, personsInRooms } from "../presence.ts";
 import { tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
 import type { FloorplanViewer, Quality, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
@@ -22,6 +24,7 @@ export class Fp3dView3d extends LitElement {
     showStats: { type: Boolean },
     _stats: { state: true },
     _error: { state: true },
+    _energy: { state: true },
   };
 
   declare hass: HomeAssistant;
@@ -34,6 +37,7 @@ export class Fp3dView3d extends LitElement {
   declare showStats: boolean;
   private declare _stats: ViewerStats | null;
   private declare _error: string | null;
+  private declare _energy: EnergySummary | null;
 
   private viewer: FloorplanViewer | null = null;
   private starting = false;
@@ -42,6 +46,8 @@ export class Fp3dView3d extends LitElement {
   /** Entities of each door and window, and the registry they were matched with. */
   private openingLinks: Map<string, OpeningEntities> | null = null;
   private linkedRegistry: HomeAssistant["entities"] | undefined;
+  /** Entities whose state changes redraw markers, cables, people and floor labels. */
+  private watched: string[] = [];
 
   constructor() {
     super();
@@ -54,6 +60,7 @@ export class Fp3dView3d extends LitElement {
     this.showStats = false;
     this._stats = null;
     this._error = null;
+    this._energy = null;
   }
 
   connectedCallback(): void {
@@ -115,24 +122,60 @@ export class Fp3dView3d extends LitElement {
   }
 
   /**
-   * Send device markers and door/window states to the viewer when a relevant entity changed (or the
-   * building). Openings are matched with entities again when the building or the registry changes.
+   * Send device markers, door/window states, energy cables, people and floor label texts to the viewer
+   * when a watched entity changed (or the building). Openings are matched with entities again when
+   * the building or the entity registry changes.
    */
   private syncDevices(force: boolean): void {
     const v = this.viewer;
-    if (!v || !this.building || !this.hass) return;
-    if (force || !this.openingLinks || this.linkedRegistry !== this.hass.entities) {
-      this.openingLinks = openingEntities(this.hass, this.building.floors);
-      this.linkedRegistry = this.hass.entities;
+    const b = this.building;
+    if (!v || !b || !this.hass) return;
+    const hass = this.hass;
+    if (force || !this.openingLinks || this.linkedRegistry !== hass.entities) {
+      this.openingLinks = openingEntities(hass, b.floors);
+      this.linkedRegistry = hass.entities;
+      const links = [...this.openingLinks.values()].flatMap((e) => [e.cover, e.contact, e.tilt]);
+      const placed = placedEntities(b);
+      const power = placed.map((id) => powerSensorFor(hass, id));
+      const e = b.energy;
+      const presence = b.presence.flatMap((p) => [p.person, p.sensor]);
+      const lights = b.floors.flatMap((f) => f.rooms.flatMap((r) => areaEntities(hass, r.area_id).filter((id) => kindOf(id) === "light")));
+      const all = [...placed, ...links, ...power, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights];
+      this.watched = [...new Set(all.filter((id): id is string => !!id))];
       force = true;
     }
-    const links = [...this.openingLinks.values()].flatMap((e) => [e.cover, e.contact, e.tilt]).filter((id): id is string => !!id);
-    const ids = [...placedEntities(this.building), ...links];
-    const changed = force || ids.length !== this.shownStates.size || ids.some((id) => this.shownStates.get(id) !== this.hass.states[id]);
+    const changed = force || this.watched.some((id) => this.shownStates.get(id) !== hass.states[id]);
     if (!changed) return;
-    this.shownStates = new Map(ids.map((id) => [id, this.hass.states[id]]));
-    v.setDevices(buildMarkers(this.hass, this.building));
-    v.setOpeningStates(new Map([...this.openingLinks].map(([id, e]) => [id, openingState(this.hass, e)])));
+    this.shownStates = new Map(this.watched.map((id) => [id, hass.states[id]]));
+
+    const consumers = findConsumers(hass, b);
+    const summary = energySummary(hass, b, consumers);
+    // a placed power sensor shows its value as state text already, so only devices get a watt badge
+    const byDevice = new Map(consumers.filter((c) => c.id !== c.powerEntity).map((c) => [c.id, c.power]));
+    v.setDevices(
+      buildMarkers(hass, b).map((m) => {
+        const power = byDevice.get(m.id) ?? null;
+        return { ...m, power, powerText: power === null ? undefined : formatPower(hass, power) };
+      }),
+    );
+    v.setOpeningStates(new Map([...this.openingLinks!].map(([id, e]) => [id, openingState(hass, e)])));
+    const batteryPlaced = b.energy.battery ? b.floors.flatMap((f) => f.placements.filter((p) => p.entity_id === b.energy.battery).map((p) => ({ floorId: f.id, x: p.x, z: p.z })))[0] : null;
+    v.setFlows(
+      flowSegments({ building: b, consumers, summary, battery: batteryPlaced ?? null }).map((f) => ({
+        floorId: f.floorId,
+        a: f.a,
+        b: f.b,
+        dist: f.dist,
+        power: f.power,
+        color: flowColor(f.kind, summary),
+      })),
+    );
+    const persons = personsInRooms(hass, b);
+    v.setPersons(persons);
+    const counts = floorCounts(hass, b, this.openingLinks!, persons);
+    v.setFloorInfo(new Map([...counts].map(([id, c]) => [id, floorInfoText(hass, c)])));
+    const hasEnergy = summary.grid !== null || summary.solar !== null || summary.battery !== null || summary.tariff !== null;
+    this._energy = hasEnergy ? summary : null;
   }
 
   private onDeviceTap(entityId: string): void {
@@ -149,9 +192,30 @@ export class Fp3dView3d extends LitElement {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
+  private renderEnergy() {
+    const e = this._energy;
+    if (!e || this.roomId) return nothing;
+    const t = (k: Parameters<typeof translate>[1]) => translate(this.hass, k);
+    const items: { cls: string; label: string; value: string }[] = [];
+    if (e.consumption !== null) items.push({ cls: "total", label: t("energy_consumption"), value: formatPower(this.hass, e.consumption) });
+    if (e.grid !== null) {
+      const exporting = e.grid < 0;
+      items.push({ cls: exporting ? "export" : "grid", label: t(exporting ? "energy_grid_export" : "energy_grid_import"), value: formatPower(this.hass, Math.abs(e.grid)) });
+    }
+    if (e.solar !== null) items.push({ cls: "solar", label: t("energy_solar"), value: formatPower(this.hass, e.solar) });
+    if (e.battery !== null || e.soc !== null) {
+      const parts = [e.battery !== null ? formatPower(this.hass, Math.abs(e.battery)) : null, e.soc !== null ? `${Math.round(e.soc)} %` : null].filter(Boolean);
+      items.push({ cls: "battery", label: t("energy_battery"), value: parts.join(" · ") });
+    }
+    if (e.tariff) items.push({ cls: "tariff", label: t("energy_tariff"), value: `${formatNumber(this.hass, e.tariff.value, 3)} ${e.tariff.unit}`.trim() });
+    return html`<div class="fp3d-energy" aria-live="off">
+      ${items.map((i) => html`<div class="fp3d-energy-item fp3d-energy-${i.cls}"><span>${i.label}</span><b>${i.value}</b></div>`)}
+    </div>`;
+  }
+
   protected render() {
     return html`<div class="fp3d-stage">
-      ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing}
+      ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.renderEnergy()}
       ${this.showStats && this._stats
         ? html`<span class="fp3d-stats"
             >${translate(this.hass, "stats", { fps: this._stats.fps, calls: this._stats.calls, tris: this._stats.triangles.toLocaleString() })}</span
@@ -265,6 +329,92 @@ export class Fp3dView3d extends LitElement {
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      .fp3d-dev-watt:empty {
+        display: none;
+      }
+      .fp3d-dev-watt {
+        padding: 1px 6px 1px 0;
+        color: #37e0ff;
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+      }
+      .fp3d-dev-on .fp3d-dev-watt {
+        color: #2a1a00;
+      }
+      .fp3d-person {
+        position: absolute;
+        left: 0;
+        top: 0;
+        display: grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        overflow: hidden;
+        background: #ff5fd2;
+        color: #fff;
+        font: 700 12px var(--fp3d-font);
+        box-shadow:
+          0 0 0 2px rgba(255, 95, 210, 0.45),
+          0 0 18px #ff5fd2;
+        pointer-events: auto;
+      }
+      .fp3d-person img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .fp3d-person[hidden] {
+        display: none;
+      }
+      .fp3d-energy {
+        position: absolute;
+        left: 12px;
+        top: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        max-width: calc(100% - 24px);
+        pointer-events: none;
+      }
+      .fp3d-energy-item {
+        display: grid;
+        padding: 5px 11px 6px;
+        border-radius: 12px;
+        background: var(--fp3d-chrome);
+        border-left: 3px solid var(--fp3d-line);
+        box-shadow: var(--fp3d-shadow);
+        backdrop-filter: blur(6px);
+        font-variant-numeric: tabular-nums;
+      }
+      .fp3d-energy-item span {
+        font-size: 11px;
+        color: var(--fp3d-muted);
+      }
+      .fp3d-energy-item b {
+        font: 700 15px var(--fp3d-title-font);
+      }
+      .fp3d-energy-total {
+        border-left-color: #6fd8ff;
+      }
+      .fp3d-energy-grid {
+        border-left-color: #37e0ff;
+      }
+      .fp3d-energy-export,
+      .fp3d-energy-solar {
+        border-left-color: #ffc633;
+      }
+      .fp3d-energy-battery {
+        border-left-color: #59ff8c;
+      }
+      .fp3d-energy-tariff {
+        border-left-color: #b98cff;
+      }
+      @media (max-width: 600px) {
+        .fp3d-energy-item:nth-child(n + 4) {
+          display: none;
+        }
+      }
       .fp3d-dev-full .fp3d-dev-text {
         display: inline;
       }
@@ -315,3 +465,8 @@ export class Fp3dView3d extends LitElement {
 }
 
 if (!customElements.get("fp3d-view3d")) customElements.define("fp3d-view3d", Fp3dView3d);
+
+/** Power as "850 W" or "1,2 kW". */
+function formatPower(hass: HomeAssistant | undefined, w: number): string {
+  return Math.abs(w) >= 1000 ? `${formatNumber(hass, w / 1000, 1)} kW` : `${Math.round(w)} W`;
+}

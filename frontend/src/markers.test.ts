@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildMarkers, stateText } from "./markers.ts";
 import type { Building } from "./model.ts";
-import { newFloor } from "./model.ts";
+import { emptyBuilding, newFloor } from "./model.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
 
 const st = (entity_id: string, state: string, attributes: Record<string, unknown> = {}): HassEntity => ({ entity_id, state, attributes });
@@ -40,7 +40,7 @@ test("markers find their room, default height and light glow; missing entities a
     { entity_id: "switch.draussen", x: 9, z: 9, y: 0.4 },
     { entity_id: "light.geloescht", x: 1, z: 1, y: null },
   ];
-  const building: Building = { version: 1, floors: [floor], settings: { wall_exterior: 0.24, wall_interior: 0.12, grid: 0.05 } };
+  const building: Building = { ...emptyBuilding(), floors: [floor] };
   const hass = hassWith([st("light.decke", "on", { friendly_name: "Wohnzimmer Decke", brightness: 255 }), st("switch.draussen", "off")]);
   const markers = buildMarkers(hass, building);
   assert.equal(markers.length, 2);

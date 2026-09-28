@@ -79,18 +79,49 @@ export interface BuildingSettings {
   grid: number;
 }
 
+/** Energy flow: meter position and power sensors (W). Grid positive = import, battery positive = discharging. */
+export interface EnergySettings {
+  meter: { floor_id: string; x: number; z: number } | null;
+  grid: string | null;
+  grid_invert: boolean;
+  solar: string | null;
+  battery: string | null;
+  battery_invert: boolean;
+  battery_soc: string | null;
+  tariff: string | null;
+}
+
+/** A person and the sensor whose state names the room they are in (ESPresense, Bermuda, …). */
+export interface PresenceLink {
+  person: string;
+  sensor: string | null;
+}
+
 export interface Building {
   version: 1;
   floors: Floor[];
   settings: BuildingSettings;
+  energy: EnergySettings;
+  presence: PresenceLink[];
 }
+
+export const DEFAULT_ENERGY: EnergySettings = {
+  meter: null,
+  grid: null,
+  grid_invert: false,
+  solar: null,
+  battery: null,
+  battery_invert: false,
+  battery_soc: null,
+  tariff: null,
+};
 
 export const FLOOR_MATERIALS = ["wood", "oak", "tiles", "carpet", "stone", "concrete"] as const;
 
 export const DEFAULT_SETTINGS: BuildingSettings = { wall_exterior: 0.24, wall_interior: 0.12, grid: 0.05 };
 
 export function emptyBuilding(): Building {
-  return { version: 1, floors: [], settings: { ...DEFAULT_SETTINGS } };
+  return { version: 1, floors: [], settings: { ...DEFAULT_SETTINGS }, energy: { ...DEFAULT_ENERGY }, presence: [] };
 }
 
 export function newFloor(id: string, name: string, elevation: number): Floor {
@@ -166,6 +197,8 @@ export const OPENING_DEFAULTS = {
 
 /** Fill fields added in later versions so older saved buildings keep working. */
 export function normalizeBuilding(b: Building): Building {
+  b.energy = { ...DEFAULT_ENERGY, ...(b.energy ?? {}) };
+  b.presence = b.presence ?? [];
   for (const f of b.floors) {
     f.openings = f.openings.map((o) => ({ ...o, hinge: o.hinge ?? "left", cover: o.cover ?? null, contact: o.contact ?? null, tilt: o.tilt ?? null }));
   }

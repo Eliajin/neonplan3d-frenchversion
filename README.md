@@ -2,7 +2,7 @@
 
 Draw your home directly in Home Assistant and see it as a 3D model in a neon look. No external tools, no cloud.
 
-> **Status: early development (Phase 4 of 6).** The data model, automatic walls, the 2D editor, the neon 3D view with floors and camera flights, device control, doors and windows, furniture and stairs work. Energy flow and presence follow in later phases (see [docs/plan.md](docs/plan.md), in German).
+> **Status: early development (Phase 5 of 6).** The data model, automatic walls, the 2D editor, the neon 3D view with floors and camera flights, device control, doors and windows, furniture, stairs, energy flow and presence work. Kiosk mode, a light theme and the release follow in the last phase (see [docs/plan.md](docs/plan.md), in German).
 
 ## Features (so far)
 
@@ -33,6 +33,11 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
   - Quality levels *Auto*, *Tablet* and *High* (remembered per device).
 - **Room panel** (next to the 3D view, at the bottom on phones and portrait tablets): lights with brightness, colour temperature and colours, covers, heating, media, switches, sensors, scenes and scripts of the room's area.
   - Only renders when something changes, so it uses no GPU while idle.
+- **Energy flow**: place the meter in the editor and choose power sensors for grid, solar, battery (with charge level) and an optional tariff sensor.
+  - Glowing cables run from the meter along the wall bases and through the walls to every placed device that reports power (its own sensor or a power sensor of the same device); cables shared by several devices carry their sum.
+  - Stripes move with the power (still at 0 W); grid import is cyan, solar and export yellow, battery green. The animation runs at about 30 fps and stops when nothing flows or the page is hidden.
+  - Watt labels at the devices and an energy bar with consumption, grid, solar, battery and tariff.
+- **Presence**: per person a room sensor (e.g. ESPresense, Bermuda) whose state names the room or area; people at home show as pink markers in their room. Floor labels count rooms, lights on, open windows and people.
 - **Sidebar page and dashboard card**: `custom:floorplan-3d-card` is loaded automatically, no resource needed.
 
 ## Installation

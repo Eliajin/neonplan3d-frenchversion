@@ -109,6 +109,28 @@ async def test_opening_fields_get_defaults(hass: HomeAssistant, hass_ws_client) 
     assert got[1]["hinge"] == "right" and got[1]["cover"] == "cover.x" and got[1]["contact"] == "none"
 
 
+async def test_energy_and_presence_get_defaults(hass: HomeAssistant, hass_ws_client) -> None:
+    await _setup(hass)
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": BUILDING})
+    assert (await client.receive_json())["success"]
+    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    got = (await client.receive_json())["result"]["building"]
+    assert got["energy"]["meter"] is None and got["energy"]["grid_invert"] is False
+    assert got["presence"] == []
+
+    building = copy.deepcopy(BUILDING)
+    building["energy"] = {"meter": {"floor_id": "f1", "x": 1, "z": 2}, "grid": "sensor.grid"}
+    building["presence"] = [{"person": "person.mia", "sensor": "sensor.mia_area"}]
+    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": building})
+    assert (await client.receive_json())["success"]
+    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    got = (await client.receive_json())["result"]["building"]
+    assert got["energy"]["meter"] == {"floor_id": "f1", "x": 1, "z": 2}
+    assert got["energy"]["grid"] == "sensor.grid" and got["energy"]["solar"] is None
+    assert got["presence"] == [{"person": "person.mia", "sensor": "sensor.mia_area"}]
+
+
 async def test_invalid_building_is_rejected(hass: HomeAssistant, hass_ws_client) -> None:
     await _setup(hass)
     client = await hass_ws_client(hass)

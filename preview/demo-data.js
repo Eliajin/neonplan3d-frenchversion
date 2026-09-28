@@ -131,7 +131,34 @@ const DEVICES = [
   entity("scene.wohnzimmer_film", "wohnzimmer", "2024-01-01T00:00:00", { friendly_name: "Wohnzimmer Film" }),
   entity("scene.wohnzimmer_lesen", "wohnzimmer", "2024-01-01T00:00:00", { friendly_name: "Wohnzimmer Lesen" }),
   entity("script.gute_nacht", "schlafzimmer", "off", { friendly_name: "Gute Nacht" }),
+  // energy (invented values)
+  entity("sensor.netz_leistung", "flur", "420", { friendly_name: "Netz Leistung", device_class: "power", unit_of_measurement: "W" }),
+  entity("sensor.pv_leistung", "flur", "1150", { friendly_name: "PV Leistung", device_class: "power", unit_of_measurement: "W" }),
+  entity("sensor.akku_leistung", "flur", "-300", { friendly_name: "Akku Leistung", device_class: "power", unit_of_measurement: "W" }),
+  entity("sensor.akku_ladestand", "flur", "64", { friendly_name: "Akku Ladestand", device_class: "battery", unit_of_measurement: "%" }),
+  entity("sensor.strompreis", null, "0.29", { friendly_name: "Strompreis", device_class: "monetary", unit_of_measurement: "€/kWh" }),
+  entity("sensor.fernseher_leistung", "wohnzimmer", "95", { friendly_name: "Fernseher Leistung", device_class: "power", unit_of_measurement: "W" }),
+  entity("sensor.kaffeemaschine_leistung", "kueche", "0.9", { friendly_name: "Kaffeemaschine Leistung", device_class: "power", unit_of_measurement: "kW" }),
+  entity("sensor.kuehlschrank_leistung", "kueche", "85", { friendly_name: "Kühlschrank Leistung", device_class: "power", unit_of_measurement: "W" }),
+  entity("sensor.waschmaschine_leistung", "bad", "430", { friendly_name: "Waschmaschine Leistung", device_class: "power", unit_of_measurement: "W" }),
+  entity("sensor.pc_leistung", "arbeitszimmer", "70", { friendly_name: "Computer Leistung", device_class: "power", unit_of_measurement: "W" }),
+  // people and their room sensors (as ESPresense or Bermuda would report them)
+  entity("person.mia", null, "home", { friendly_name: "Mia" }),
+  entity("person.tom", null, "home", { friendly_name: "Tom Beispiel" }),
+  entity("person.lea", null, "not_home", { friendly_name: "Lea" }),
+  entity("sensor.mia_raum", null, "Wohnzimmer", { friendly_name: "Mia Raum" }),
+  entity("sensor.tom_raum", null, "Küche", { friendly_name: "Tom Raum" }),
+  entity("sensor.lea_raum", null, "not_home", { friendly_name: "Lea Raum" }),
 ];
+// devices with a power sensor of their own
+for (const [id, device] of [
+  ["media_player.fernseher", "d_tv"],
+  ["sensor.fernseher_leistung", "d_tv"],
+  ["switch.kaffeemaschine", "d_kaffee"],
+  ["sensor.kaffeemaschine_leistung", "d_kaffee"],
+]) {
+  DEVICES.find((d) => d.entry.entity_id === id).entry.device_id = device;
+}
 
 export const DEMO_ENTITIES = Object.fromEntries(DEVICES.map((d) => [d.entry.entity_id, d.entry]));
 export const DEMO_STATES = Object.fromEntries(DEVICES.map((d) => [d.state.entity_id, d.state]));
@@ -151,7 +178,27 @@ DEMO_BUILDING.floors[0].placements = [
   place("light.bad", 5.5, 7.2),
   place("light.flur", 8.8, 6.9),
 ];
-DEMO_BUILDING.floors[1].placements = [place("light.kinderzimmer", 2.9, 2.8), place("light.schreibtisch", 6.2, 1.2)];
+DEMO_BUILDING.floors[0].placements.push(
+  place("sensor.kuehlschrank_leistung", 6.35, 0.8),
+  place("sensor.waschmaschine_leistung", 6.4, 6.9),
+  place("sensor.akku_leistung", 7.3, 8.8),
+);
+DEMO_BUILDING.floors[1].placements = [place("light.kinderzimmer", 2.9, 2.8), place("light.schreibtisch", 6.2, 1.2), place("sensor.pc_leistung", 7.8, 0.9)];
+DEMO_BUILDING.energy = {
+  meter: { floor_id: "eg", x: 9.75, z: 5.0 },
+  grid: "sensor.netz_leistung",
+  grid_invert: false,
+  solar: "sensor.pv_leistung",
+  battery: "sensor.akku_leistung",
+  battery_invert: false,
+  battery_soc: "sensor.akku_ladestand",
+  tariff: "sensor.strompreis",
+};
+DEMO_BUILDING.presence = [
+  { person: "person.mia", sensor: "sensor.mia_raum" },
+  { person: "person.tom", sensor: "sensor.tom_raum" },
+  { person: "person.lea", sensor: "sensor.lea_raum" },
+];
 
 // Invented doors, windows and furniture for the preview.
 let openingId = 0;
