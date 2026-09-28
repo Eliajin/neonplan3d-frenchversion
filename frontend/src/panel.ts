@@ -11,6 +11,7 @@ import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
 import type { MarkerMode } from "./components/view3d.ts";
 import type { HeatMode } from "./heatmap.ts";
+import { THEMES, type Theme } from "./themes.ts";
 import type { Quality, WallMode } from "./viewer/viewer3d.ts";
 
 type Mode = "view" | "editor";
@@ -48,6 +49,7 @@ export class Floorplan3dPanel extends LitElement {
     _stats: { state: true },
     _markers: { state: true },
     _heat: { state: true },
+    _theme: { state: true },
   };
 
   declare hass: HomeAssistant;
@@ -64,6 +66,7 @@ export class Floorplan3dPanel extends LitElement {
   private declare _stats: boolean;
   private declare _markers: MarkerMode;
   private declare _heat: HeatMode;
+  private declare _theme: Theme;
 
   private readonly data = new BuildingController(this);
 
@@ -83,6 +86,8 @@ export class Floorplan3dPanel extends LitElement {
     this._markers = markers === "none" || markers === "all" ? markers : "important";
     const heat = prefs.get("heat");
     this._heat = heat === "temperature" || heat === "humidity" || heat === "co2" ? heat : "none";
+    const theme = prefs.get("theme") as Theme | null;
+    this._theme = theme && THEMES.includes(theme) ? theme : "neon";
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
@@ -164,6 +169,20 @@ export class Floorplan3dPanel extends LitElement {
             ? html`<div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("quality")}>
                 ${(["auto", "low", "high"] as Quality[]).map(
                   (q) => html`<button aria-pressed=${this._quality === q} @click=${() => this.setQuality(q)}>${this.t(`quality_${q}`)}</button>`,
+                )}
+              </div>
+              <div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("theme")}>
+                ${THEMES.map(
+                  (t) =>
+                    html`<button
+                      aria-pressed=${this._theme === t}
+                      @click=${() => {
+                        this._theme = t;
+                        prefs.set("theme", t);
+                      }}
+                    >
+                      ${this.t(`theme_${t}`)}
+                    </button>`,
                 )}
               </div>
               <div class="fp3d-seg fp3d-quality" role="group" aria-label=${this.t("markers")}>
@@ -295,6 +314,7 @@ export class Floorplan3dPanel extends LitElement {
           .explode=${this._explode}
           .markerMode=${this._markers}
           .heatMode=${this._heat}
+          .theme=${this._theme}
           .quality=${this._quality}
           ?showStats=${this._stats}
           @room-tap=${this.onRoomTap}

@@ -25,6 +25,7 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
 - **Outdoor areas**: lawn, terrace, path, driveway, pool, flower bed, hedge and fence, drawn with the "Outdoor" tool; path lights, garden spots and outdoor wall lights light the outdoor areas and the facade.
 - **Roof**: flat or gable over the top floor (settings); shown in the house view, it lifts and fades when you zoom in.
 - **Daylight**: with north set in the settings, sunlight from `sun.sun` falls through the windows facing the sun as soft patches on the floor (smaller when blinds are down); the sky behind the house gets lighter by day.
+- **Looks**: *Neon* (default), *Blueprint* (white lines on blue) and *Day* (a light architectural model); switched instantly, remembered per device, card option `theme`. Lit lamps, open windows and other signal colours keep their colour in every look.
 - **Heatmap**: floors coloured by temperature, humidity or CO₂ of the room's sensors, with a legend.
 - **Living devices**: a radiator linked to a thermostat glows while it heats; washing machine, dryer and dishwasher glow while they run.
 - **Area link**: each room can be linked to a Home Assistant area.
@@ -84,6 +85,7 @@ quality: auto           # optional: auto | low | high
 stats: false            # optional: show the performance display
 markers: important      # optional: none | important | all
 heatmap: none           # optional: none | temperature | humidity | co2
+theme: neon             # optional: neon | blueprint | day
 ```
 
 ## Development

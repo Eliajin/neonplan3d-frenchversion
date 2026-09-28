@@ -18,6 +18,7 @@ import {
 } from "../devices.ts";
 import { iconSvg } from "../icons.ts";
 import { energySummary, findConsumers, flowColor, flowSegments, powerSensorFor, readPower, type Consumer, type EnergySummary } from "../energy.ts";
+import { STAGE, type Theme } from "../themes.ts";
 import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from "../heatmap.ts";
 import { formatNumber, translate } from "../i18n.ts";
 import { load3d } from "../load3d.ts";
@@ -56,6 +57,7 @@ export class Fp3dView3d extends LitElement {
     explode: { type: Boolean },
     markerMode: { attribute: false },
     heatMode: { attribute: false },
+    theme: { attribute: false },
     _sky: { state: true },
     quality: { attribute: false },
     showStats: { type: Boolean },
@@ -72,6 +74,7 @@ export class Fp3dView3d extends LitElement {
   declare explode: boolean;
   declare markerMode: MarkerMode;
   declare heatMode: HeatMode;
+  declare theme: Theme;
   /** How much daylight there is (0 = night, 1 = day), from sun.sun. */
   private declare _sky: number;
   declare quality: Quality;
@@ -103,6 +106,7 @@ export class Fp3dView3d extends LitElement {
     this.explode = true;
     this.markerMode = "important";
     this.heatMode = "none";
+    this.theme = "neon";
     this._sky = 0;
     this.quality = "auto";
     this.showStats = false;
@@ -149,6 +153,7 @@ export class Fp3dView3d extends LitElement {
         },
       });
       this.viewer.setWallMode(this.wallMode);
+      this.viewer.setTheme(this.theme);
       if (this.building) this.viewer.setBuilding(this.building);
       this.syncDevices(true);
       this.viewer.setFloor(this.floorId, false);
@@ -171,6 +176,7 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("roomId") && (this.roomId || changed.get("roomId"))) v.selectRoom(this.roomId);
     if (changed.has("wallMode")) v.setWallMode(this.wallMode);
     if (changed.has("explode")) v.setExplode(this.explode);
+    if (changed.has("theme")) v.setTheme(this.theme);
     if (changed.has("quality") && changed.get("quality") !== undefined) v.setQuality(this.quality);
   }
 
@@ -450,7 +456,8 @@ export class Fp3dView3d extends LitElement {
     // night: deep blue-black; day: a lighter, bluer sky behind the house
     const sky = this._sky;
     const mix = (a: number[], b: number[]) => `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * sky)).join(",")})`;
-    const style = `--fp3d-sky:${mix([11, 17, 32], [26, 44, 78])};--fp3d-ground:${mix([7, 11, 20], [12, 20, 36])}`;
+    const stage = STAGE[this.theme] ?? STAGE.neon;
+    const style = `--fp3d-sky:${mix(stage.night[0], stage.day[0])};--fp3d-ground:${mix(stage.night[1], stage.day[1])}`;
     return html`<div class="fp3d-stage" style=${style}>
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.renderEnergy()} ${this.renderLegend()}
       ${this.showStats && this._stats

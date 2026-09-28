@@ -43,6 +43,9 @@ import { OrbitControls } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
 import { screenRect } from "./furniture.ts";
 import { buildRoof } from "./roof.ts";
+import { lineBlending, themed, themeIndex, type Theme, type ThemeUniform } from "./theme.ts";
+
+export type { Theme } from "./theme.ts";
 import { GeoBuffer, pushPrism } from "./geo.ts";
 import { buildLightSurface, lightColors, roomIndexAt, type LightKind, type LightSource, type LightSurface } from "./lighting.ts";
 import { buildOpeningParts, CLOSED, type OpeningState } from "./openings.ts";
@@ -331,6 +334,8 @@ export class FloorplanViewer {
   /** Roof over the top floor (house view only), its opacity and the camera distance of the house view. */
   private roof: { group: Group; floorId: string; solid: MeshBasicMaterial; lines: LineBasicMaterial } | null = null;
   private roofO = 0;
+  private theme: Theme = "neon";
+  private readonly themeUniform: ThemeUniform = { value: 0 };
   private sun: SunState | null = null;
   /** Heatmap colour per room id (null: normal floors). */
   private roomTint: Map<string, [number, number, number]> | null = null;
@@ -526,6 +531,22 @@ export class FloorplanViewer {
   setPickTargets(furniture: Map<string, string>, openings: Map<string, string>): void {
     this.pickFurniture = furniture;
     this.pickOpenings = openings;
+  }
+
+  /** Look of the 3D view: neon, blueprint or day. Instant: colours are mapped in the shaders. */
+  setTheme(theme: Theme): void {
+    if (theme === this.theme) return;
+    this.theme = theme;
+    this.themeUniform.value = themeIndex(theme);
+    const blending = lineBlending(theme);
+    const lineMats = [...this.floors.map((f) => f.materials.lines), ...(this.roof ? [this.roof.lines] : [])];
+    for (const m of lineMats) {
+      m.blending = blending;
+      m.needsUpdate = true;
+    }
+    // the neon ground grid would vanish on the light background anyway
+    this.placeGround();
+    this.invalidate();
   }
 
   /** Position of the sun; sunlight falls through windows facing it. */
@@ -791,9 +812,9 @@ export class FloorplanViewer {
 
   private makeMaterials(mask: FoldMasks): FloorMaterials {
     return {
-      floor: new MeshBasicMaterial({ vertexColors: true }),
+      floor: themed(new MeshBasicMaterial({ vertexColors: true }), this.themeUniform),
       pattern: patternMaterial(this.patternTexture),
-      wall: makeFoldable(new MeshBasicMaterial({ vertexColors: true }), mask, "solid"),
+      wall: themed(makeFoldable(new MeshBasicMaterial({ vertexColors: true }), mask, "solid"), this.themeUniform),
       glassWall: makeFoldable(new MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false }), mask, "glass"),
       // result = floor colour * vertex colour (white leaves the floor untouched)
       shadow: new MeshBasicMaterial({
@@ -806,7 +827,11 @@ export class FloorplanViewer {
         polygonOffset: true,
         polygonOffsetFactor: -1,
       }),
-      lines: makeFoldable(new LineBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false }), mask),
+      lines: themed(
+        makeFoldable(new LineBasicMaterial({ vertexColors: true, transparent: true, blending: lineBlending(this.theme), depthWrite: false }), mask),
+        this.themeUniform,
+        true,
+      ),
       // light on floors and walls follows cut and glass walls like the walls themselves
       glow: makeFoldable(
         new MeshBasicMaterial({
@@ -821,14 +846,14 @@ export class FloorplanViewer {
         mask,
         "solid",
       ),
-      frames: makeFoldable(new MeshBasicMaterial({ vertexColors: true, side: DoubleSide }), mask),
+      frames: themed(makeFoldable(new MeshBasicMaterial({ vertexColors: true, side: DoubleSide }), mask), this.themeUniform),
       glass: makeFoldable(
         new MeshBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false, side: DoubleSide }),
         mask,
       ),
-      blinds: makeFoldable(new MeshBasicMaterial({ map: this.blindTexture, vertexColors: true, side: DoubleSide }), mask),
+      blinds: themed(makeFoldable(new MeshBasicMaterial({ map: this.blindTexture, vertexColors: true, side: DoubleSide }), mask), this.themeUniform),
       flow: flowMaterial(this.flowTime),
-      lamps: new MeshBasicMaterial({ vertexColors: true }),
+      lamps: themed(new MeshBasicMaterial({ vertexColors: true }), this.themeUniform),
       halos: new PointsMaterial({
         map: this.haloTexture,
         size: 0.9,
@@ -1000,8 +1025,8 @@ export class FloorplanViewer {
     const geo = this.building ? buildRoof(this.building) : null;
     if (!geo) return;
     const group = new Group();
-    const solid = new MeshBasicMaterial({ vertexColors: true, transparent: true, side: DoubleSide });
-    const lines = new LineBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false });
+    const solid = themed(new MeshBasicMaterial({ vertexColors: true, transparent: true, side: DoubleSide }), this.themeUniform);
+    const lines = themed(new LineBasicMaterial({ vertexColors: true, transparent: true, blending: lineBlending(this.theme), depthWrite: false }), this.themeUniform, true);
     group.add(new Mesh(geo.solid.geometry(), solid), new LineSegments(geo.lines.geometry(), lines));
     group.renderOrder = 8;
     this.scene.add(group);
@@ -1038,7 +1063,7 @@ export class FloorplanViewer {
    */
   private applyDetail(): void {
     const low = this.lowQuality;
-    this.ground.visible = !low && this.floors.some((f) => f.floor.rooms.length > 0);
+    this.ground.visible = !low && this.theme !== "day" && this.floors.some((f) => f.floor.rooms.length > 0);
     for (const fv of this.floors) {
       fv.patternMesh.visible = !low;
       fv.shadowMesh.visible = !low && fv.o > 0.98;
@@ -1712,7 +1737,7 @@ export class FloorplanViewer {
       for (const room of fv.floor.rooms) for (const [x, z] of room.points) box.expandByPoint(new Vector3(x, 0, z));
       for (const a of fv.floor.outdoor ?? []) for (const [x, z] of a.points) box.expandByPoint(new Vector3(x, 0, z));
     }
-    this.ground.visible = !box.isEmpty() && !this.lowQuality;
+    this.ground.visible = !box.isEmpty() && !this.lowQuality && this.theme !== "day";
     if (box.isEmpty()) return;
     const c = box.getCenter(new Vector3());
     const s = box.getSize(new Vector3());
