@@ -23,6 +23,7 @@ const DEFAULTS: Partial<CardConfig> = {
   controls: false,
   fullscreen_button: false,
   room_names: true,
+  floor_stack: "dim",
 };
 
 type Choice = [value: string, label: I18nKey];
@@ -179,6 +180,7 @@ export class Floorplan3dCardEditor extends LitElement {
         ${this.select("theme", "theme", [["neon", "theme_neon"], ["blueprint", "theme_blueprint"], ["day", "theme_day"]], v.theme)}
         ${this.select("walls", "card_walls", [["auto", "walls_auto"], ["cut", "walls_cut"]], v.walls)}
         ${this.select("quality", "quality", [["auto", "quality_auto"], ["low", "quality_low"], ["high", "quality_high"]], v.quality)}
+        ${this.select("floor_stack", "card_floor_stack", [["dim", "floor_stack_dim"], ["stacked", "floor_stack_stacked"], ["single", "floor_stack_single"]], v.floor_stack)}
       </div>
       ${v.fill ? html`<p class="hint">${this.t("card_fill_hint")}</p>` : nothing}
       <p class="hint">${this.t("card_quality_hint")}</p>

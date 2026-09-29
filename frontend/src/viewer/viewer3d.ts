@@ -133,6 +133,8 @@ export interface DeviceMarker {
   powerText?: string;
 }
 
+export type FloorStack = "dim" | "stacked" | "single";
+
 export type LampModel = "ceiling" | "downlight" | "spot" | "panel" | "pendant" | "floor" | "uplight" | "table" | "wall" | "strip" | "bollard" | "garden";
 
 /** Piece of energy cable (floor-local coordinates); the flow runs from a to b. */
@@ -366,6 +368,7 @@ export class FloorplanViewer {
   private robotLedGeo: BufferGeometry | null = null;
   private robotLast = 0;
   private robotTimer: ReturnType<typeof setTimeout> | undefined;
+  private floorStack: FloorStack = "dim";
   /** The device a running swipe acts on. */
   private swipe: { entity: string; x: number; y: number } | null = null;
   /** Furnishing in 3D: items can be dragged; the selected one shows a wireframe box. */
@@ -448,6 +451,13 @@ export class FloorplanViewer {
   }
 
   /** Pull the floors apart in the house view, or stack them. */
+  /** What shows below an opened floor: the floors dimmed, the whole house up to it, or nothing. */
+  setFloorStack(mode: FloorStack): void {
+    if (mode === this.floorStack) return;
+    this.floorStack = mode;
+    this.applyTargets(false);
+  }
+
   setExplode(explode: boolean): void {
     if (explode === this.explode) return;
     this.explode = explode;
@@ -1174,8 +1184,12 @@ export class FloorplanViewer {
         ty = 5 + fv.rank; // floors above fly away
         to = 0;
       } else if (fv.rank < sel.rank) {
-        ty = -0.4; // floors below stay as a dim reference
-        to = BELOW_OPACITY;
+        // floors below: a dim reference, the house stacked up to this floor, or hidden
+        if (this.floorStack === "stacked") ty = 0;
+        else {
+          ty = -0.4;
+          to = this.floorStack === "single" ? 0 : BELOW_OPACITY;
+        }
       }
       fv.ty = ty;
       fv.to = to;
@@ -2235,7 +2249,8 @@ export class FloorplanViewer {
       const fv = this.floors.find((f) => f.floor.id === pin.dataset.floor);
       const room = fv?.floor.rooms.find((r) => r.id === pin.dataset.room);
       // in the house view, room labels would pile up between the floors; in a room its panel names it
-      if (!fv || !room || fv.to < 0.99 || fv.o < 0.9 || house || this.roomId) {
+      // floors stacked below an opened floor carry no labels
+      if (!fv || !room || fv.to < 0.99 || fv.o < 0.9 || house || this.roomId || this.otherFloor(fv)) {
         pin.hidden = true;
         continue;
       }
@@ -2247,6 +2262,11 @@ export class FloorplanViewer {
     }
   }
 
+  /** A floor other than the opened one (shown below it when floors are stacked). */
+  private otherFloor(fv: FloorView): boolean {
+    return this.floorId !== null && fv.floor.id !== this.floorId;
+  }
+
   private updateDevicePins(w: number, h: number): void {
     const v = new Vector3();
     const house = this.houseView;
@@ -2254,7 +2274,7 @@ export class FloorplanViewer {
       const pin = this.personPins.get(p.id);
       const fv = this.floors.find((f) => f.floor.id === p.floorId);
       if (!pin) continue;
-      if (!fv || house || fv.to < 0.99 || fv.o < 0.9) {
+      if (!fv || house || fv.to < 0.99 || fv.o < 0.9 || this.otherFloor(fv)) {
         pin.hidden = true;
         continue;
       }
@@ -2268,7 +2288,7 @@ export class FloorplanViewer {
       if (!pin) continue;
       const fv = this.floors.find((f) => f.floor.id === d.floorId);
       // device markers belong to the floor and room views; the house view only shows floor labels
-      if (!fv || house || fv.to < 0.99 || fv.o < 0.9 || d.pin === false) {
+      if (!fv || house || fv.to < 0.99 || fv.o < 0.9 || d.pin === false || this.otherFloor(fv)) {
         pin.hidden = true;
         continue;
       }

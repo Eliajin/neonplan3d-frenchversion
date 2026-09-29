@@ -37,6 +37,8 @@ export interface CardConfig {
   controls?: boolean | CardControl[];
   /** Room names in 3D (default true). */
   room_names?: boolean;
+  /** An opened floor with the floors below it dimmed (default), stacked, or on its own. */
+  floor_stack?: "dim" | "stacked" | "single";
   /** A button for full screen (hides the dashboard around the card). */
   fullscreen_button?: boolean;
   /** Small pictures of the floors to switch between them (default: on without a start floor). */
@@ -185,6 +187,7 @@ export class Floorplan3dCard extends LitElement {
               .flows=${this._config?.flows ?? null}
               .floorThumbs=${this.thumbs}
               .roomLabels=${c?.room_names !== false}
+              .floorStack=${c?.floor_stack ?? "dim"}
               @room-tap=${(e: CustomEvent<{ floorId: string; roomId: string | null }>) => {
                 // in the house view (or on another floor) a tap first opens the whole floor
                 if (this.canSwitch && (b?.floors.length ?? 0) > 1 && e.detail.floorId && floorId !== e.detail.floorId) {

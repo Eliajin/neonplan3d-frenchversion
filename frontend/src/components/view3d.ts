@@ -32,7 +32,7 @@ import { isLamp, LAMP_MODEL, outdoorGround, pointInPolygon, surfaceHeight, type 
 import { floorCounts, floorInfoText, personsInRooms } from "../presence.ts";
 import { tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
-import type { DeviceMarker, FloorplanViewer, RobotInfo, Quality, ScreenState, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
+import type { DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Quality, ScreenState, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
 
 /** Which HTML markers are shown: none, only what has no 3D object or shows a value, or all. */
 export type MarkerMode = "none" | "important" | "all";
@@ -67,6 +67,7 @@ export class Fp3dView3d extends LitElement {
     _thumbs: { state: true },
     floorThumbs: { attribute: false },
     roomLabels: { attribute: false },
+    floorStack: { attribute: false },
   };
 
   declare hass: HomeAssistant;
@@ -102,6 +103,8 @@ export class Fp3dView3d extends LitElement {
   declare floorThumbs: boolean;
   /** Room names in 3D (cards can switch them off). */
   declare roomLabels: boolean;
+  /** Floors below an opened floor: dimmed, stacked (the house up to it) or hidden. */
+  declare floorStack: FloorStack;
   private declare _thumbs: { floorId: string; url: string }[];
   private thumbTimer: ReturnType<typeof setTimeout> | undefined;
   /** What the floor pictures show of the devices (lamps, blinds): they are drawn again when it changes. */
@@ -155,6 +158,7 @@ export class Fp3dView3d extends LitElement {
     this._thumbs = [];
     this.floorThumbs = true;
     this.roomLabels = true;
+    this.floorStack = "dim";
     try {
       this._flows = localStorage.getItem("floorplan_3d.flows") === "1";
     } catch {
@@ -205,6 +209,7 @@ export class Fp3dView3d extends LitElement {
       this.viewer.setWallMode(this.wallMode);
       this.viewer.setTheme(this.theme);
       this.viewer.setFurnishMode(this.furnish);
+      this.viewer.setFloorStack(this.floorStack);
       this.viewer.setPacks([...getPacks()]);
       this.shownPacks = packsVersion();
       if (this.building) this.viewer.setBuilding(this.building);
@@ -236,6 +241,7 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("roomId") && (this.roomId || changed.get("roomId"))) v.selectRoom(this.roomId);
     if (changed.has("wallMode")) v.setWallMode(this.wallMode);
     if (changed.has("explode")) v.setExplode(this.explode);
+    if (changed.has("floorStack")) v.setFloorStack(this.floorStack);
     if (changed.has("theme")) v.setTheme(this.theme);
     if (changed.has("furnish")) v.setFurnishMode(this.furnish);
     if (changed.has("selectedFurniture")) v.selectFurniture(this.selectedFurniture);
