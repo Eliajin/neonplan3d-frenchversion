@@ -2,12 +2,12 @@
   "config": {
     "step": {
       "user": {
-        "title": "Floorplan 3D",
+        "title": "NeonPlan 3D",
         "description": "Fügt eine Seite in der Seitenleiste hinzu, auf der du deine Wohnung zeichnest und in 3D siehst."
       }
     },
     "abort": {
-      "single_instance_allowed": "Floorplan 3D ist bereits eingerichtet."
+      "single_instance_allowed": "NeonPlan 3D ist bereits eingerichtet."
     }
   }
 }

@@ -41,11 +41,11 @@ def async_register_commands(hass: HomeAssistant) -> None:
 def _data(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> FloorplanData | None:
     data: FloorplanData | None = hass.data.get(DOMAIN)
     if data is None:
-        connection.send_error(msg["id"], "not_loaded", "Floorplan 3D is not set up")
+        connection.send_error(msg["id"], "not_loaded", "NeonPlan 3D is not set up")
     return data
 
 
-@websocket_api.websocket_command({vol.Required("type"): "floorplan_3d/building/get"})
+@websocket_api.websocket_command({vol.Required("type"): "neonplan3d/building/get"})
 @websocket_api.async_response
 async def ws_get_building(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Return the building, its revision and the running integration version.
@@ -63,7 +63,7 @@ async def ws_get_building(hass: HomeAssistant, connection: websocket_api.ActiveC
 
 @websocket_api.websocket_command(
     {
-        vol.Required("type"): "floorplan_3d/building/save",
+        vol.Required("type"): "neonplan3d/building/save",
         vol.Required("building"): BUILDING_SCHEMA,
     }
 )
@@ -79,7 +79,7 @@ async def ws_save_building(
     connection.send_result(msg["id"], {"revision": revision})
 
 
-@websocket_api.websocket_command({vol.Required("type"): "floorplan_3d/building/subscribe"})
+@websocket_api.websocket_command({vol.Required("type"): "neonplan3d/building/subscribe"})
 @callback
 def ws_subscribe_building(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Send the new revision whenever the building changes."""
@@ -92,7 +92,7 @@ def ws_subscribe_building(hass: HomeAssistant, connection: websocket_api.ActiveC
     connection.send_result(msg["id"])
 
 
-@websocket_api.websocket_command({vol.Required("type"): "floorplan_3d/image/get", vol.Required("image_id"): _IMAGE_ID})
+@websocket_api.websocket_command({vol.Required("type"): "neonplan3d/image/get", vol.Required("image_id"): _IMAGE_ID})
 @callback
 def ws_get_image(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Return a background image as data URL."""
@@ -107,7 +107,7 @@ def ws_get_image(hass: HomeAssistant, connection: websocket_api.ActiveConnection
 
 @websocket_api.websocket_command(
     {
-        vol.Required("type"): "floorplan_3d/image/set",
+        vol.Required("type"): "neonplan3d/image/set",
         vol.Required("image_id"): _IMAGE_ID,
         vol.Required("data"): IMAGE_DATA,
     }
@@ -122,9 +122,7 @@ async def ws_set_image(hass: HomeAssistant, connection: websocket_api.ActiveConn
     connection.send_result(msg["id"])
 
 
-@websocket_api.websocket_command(
-    {vol.Required("type"): "floorplan_3d/image/delete", vol.Required("image_id"): _IMAGE_ID}
-)
+@websocket_api.websocket_command({vol.Required("type"): "neonplan3d/image/delete", vol.Required("image_id"): _IMAGE_ID})
 @websocket_api.require_admin
 @websocket_api.async_response
 async def ws_delete_image(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
@@ -135,7 +133,7 @@ async def ws_delete_image(hass: HomeAssistant, connection: websocket_api.ActiveC
     connection.send_result(msg["id"])
 
 
-@websocket_api.websocket_command({vol.Required("type"): "floorplan_3d/history/list"})
+@websocket_api.websocket_command({vol.Required("type"): "neonplan3d/history/list"})
 @websocket_api.require_admin
 @callback
 def ws_history_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
@@ -145,7 +143,7 @@ def ws_history_list(hass: HomeAssistant, connection: websocket_api.ActiveConnect
     connection.send_result(msg["id"], {"snapshots": data.history()})
 
 
-@websocket_api.websocket_command({vol.Required("type"): "floorplan_3d/history/snapshot"})
+@websocket_api.websocket_command({vol.Required("type"): "neonplan3d/history/snapshot"})
 @websocket_api.require_admin
 @websocket_api.async_response
 async def ws_history_snapshot(
@@ -159,7 +157,7 @@ async def ws_history_snapshot(
 
 
 @websocket_api.websocket_command(
-    {vol.Required("type"): "floorplan_3d/history/restore", vol.Required("snapshot_id"): _IMAGE_ID}
+    {vol.Required("type"): "neonplan3d/history/restore", vol.Required("snapshot_id"): _IMAGE_ID}
 )
 @websocket_api.require_admin
 @websocket_api.async_response
@@ -178,7 +176,7 @@ async def ws_history_restore(
     connection.send_result(msg["id"], {"revision": revision})
 
 
-@websocket_api.websocket_command({vol.Required("type"): "floorplan_3d/packs/list"})
+@websocket_api.websocket_command({vol.Required("type"): "neonplan3d/packs/list"})
 @callback
 def ws_packs_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Return the imported furniture packs (every user needs them to see the furniture)."""
@@ -189,7 +187,7 @@ def ws_packs_list(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
 
 @websocket_api.websocket_command(
     {
-        vol.Required("type"): "floorplan_3d/packs/import",
+        vol.Required("type"): "neonplan3d/packs/import",
         vol.Required("pack"): vol.All(str, vol.Length(max=MAX_PACK_SIZE)),
     }
 )
@@ -218,7 +216,7 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
 
 
 @websocket_api.websocket_command(
-    {vol.Required("type"): "floorplan_3d/packs/remove", vol.Required("pack_id"): vol.All(str, vol.Length(max=64))}
+    {vol.Required("type"): "neonplan3d/packs/remove", vol.Required("pack_id"): vol.All(str, vol.Length(max=64))}
 )
 @websocket_api.require_admin
 @websocket_api.async_response

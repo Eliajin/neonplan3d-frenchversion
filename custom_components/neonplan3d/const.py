@@ -1,8 +1,10 @@
-"""Constants for Floorplan 3D."""
+"""Constants for NeonPlan 3D."""
 
 from __future__ import annotations
 
-DOMAIN = "floorplan_3d"
+DOMAIN = "neonplan3d"
+# the integration's earlier name; its stores are taken over once (see storage.py)
+LEGACY_DOMAIN = "floorplan_3d"
 
 STORAGE_VERSION = 1
 # minor versions of the building store; each step has a migration in storage.py
@@ -16,11 +18,11 @@ STORAGE_KEY_PACKS = f"{DOMAIN}.packs"
 HISTORY_MAX = 20
 HISTORY_INTERVAL = 600
 
-URL_BASE = "/floorplan_3d_static"
-MAIN_BUNDLE = "floorplan-3d.js"
-PANEL_URL_PATH = "floorplan-3d"
-PANEL_COMPONENT = "floorplan-3d-panel"
+URL_BASE = "/neonplan3d_static"
+MAIN_BUNDLE = "neonplan3d.js"
+PANEL_URL_PATH = "neonplan3d"
+PANEL_COMPONENT = "neonplan3d-panel"
 PANEL_ICON = "mdi:floor-plan"
-PANEL_TITLE = "Floorplan 3D"
+PANEL_TITLE = "NeonPlan 3D"
 
 SIGNAL_BUILDING_UPDATED = f"{DOMAIN}_building_updated"

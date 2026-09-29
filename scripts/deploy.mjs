@@ -1,21 +1,21 @@
-// Copies custom_components/floorplan_3d to a Home Assistant config folder (e.g. a Samba share).
-// The target comes from FLOORPLAN_DEPLOY_TARGET or deploy.local.json ({"target": "..."}), which is
+// Copies custom_components/neonplan3d to a Home Assistant config folder (e.g. a Samba share).
+// The target comes from NEONPLAN_DEPLOY_TARGET or deploy.local.json ({"target": "..."}), which is
 // not committed. Files in the target that no longer exist here are removed.
 
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const source = join(root, "custom_components", "floorplan_3d");
+const source = join(root, "custom_components", "neonplan3d");
 const localConfig = join(root, "deploy.local.json");
-const target = process.env.FLOORPLAN_DEPLOY_TARGET ?? (existsSync(localConfig) ? JSON.parse(readFileSync(localConfig, "utf8")).target : null);
+const target = process.env.NEONPLAN_DEPLOY_TARGET ?? (existsSync(localConfig) ? JSON.parse(readFileSync(localConfig, "utf8")).target : null);
 
 if (!target) {
-  console.error('No target. Set FLOORPLAN_DEPLOY_TARGET or create deploy.local.json with {"target": "<ha config>/custom_components/floorplan_3d"}.');
+  console.error('No target. Set NEONPLAN_DEPLOY_TARGET or create deploy.local.json with {"target": "<ha config>/custom_components/neonplan3d"}.');
   process.exit(1);
 }
-if (basename(target) !== "floorplan_3d") {
-  console.error(`Refusing to deploy: the target folder must be named floorplan_3d (got ${target}).`);
+if (basename(target) !== "neonplan3d") {
+  console.error(`Refusing to deploy: the target folder must be named neonplan3d (got ${target}).`);
   process.exit(1);
 }
 

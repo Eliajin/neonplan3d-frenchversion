@@ -1,14 +1,14 @@
 {
-  "domain": "floorplan_3d",
-  "name": "Floorplan 3D",
+  "domain": "neonplan3d",
+  "name": "NeonPlan 3D",
   "codeowners": ["@Mastershort"],
   "config_flow": true,
   "dependencies": ["frontend", "http", "panel_custom", "websocket_api"],
-  "documentation": "https://github.com/Mastershort/floorplan-3d",
+  "documentation": "https://github.com/mastershort/neonplan3d",
   "integration_type": "service",
   "iot_class": "calculated",
-  "issue_tracker": "https://github.com/Mastershort/floorplan-3d/issues",
+  "issue_tracker": "https://github.com/mastershort/neonplan3d/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.19.1"
+  "version": "0.20.0"
 }

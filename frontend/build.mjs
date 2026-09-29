@@ -1,10 +1,10 @@
-// Builds the two bundles into custom_components/floorplan_3d/frontend and checks the size budgets.
+// Builds the two bundles into custom_components/neonplan3d/frontend and checks the size budgets.
 
 import { build, context } from "esbuild";
 import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, readFileSync, statSync } from "node:fs";
 
-const out = "../custom_components/floorplan_3d/frontend";
+const out = "../custom_components/neonplan3d/frontend";
 const watch = process.argv.includes("--watch");
 
 const common = {
@@ -17,25 +17,25 @@ const common = {
   logLevel: "info",
 };
 
-const viewerConfig = { ...common, entryPoints: ["src/viewer/viewer3d.ts"], outfile: `${out}/floorplan-3d-3d.js` };
+const viewerConfig = { ...common, entryPoints: ["src/viewer/viewer3d.ts"], outfile: `${out}/neonplan3d-3d.js` };
 // the card's visual editor only loads in the dashboard's card dialog
-const cardEditorConfig = { ...common, entryPoints: ["src/card-editor.ts"], outfile: `${out}/floorplan-3d-card-editor.js` };
+const cardEditorConfig = { ...common, entryPoints: ["src/card-editor.ts"], outfile: `${out}/neonplan3d-card-editor.js` };
 // the editor is only needed by admins who open it, so it is a bundle of its own as well
 // (it draws furniture previews with the 3D bundle, so it knows that bundle's hash too)
 const editorConfig = (viewerHash) => ({
   ...common,
   entryPoints: ["src/components/editor.ts"],
-  outfile: `${out}/floorplan-3d-editor.js`,
+  outfile: `${out}/neonplan3d-editor.js`,
   define: { __FP3D_VIEWER_HASH__: JSON.stringify(viewerHash) },
 });
 // The main bundle loads the 3D bundle with a hash of its content in the URL, so a new 3D bundle is
 // never taken from the browser cache (the integration version only changes after a restart).
 // the frontend knows its own version, to notice a backend that still runs an older one
-const version = JSON.parse(readFileSync("../custom_components/floorplan_3d/manifest.json", "utf8")).version;
+const version = JSON.parse(readFileSync("../custom_components/neonplan3d/manifest.json", "utf8")).version;
 const mainConfig = (viewerHash, editorHash, cardEditorHash) => ({
   ...common,
   entryPoints: ["src/main.ts"],
-  outfile: `${out}/floorplan-3d.js`,
+  outfile: `${out}/neonplan3d.js`,
   define: {
     __FP3D_VIEWER_HASH__: JSON.stringify(viewerHash),
     __FP3D_EDITOR_HASH__: JSON.stringify(editorHash),
@@ -59,7 +59,7 @@ function copyFonts() {
   }
 }
 
-const BUDGET = { "floorplan-3d.js": 250 * 1024, "floorplan-3d-3d.js": 650 * 1024, "floorplan-3d-editor.js": 250 * 1024, "floorplan-3d-card-editor.js": 80 * 1024 };
+const BUDGET = { "neonplan3d.js": 250 * 1024, "neonplan3d-3d.js": 650 * 1024, "neonplan3d-editor.js": 250 * 1024, "neonplan3d-card-editor.js": 80 * 1024 };
 
 copyFonts();
 if (watch) {

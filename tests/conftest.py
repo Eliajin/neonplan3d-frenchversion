@@ -1,4 +1,4 @@
-"""Fixtures for Floorplan 3D tests."""
+"""Fixtures for NeonPlan 3D tests."""
 
 from __future__ import annotations
 

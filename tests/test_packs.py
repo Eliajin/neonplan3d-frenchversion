@@ -13,8 +13,8 @@ from homeassistant.setup import async_setup_component
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.floorplan_3d import packs
-from custom_components.floorplan_3d.const import DOMAIN
+from custom_components.neonplan3d import packs
+from custom_components.neonplan3d.const import DOMAIN
 
 PAYLOAD = {
     "format": "fp3dpack",
@@ -124,7 +124,7 @@ async def test_import_list_and_remove(hass: HomeAssistant, hass_ws_client, monke
     client = await hass_ws_client(hass)
 
     await client.send_json_auto_id(
-        {"type": "floorplan_3d/packs/import", "pack": _sign(private, keys, {**PAYLOAD, "licensee": "Anna"})}
+        {"type": "neonplan3d/packs/import", "pack": _sign(private, keys, {**PAYLOAD, "licensee": "Anna"})}
     )
     result = await client.receive_json()
     assert result["success"]
@@ -136,18 +136,18 @@ async def test_import_list_and_remove(hass: HomeAssistant, hass_ws_client, monke
         "items": 1,
     }
 
-    await client.send_json_auto_id({"type": "floorplan_3d/packs/import", "pack": "{}"})
+    await client.send_json_auto_id({"type": "neonplan3d/packs/import", "pack": "{}"})
     result = await client.receive_json()
     assert not result["success"] and result["error"]["code"] == "not_a_pack"
 
-    await client.send_json_auto_id({"type": "floorplan_3d/packs/list"})
+    await client.send_json_auto_id({"type": "neonplan3d/packs/list"})
     listed = (await client.receive_json())["result"]["packs"]
     assert [p["id"] for p in listed] == ["test.starter"]
     assert listed[0]["items"][0]["name"]["de"] == "Würfelsessel"
 
-    await client.send_json_auto_id({"type": "floorplan_3d/packs/remove", "pack_id": "test.starter"})
+    await client.send_json_auto_id({"type": "neonplan3d/packs/remove", "pack_id": "test.starter"})
     assert (await client.receive_json())["success"]
-    await client.send_json_auto_id({"type": "floorplan_3d/packs/list"})
+    await client.send_json_auto_id({"type": "neonplan3d/packs/list"})
     assert (await client.receive_json())["result"]["packs"] == []
 
 

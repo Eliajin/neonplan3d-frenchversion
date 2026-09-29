@@ -1,4 +1,4 @@
-"""Config flow for Floorplan 3D (no options: everything is set up in the panel)."""
+"""Config flow for NeonPlan 3D (no options: everything is set up in the panel)."""
 
 from __future__ import annotations
 

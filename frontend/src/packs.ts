@@ -1,4 +1,4 @@
-// Furniture from imported packs (see custom_components/floorplan_3d/packs.py for the format). Pack
+// Furniture from imported packs (see custom_components/neonplan3d/packs.py for the format). Pack
 // furniture has the type "pack:<pack id>:<item id>". Every bundle (main, editor, 3D) keeps its own
 // registry, filled with setPacks() from the packs the backend returns.
 

@@ -209,7 +209,7 @@ export class Fp3dView3d extends LitElement {
     this.dimmed = false;
     this.autoOrbit = false;
     try {
-      this._flows = localStorage.getItem("floorplan_3d.flows") === "1";
+      this._flows = localStorage.getItem("neonplan3d.flows") === "1";
     } catch {
       this._flows = false;
     }
@@ -911,7 +911,7 @@ export class Fp3dView3d extends LitElement {
   private toggleFlows(): void {
     this._flows = !this._flows;
     try {
-      localStorage.setItem("floorplan_3d.flows", this._flows ? "1" : "0");
+      localStorage.setItem("neonplan3d.flows", this._flows ? "1" : "0");
     } catch {
       // private mode: the choice lasts for this page only
     }

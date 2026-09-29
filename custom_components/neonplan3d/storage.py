@@ -1,4 +1,4 @@
-"""Persistence for Floorplan 3D.
+"""Persistence for NeonPlan 3D.
 
 The building (rooms, walls, furniture, placements) and the background images live in separate
 stores so frequent saves from the editor never rewrite the large image data.
@@ -6,7 +6,9 @@ stores so frequent saves from the editor never rewrite the large image data.
 
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
 import time
 from typing import Any
 import uuid
@@ -17,8 +19,10 @@ from homeassistant.helpers.storage import Store
 import voluptuous as vol
 
 from .const import (
+    DOMAIN,
     HISTORY_INTERVAL,
     HISTORY_MAX,
+    LEGACY_DOMAIN,
     SIGNAL_BUILDING_UPDATED,
     STORAGE_KEY_BUILDING,
     STORAGE_KEY_HISTORY,
@@ -49,6 +53,31 @@ class _BuildingStore(Store):
         if old_minor_version < 2 and old_data.get("building"):
             old_data = {**old_data, "building": complete(old_data["building"])}
         return old_data
+
+
+_STORE_KEYS = (STORAGE_KEY_BUILDING, STORAGE_KEY_IMAGES, STORAGE_KEY_HISTORY, STORAGE_KEY_PACKS)
+
+
+def _copy_legacy_stores(storage_dir: str) -> list[str]:
+    """Copy the store files of the earlier name (floorplan_3d.*) to the new keys, unless those exist."""
+    copied = []
+    for key in _STORE_KEYS:
+        new = Path(storage_dir) / key
+        old = Path(storage_dir) / key.replace(f"{DOMAIN}.", f"{LEGACY_DOMAIN}.", 1)
+        if new.exists() or not old.exists():
+            continue
+        data = json.loads(old.read_text(encoding="utf-8"))
+        data["key"] = key
+        new.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        copied.append(key)
+    return copied
+
+
+async def async_migrate_legacy_stores(hass: HomeAssistant) -> None:
+    """A renamed installation keeps its plan: the old files are copied before the stores load."""
+    copied = await hass.async_add_executor_job(_copy_legacy_stores, hass.config.path(".storage"))
+    if copied:
+        _LOGGER.info("Took over the data of %s: %s", LEGACY_DOMAIN, ", ".join(copied))
 
 
 def _stores(hass: HomeAssistant) -> tuple[Store, Store, Store, Store]:
@@ -85,6 +114,7 @@ class FloorplanData:
 
     async def async_load(self) -> None:
         """Load both stores and drop images no floor refers to any more."""
+        await async_migrate_legacy_stores(self.hass)
         stored = await self._building_store.async_load()
         if stored:
             self.building = complete(stored.get("building") or empty_building())

@@ -10,7 +10,7 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.floorplan_3d.const import DOMAIN, STORAGE_KEY_BUILDING, STORAGE_KEY_HISTORY, STORAGE_KEY_IMAGES
+from custom_components.neonplan3d.const import DOMAIN, STORAGE_KEY_BUILDING, STORAGE_KEY_HISTORY, STORAGE_KEY_IMAGES
 
 BUILDING = {
     "version": 1,
@@ -50,6 +50,25 @@ async def _setup(hass: HomeAssistant) -> MockConfigEntry:
     return entry
 
 
+async def test_data_of_the_earlier_name_is_taken_over(hass: HomeAssistant, hass_ws_client) -> None:
+    """A plan saved under the old integration name (floorplan_3d) shows up after the rename."""
+    import json
+    from pathlib import Path
+
+    storage = Path(hass.config.path(".storage"))
+    storage.mkdir(parents=True, exist_ok=True)
+    data = {"building": copy.deepcopy(BUILDING), "revision": 7}
+    old = {"version": 1, "minor_version": 2, "key": "floorplan_3d.building", "data": data}
+    (storage / "floorplan_3d.building").write_text(json.dumps(old), encoding="utf-8")
+    await _setup(hass)
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": f"{DOMAIN}/building/get"})
+    result = (await client.receive_json())["result"]
+    assert result["revision"] == 7
+    assert [f["name"] for f in result["building"]["floors"]] == [f["name"] for f in BUILDING["floors"]]
+    assert (storage / f"{DOMAIN}.building").exists()
+
+
 async def test_config_flow_creates_single_entry(hass: HomeAssistant) -> None:
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
     assert result["type"] is FlowResultType.FORM
@@ -64,11 +83,11 @@ async def test_save_and_get_building(hass: HomeAssistant, hass_ws_client) -> Non
     await _setup(hass)
     client = await hass_ws_client(hass)
 
-    await client.send_json_auto_id({"type": "floorplan_3d/building/subscribe"})
+    await client.send_json_auto_id({"type": "neonplan3d/building/subscribe"})
     sub = await client.receive_json()
     assert sub["success"]
 
-    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": BUILDING})
+    await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": BUILDING})
     event = await client.receive_json()
     result = await client.receive_json()
     if "event" in result:
@@ -77,7 +96,7 @@ async def test_save_and_get_building(hass: HomeAssistant, hass_ws_client) -> Non
     assert result["result"]["revision"] == 1
     assert event["event"] == {"revision": 1}
 
-    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    await client.send_json_auto_id({"type": "neonplan3d/building/get"})
     got = await client.receive_json()
     assert got["result"]["revision"] == 1
     assert got["result"]["building"]["floors"][0]["rooms"][0]["name"] == "Living"
@@ -102,9 +121,9 @@ async def test_opening_fields_get_defaults(hass: HomeAssistant, hass_ws_client) 
         opening,
         {**opening, "id": "o2", "hinge": "right", "cover": "cover.x", "contact": "none"},
     ]
-    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": building})
+    await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": building})
     assert (await client.receive_json())["success"]
-    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    await client.send_json_auto_id({"type": "neonplan3d/building/get"})
     got = (await client.receive_json())["result"]["building"]["floors"][0]["openings"]
     assert got[0] == {
         **opening,
@@ -125,15 +144,15 @@ async def test_opening_fields_get_defaults(hass: HomeAssistant, hass_ws_client) 
 
     double = {**opening, "id": "o3", "sill": 0, "leaves": 2, "contact2": "binary_sensor.b"}
     building["floors"][0]["openings"] = [double, {**opening, "id": "o4", "type": "door", "swing": "out"}]
-    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": building})
+    await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": building})
     assert (await client.receive_json())["success"]
-    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    await client.send_json_auto_id({"type": "neonplan3d/building/get"})
     got = (await client.receive_json())["result"]["building"]["floors"][0]["openings"]
     assert got[0]["leaves"] == 2 and got[0]["contact2"] == "binary_sensor.b"
     assert got[1]["swing"] == "out"
 
     building["floors"][0]["openings"] = [{**opening, "leaves": 3}]
-    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": building})
+    await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": building})
     assert not (await client.receive_json())["success"]
 
 
@@ -153,9 +172,9 @@ async def test_furniture_links_default_to_automatic(hass: HomeAssistant, hass_ws
         "variant": None,
     }
     building["floors"][0]["furniture"] = [item, {**item, "id": "m2", "entity": "media_player.tv", "power": "none"}]
-    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": building})
+    await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": building})
     assert (await client.receive_json())["success"]
-    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    await client.send_json_auto_id({"type": "neonplan3d/building/get"})
     got = (await client.receive_json())["result"]["building"]["floors"][0]["furniture"]
     assert (got[0]["entity"], got[0]["power"]) == (None, None)
     assert (got[1]["entity"], got[1]["power"]) == ("media_player.tv", "none")
@@ -169,9 +188,9 @@ async def test_placement_mount_defaults_to_none(hass: HomeAssistant, hass_ws_cli
         {"entity_id": "light.a", "x": 1, "z": 1, "y": None},
         {"entity_id": "light.b", "x": 2, "z": 1, "y": None, "mount": "floor"},
     ]
-    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": building})
+    await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": building})
     assert (await client.receive_json())["success"]
-    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    await client.send_json_auto_id({"type": "neonplan3d/building/get"})
     got = (await client.receive_json())["result"]["building"]["floors"][0]["placements"]
     assert [p["mount"] for p in got] == [None, "floor"]
 
@@ -179,9 +198,9 @@ async def test_placement_mount_defaults_to_none(hass: HomeAssistant, hass_ws_cli
 async def test_energy_and_presence_get_defaults(hass: HomeAssistant, hass_ws_client) -> None:
     await _setup(hass)
     client = await hass_ws_client(hass)
-    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": BUILDING})
+    await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": BUILDING})
     assert (await client.receive_json())["success"]
-    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    await client.send_json_auto_id({"type": "neonplan3d/building/get"})
     got = (await client.receive_json())["result"]["building"]
     assert got["energy"]["meter"] is None and got["energy"]["grid_invert"] is False
     assert got["presence"] == []
@@ -189,9 +208,9 @@ async def test_energy_and_presence_get_defaults(hass: HomeAssistant, hass_ws_cli
     building = copy.deepcopy(BUILDING)
     building["energy"] = {"meter": {"floor_id": "f1", "x": 1, "z": 2}, "grid": "sensor.grid"}
     building["presence"] = [{"person": "person.mia", "sensor": "sensor.mia_area"}]
-    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": building})
+    await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": building})
     assert (await client.receive_json())["success"]
-    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    await client.send_json_auto_id({"type": "neonplan3d/building/get"})
     got = (await client.receive_json())["result"]["building"]
     assert got["energy"]["meter"] == {"floor_id": "f1", "x": 1, "z": 2}
     assert got["energy"]["grid"] == "sensor.grid" and got["energy"]["solar"] is None
@@ -204,9 +223,9 @@ async def test_unknown_fields_from_newer_frontends_are_kept(hass: HomeAssistant,
     building = copy.deepcopy(BUILDING)
     building["future_setting"] = {"a": 1}
     building["floors"][0]["rooms"][0]["ceiling_color"] = "#ffffff"
-    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": building})
+    await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": building})
     assert (await client.receive_json())["success"]
-    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    await client.send_json_auto_id({"type": "neonplan3d/building/get"})
     got = (await client.receive_json())["result"]["building"]
     assert got["future_setting"] == {"a": 1}
     assert got["floors"][0]["rooms"][0]["ceiling_color"] == "#ffffff"
@@ -215,27 +234,27 @@ async def test_unknown_fields_from_newer_frontends_are_kept(hass: HomeAssistant,
 async def test_restore_points(hass: HomeAssistant, hass_ws_client, hass_storage) -> None:
     await _setup(hass)
     client = await hass_ws_client(hass)
-    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": BUILDING})
+    await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": BUILDING})
     assert (await client.receive_json())["success"]
     # an empty building is no restore point
-    await client.send_json_auto_id({"type": "floorplan_3d/history/list"})
+    await client.send_json_auto_id({"type": "neonplan3d/history/list"})
     assert (await client.receive_json())["result"]["snapshots"] == []
 
     changed = copy.deepcopy(BUILDING)
     changed["floors"][0]["rooms"][0]["name"] = "Changed"
-    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": changed})
+    await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": changed})
     assert (await client.receive_json())["success"]
-    await client.send_json_auto_id({"type": "floorplan_3d/history/list"})
+    await client.send_json_auto_id({"type": "neonplan3d/history/list"})
     snapshots = (await client.receive_json())["result"]["snapshots"]
     assert len(snapshots) == 1 and snapshots[0]["rooms"] == 1
 
-    await client.send_json_auto_id({"type": "floorplan_3d/history/restore", "snapshot_id": snapshots[0]["id"]})
+    await client.send_json_auto_id({"type": "neonplan3d/history/restore", "snapshot_id": snapshots[0]["id"]})
     assert (await client.receive_json())["success"]
-    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    await client.send_json_auto_id({"type": "neonplan3d/building/get"})
     got = (await client.receive_json())["result"]["building"]
     assert got["floors"][0]["rooms"][0]["name"] == "Living"
     # the state before restoring is a restore point as well
-    await client.send_json_auto_id({"type": "floorplan_3d/history/list"})
+    await client.send_json_auto_id({"type": "neonplan3d/history/list"})
     assert len((await client.receive_json())["result"]["snapshots"]) == 2
     await hass.async_block_till_done()
     assert STORAGE_KEY_HISTORY in hass_storage
@@ -246,9 +265,9 @@ async def test_outdoor_roof_and_north_get_defaults(hass: HomeAssistant, hass_ws_
     client = await hass_ws_client(hass)
     building = copy.deepcopy(BUILDING)
     building["floors"][0]["outdoor"] = [{"id": "o1", "type": "lawn", "points": [[0, 0], [1, 0], [1, 1]]}]
-    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": building})
+    await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": building})
     assert (await client.receive_json())["success"]
-    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    await client.send_json_auto_id({"type": "neonplan3d/building/get"})
     got = (await client.receive_json())["result"]["building"]
     assert got["settings"]["north"] == 0
     assert got["settings"]["roof"] == {"type": "none", "pitch": 35, "overhang": 0.4}
@@ -258,7 +277,7 @@ async def test_outdoor_roof_and_north_get_defaults(hass: HomeAssistant, hass_ws_
 
     bad = copy.deepcopy(building)
     bad["floors"][0]["outdoor"][0]["type"] = "volcano"
-    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": bad})
+    await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": bad})
     assert not (await client.receive_json())["success"]
 
 
@@ -267,7 +286,7 @@ async def test_invalid_building_is_rejected(hass: HomeAssistant, hass_ws_client)
     client = await hass_ws_client(hass)
     bad = copy.deepcopy(BUILDING)
     bad["floors"][0]["rooms"][0]["points"] = [[0, 0], [1, 1]]
-    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": bad})
+    await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": bad})
     result = await client.receive_json()
     assert not result["success"]
     assert result["error"]["code"] == "invalid_format"
@@ -276,15 +295,15 @@ async def test_invalid_building_is_rejected(hass: HomeAssistant, hass_ws_client)
 async def test_changes_require_admin(hass: HomeAssistant, hass_ws_client, hass_read_only_access_token) -> None:
     await _setup(hass)
     client = await hass_ws_client(hass, hass_read_only_access_token)
-    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": BUILDING})
+    await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": BUILDING})
     result = await client.receive_json()
     assert not result["success"]
     assert result["error"]["code"] == "unauthorized"
-    await client.send_json_auto_id({"type": "floorplan_3d/image/set", "image_id": "img1", "data": IMAGE})
+    await client.send_json_auto_id({"type": "neonplan3d/image/set", "image_id": "img1", "data": IMAGE})
     result = await client.receive_json()
     assert result["error"]["code"] == "unauthorized"
     # reading is allowed
-    await client.send_json_auto_id({"type": "floorplan_3d/building/get"})
+    await client.send_json_auto_id({"type": "neonplan3d/building/get"})
     result = await client.receive_json()
     assert result["success"]
 
@@ -292,15 +311,15 @@ async def test_changes_require_admin(hass: HomeAssistant, hass_ws_client, hass_r
 async def test_images(hass: HomeAssistant, hass_ws_client) -> None:
     await _setup(hass)
     client = await hass_ws_client(hass)
-    await client.send_json_auto_id({"type": "floorplan_3d/image/set", "image_id": "img1", "data": IMAGE})
+    await client.send_json_auto_id({"type": "neonplan3d/image/set", "image_id": "img1", "data": IMAGE})
     assert (await client.receive_json())["success"]
-    await client.send_json_auto_id({"type": "floorplan_3d/image/get", "image_id": "img1"})
+    await client.send_json_auto_id({"type": "neonplan3d/image/get", "image_id": "img1"})
     assert (await client.receive_json())["result"]["data"] == IMAGE
-    await client.send_json_auto_id({"type": "floorplan_3d/image/set", "image_id": "img2", "data": "not an image"})
+    await client.send_json_auto_id({"type": "neonplan3d/image/set", "image_id": "img2", "data": "not an image"})
     assert not (await client.receive_json())["success"]
-    await client.send_json_auto_id({"type": "floorplan_3d/image/delete", "image_id": "img1"})
+    await client.send_json_auto_id({"type": "neonplan3d/image/delete", "image_id": "img1"})
     assert (await client.receive_json())["success"]
-    await client.send_json_auto_id({"type": "floorplan_3d/image/get", "image_id": "img1"})
+    await client.send_json_auto_id({"type": "neonplan3d/image/get", "image_id": "img1"})
     assert (await client.receive_json())["error"]["code"] == "not_found"
 
 
@@ -325,9 +344,9 @@ async def test_unused_images_are_dropped_on_load(hass: HomeAssistant, hass_stora
 async def test_remove_entry_deletes_all_stores(hass: HomeAssistant, hass_ws_client, hass_storage) -> None:
     entry = await _setup(hass)
     client = await hass_ws_client(hass)
-    await client.send_json_auto_id({"type": "floorplan_3d/building/save", "building": BUILDING})
+    await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": BUILDING})
     await client.receive_json()
-    await client.send_json_auto_id({"type": "floorplan_3d/image/set", "image_id": "img1", "data": IMAGE})
+    await client.send_json_auto_id({"type": "neonplan3d/image/set", "image_id": "img1", "data": IMAGE})
     await client.receive_json()
     await hass.async_block_till_done()
     assert STORAGE_KEY_BUILDING in hass_storage
@@ -344,11 +363,11 @@ async def test_remove_entry_deletes_all_stores(hass: HomeAssistant, hass_ws_clie
 async def test_panel_and_card_are_registered_and_removed(hass: HomeAssistant, mock_frontend) -> None:
     entry = await _setup(hass)
     mock_frontend["register"].assert_awaited_once()
-    assert mock_frontend["register"].await_args.kwargs["frontend_url_path"] == "floorplan-3d"
+    assert mock_frontend["register"].await_args.kwargs["frontend_url_path"] == "neonplan3d"
     url = mock_frontend["add_js"].call_args.args[1]
-    assert url.startswith("/floorplan_3d_static/floorplan-3d.js?v=")
+    assert url.startswith("/neonplan3d_static/neonplan3d.js?v=")
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
-    mock_frontend["remove_panel"].assert_called_once_with(hass, "floorplan-3d")
+    mock_frontend["remove_panel"].assert_called_once_with(hass, "neonplan3d")
     mock_frontend["remove_js"].assert_called_once_with(hass, url)

@@ -103,11 +103,11 @@ export class Floorplan3dCard extends LitElement {
   /** Visual editor in the dashboard (no YAML needed). */
   static async getConfigElement(): Promise<HTMLElement> {
     await loadCardEditor();
-    return document.createElement("floorplan-3d-card-editor");
+    return document.createElement("neonplan3d-card-editor");
   }
 
   static getStubConfig(): CardConfig {
-    return { type: "custom:floorplan-3d-card" };
+    return { type: "custom:neonplan3d-card" };
   }
 
   setConfig(config: CardConfig): void {
@@ -347,12 +347,12 @@ export class Floorplan3dCard extends LitElement {
   ];
 }
 
-if (!customElements.get("floorplan-3d-card")) {
-  customElements.define("floorplan-3d-card", Floorplan3dCard);
+if (!customElements.get("neonplan3d-card")) {
+  customElements.define("neonplan3d-card", Floorplan3dCard);
   const w = window as Window & { customCards?: unknown[] };
   w.customCards = w.customCards ?? [];
   w.customCards.push({
-    type: "floorplan-3d-card",
+    type: "neonplan3d-card",
     name: translate(undefined, "card_name"),
     description: translate(undefined, "card_description"),
     preview: false,

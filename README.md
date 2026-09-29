@@ -1,6 +1,6 @@
-# Floorplan 3D
+# NeonPlan 3D
 
-Draw your home directly in Home Assistant and see it as a 3D model in a neon look. No external tools, no cloud.
+**by Mastershort** – draw your home directly in Home Assistant and see it as a 3D model in a neon look, live with your lights, blinds, sensors and cars. No external tools, no cloud.
 
 > **Status: early development (Phase 5 of 6).** The data model, automatic walls, the 2D editor, the neon 3D view with floors and camera flights, device control, doors and windows, furniture, stairs, energy flow and presence work. Kiosk mode, a light theme and the release follow in the last phase (see [docs/plan.md](docs/plan.md), in German).
 
@@ -63,24 +63,24 @@ Draw your home directly in Home Assistant and see it as a 3D model in a neon loo
 - **Presence**: per person a room sensor (e.g. ESPresense, Bermuda) whose state names the room or area; people at home show as pink markers in their room. Floor labels count rooms, lights on, open windows and people.
 - **Backup**: restore points while editing (at most one every 10 minutes, the last 20 are kept), export and import as a JSON file, and "share as template" without areas, devices, sensors and images.
 - **Updates without restart trouble**: fields added by newer versions are passed through, so saving keeps working after an update until Home Assistant restarts.
-- **Sidebar page and dashboard card**: `custom:floorplan-3d-card` is loaded automatically, no resource needed.
+- **Sidebar page and dashboard card**: `custom:neonplan3d-card` is loaded automatically, no resource needed.
 
 ## Installation
 
 ### HACS (custom repository)
 
-1. HACS → ⋮ → *Custom repositories* → add `https://github.com/Mastershort/floorplan-3d` as **Integration**.
-2. Install *Floorplan 3D* and restart Home Assistant.
-3. *Settings → Devices & services → Add integration → Floorplan 3D*.
+1. HACS → ⋮ → *Custom repositories* → add `https://github.com/mastershort/neonplan3d` as **Integration**.
+2. Install *NeonPlan 3D* and restart Home Assistant.
+3. *Settings → Devices & services → Add integration → NeonPlan 3D*.
 
 ### Manual
 
-Copy `custom_components/floorplan_3d` into your `config/custom_components/` folder and restart Home Assistant.
+Copy `custom_components/neonplan3d` into your `config/custom_components/` folder and restart Home Assistant.
 
 ## Dashboard card
 
 ```yaml
-type: custom:floorplan-3d-card
+type: custom:neonplan3d-card
 floor: floor_ab12cd34   # optional: show a single floor (id from the editor)
 height: 420             # optional: height in pixels
 walls: auto             # optional: auto | cut
@@ -116,12 +116,12 @@ cd frontend
 npm install
 npm test          # wall generation and other pure logic
 npm run typecheck
-npm run build     # writes the bundles to custom_components/floorplan_3d/frontend
+npm run build     # writes the bundles to custom_components/neonplan3d/frontend
 npm run screenshot  # renders preview/index.html (invented demo data) with a local Chrome/Edge
 ```
 
 - **Preview without Home Assistant**: open `preview/index.html` through any local web server.
-- **Deploy to a Home Assistant instance**: create `deploy.local.json` with `{"target": "<config>/custom_components/floorplan_3d"}`, then run `npm run deploy` in `frontend/`.
+- **Deploy to a Home Assistant instance**: create `deploy.local.json` with `{"target": "<config>/custom_components/neonplan3d"}`, then run `npm run deploy` in `frontend/`.
 - **Python tests** run in CI (Linux) with `pytest-homeassistant-custom-component`.
 
 ## Licence

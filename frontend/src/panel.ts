@@ -22,14 +22,14 @@ type Mode = "view" | "editor";
 const prefs = {
   get(key: string): string | null {
     try {
-      return localStorage.getItem(`floorplan_3d.${key}`);
+      return localStorage.getItem(`neonplan3d.${key}`);
     } catch {
       return null;
     }
   },
   set(key: string, value: string): void {
     try {
-      localStorage.setItem(`floorplan_3d.${key}`, value);
+      localStorage.setItem(`neonplan3d.${key}`, value);
     } catch {
       // storage unavailable (private mode): the choice just is not remembered
     }
@@ -245,7 +245,7 @@ export class Floorplan3dPanel extends LitElement {
       <div class="fp3d-app">
         <header class="fp3d-header">
           <ha-menu-button .hass=${this.hass} .narrow=${this.narrow}></ha-menu-button>
-          <h1>Floorplan 3D</h1>
+          <h1>NeonPlan 3D</h1>
           ${this.isAdmin
             ? html`<div class="fp3d-seg" role="tablist">
                 <button role="tab" aria-pressed=${this._mode === "view"} @click=${() => this.setMode("view")}>${this.t("view")}</button>
@@ -742,4 +742,4 @@ export class Floorplan3dPanel extends LitElement {
   ];
 }
 
-if (!customElements.get("floorplan-3d-panel")) customElements.define("floorplan-3d-panel", Floorplan3dPanel);
+if (!customElements.get("neonplan3d-panel")) customElements.define("neonplan3d-panel", Floorplan3dPanel);

@@ -1,10 +1,10 @@
 # Möbel-Packs
 
-Möbel-Packs bringen zusätzliche Möbel in Floorplan 3D. Sie werden wie die eingebauten Möbel aus
+Möbel-Packs bringen zusätzliche Möbel in NeonPlan 3D. Sie werden wie die eingebauten Möbel aus
 Quadern und Zylindern gebaut und laufen deshalb genauso flüssig auf schwachen Tablets.
 
 Nur Packs, die mit dem Herausgeber-Schlüssel unterschrieben sind, lassen sich importieren. Der
-öffentliche Schlüssel steht in `custom_components/floorplan_3d/packs.py` (`PACK_PUBLIC_KEYS`); der
+öffentliche Schlüssel steht in `custom_components/neonplan3d/packs.py` (`PACK_PUBLIC_KEYS`); der
 geheime Schlüssel liegt nur beim Herausgeber und gehört nie ins Repo.
 
 ## Ablauf

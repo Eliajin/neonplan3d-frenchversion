@@ -2772,7 +2772,7 @@ export class Fp3dEditor extends LitElement {
 
   private exportPlan(shareable: boolean): void {
     const day = new Date().toISOString().slice(0, 10);
-    download(`floorplan-3d-${this.t(shareable ? "export_name_template" : "export_name_backup")}-${day}.json`, JSON.stringify(exportFile(this._doc, shareable), null, 2));
+    download(`neonplan3d-${this.t(shareable ? "export_name_template" : "export_name_backup")}-${day}.json`, JSON.stringify(exportFile(this._doc, shareable), null, 2));
   }
 
   private async importPlan(e: Event): Promise<void> {

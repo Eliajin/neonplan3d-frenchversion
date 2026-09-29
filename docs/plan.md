@@ -1,4 +1,4 @@
-# Projekt-Prompt: 3D-Wohnungsplan für Home Assistant (Arbeitstitel „Floorplan 3D“)
+# Projekt-Prompt: 3D-Wohnungsplan für Home Assistant (Arbeitstitel „NeonPlan 3D“)
 
 > So startest du: In diesem Ordner eine neue Claude-Code-Sitzung öffnen und schreiben
 > „Lies PROMPT.md und leg mit Phase 1 los.“ Der Name ist ein Arbeitstitel und kann jederzeit geändert werden.

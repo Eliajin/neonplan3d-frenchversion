@@ -2,12 +2,12 @@
   "config": {
     "step": {
       "user": {
-        "title": "Floorplan 3D",
+        "title": "NeonPlan 3D",
         "description": "Adds a sidebar page where you draw your home and see it in 3D."
       }
     },
     "abort": {
-      "single_instance_allowed": "Floorplan 3D is already set up."
+      "single_instance_allowed": "NeonPlan 3D is already set up."
     }
   }
 }

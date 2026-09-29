@@ -48,7 +48,7 @@ export class Floorplan3dCardEditor extends LitElement {
 
   constructor() {
     super();
-    this._config = { type: "custom:floorplan-3d-card" };
+    this._config = { type: "custom:neonplan3d-card" };
     this._floors = [];
   }
 
@@ -352,4 +352,4 @@ export class Floorplan3dCardEditor extends LitElement {
   `;
 }
 
-if (!customElements.get("floorplan-3d-card-editor")) customElements.define("floorplan-3d-card-editor", Floorplan3dCardEditor);
+if (!customElements.get("neonplan3d-card-editor")) customElements.define("neonplan3d-card-editor", Floorplan3dCardEditor);

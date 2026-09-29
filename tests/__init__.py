@@ -1,1 +1,1 @@
-"""Tests for Floorplan 3D."""
+"""Tests for NeonPlan 3D."""
