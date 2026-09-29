@@ -127,8 +127,13 @@ export class Floorplan3dPanel extends LitElement {
 
   private onRoomTap(e: CustomEvent<{ floorId: string; roomId: string | null }>): void {
     const { floorId, roomId } = e.detail;
+    // in the house view (or on another floor) a tap first opens the whole floor; rooms come next
+    if ((this.data.building?.floors.length ?? 0) > 1 && floorId && this._floorId !== floorId) {
+      this._floorId = floorId;
+      this._roomId = null;
+      return;
+    }
     if (!roomId) return;
-    if (this._floorId === null && (this.data.building?.floors.length ?? 0) > 1) this._floorId = floorId;
     this._roomId = roomId === this._roomId ? null : roomId;
   }
 

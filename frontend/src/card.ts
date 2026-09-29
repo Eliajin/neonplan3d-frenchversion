@@ -164,8 +164,13 @@ export class Floorplan3dCard extends LitElement {
               .flows=${this._config?.flows ?? null}
               .floorThumbs=${!this._config?.floor && this._config?.floor_thumbs !== false}
               @room-tap=${(e: CustomEvent<{ floorId: string; roomId: string | null }>) => {
+                // in the house view (or on another floor) a tap first opens the whole floor
+                if (!this._config?.floor && (b?.floors.length ?? 0) > 1 && e.detail.floorId && floorId !== e.detail.floorId) {
+                  this._floorId = e.detail.floorId;
+                  this._roomId = null;
+                  return;
+                }
                 if (!e.detail.roomId) return;
-                if (!floorId && !this._config?.floor) this._floorId = e.detail.floorId;
                 this._roomId = e.detail.roomId === this._roomId ? null : e.detail.roomId;
               }}
               @floor-tap=${(e: CustomEvent<{ floorId: string | null }>) => {

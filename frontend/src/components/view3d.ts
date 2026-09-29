@@ -101,6 +101,9 @@ export class Fp3dView3d extends LitElement {
   declare floorThumbs: boolean;
   private declare _thumbs: { floorId: string; url: string }[];
   private thumbTimer: ReturnType<typeof setTimeout> | undefined;
+  /** What the floor pictures show of the devices (lamps, blinds): they are drawn again when it changes. */
+  private thumbSig = "";
+  private thumbsAt = 0;
   /** Search ("where is …?"): null = closed. */
   private declare _find: string | null;
   private swipeSent = 0;
@@ -285,7 +288,15 @@ export class Fp3dView3d extends LitElement {
     v.setPickTargets(furniture.targets, this.openingTargets());
     v.setScreens(furniture.screens);
     const types = new Map(b.floors.flatMap((f) => f.openings.map((o) => [o.id, o.type] as const)));
-    v.setOpeningStates(new Map([...this.openingLinks!].map(([id, e]) => [id, openingState(hass, e, types.get(id))])));
+    const openingStates = new Map([...this.openingLinks!].map(([id, e]) => [id, openingState(hass, e, types.get(id))]));
+    v.setOpeningStates(openingStates);
+    // the floor pictures follow lamps and blinds (not sensors), at most every few seconds
+    const lampSig = [...deviceMarkers, ...furniture.markers].map((m) => `${m.id}:${m.glow ? `${m.glow.level.toFixed(1)}/${m.glow.color.map((c) => c.toFixed(1)).join("/")}` : 0}`).join(";") + "|" + [...openingStates].map(([id, o]) => `${id}:${o.open}:${o.cover === null ? "-" : o.cover.toFixed(1)}`).join(";");
+    if (lampSig !== this.thumbSig) {
+      const first = this.thumbSig === "";
+      this.thumbSig = lampSig;
+      if (!first) this.scheduleThumbs(1500);
+    }
     const batteryPlaced = b.energy.battery ? b.floors.flatMap((f) => f.placements.filter((p) => p.entity_id === b.energy.battery).map((p) => ({ floorId: f.id, x: p.x, z: p.z })))[0] : null;
     v.setFlows(
       !(this.flows ?? this._flows)
@@ -476,16 +487,20 @@ export class Fp3dView3d extends LitElement {
   }
 
   /** Pictures of the floors, drawn a moment after the plan or the look changed (once, not per frame). */
-  private scheduleThumbs(): void {
+  private scheduleThumbs(delay = 600): void {
     clearTimeout(this.thumbTimer);
     const floors = this.building?.floors.filter((f) => f.rooms.length).length ?? 0;
     if (!this.floorThumbs || floors < 2) {
       this._thumbs = [];
       return;
     }
+    // at most every few seconds, however often lamps change
+    const wait = Math.max(delay, this.thumbsAt + 4000 - Date.now());
     this.thumbTimer = setTimeout(() => {
-      if (this.viewer) this._thumbs = this.viewer.floorThumbnails(this.narrowThumbs ? 104 : 150, this.narrowThumbs ? 78 : 112);
-    }, 600);
+      if (!this.viewer) return;
+      this.thumbsAt = Date.now();
+      this._thumbs = this.viewer.floorThumbnails(this.narrowThumbs ? 104 : 150, this.narrowThumbs ? 78 : 112);
+    }, wait);
   }
 
   private get narrowThumbs(): boolean {
