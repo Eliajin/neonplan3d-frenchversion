@@ -57,6 +57,8 @@ OPENING_SCHEMA = vol.Schema(
         # the same for the second leaf of a double window
         vol.Optional("sensor2", default=None): vol.Any(None, vol.In(["contact", "handle", "contact_tilt"])),
         vol.Optional("tilt2", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        # a sensor with the blind's position while it moves (covers that only report at the end)
+        vol.Optional("position", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Optional("cover", default=None): _ENTITY_REF,
         vol.Optional("contact", default=None): _ENTITY_REF,
         vol.Optional("tilt", default=None): _ENTITY_REF,

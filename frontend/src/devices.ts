@@ -309,6 +309,8 @@ export interface OpeningEntities {
   /** Contact and tilt sensor of the second leaf of a double door or window. */
   contact2?: string | null;
   tilt2?: string | null;
+  /** A sensor with the blind's position while it moves (0–100 % or 0–1, open = high). */
+  position?: string | null;
 }
 
 /** Pairs openings with entities in order; with `shared`, a single entity serves all openings. */
@@ -355,6 +357,7 @@ export function openingEntities(hass: HomeAssistant, floors: readonly Floor[]): 
           tilt: o.tilt === "none" ? null : o.tilt,
           contact2: o.leaves === 2 && o.contact2 && o.contact2 !== "none" ? o.contact2 : null,
           tilt2: o.leaves === 2 && o.tilt2 && o.tilt2 !== "none" ? o.tilt2 : null,
+          position: o.position && o.position !== "none" ? o.position : null,
         });
       }
     }
@@ -411,7 +414,9 @@ export function openingState(
   const open = pos(e.contact) === "open" && !tilted ? 1 : 0;
   let cover: number | null = null;
   const c = e.cover ? hass.states[e.cover] : undefined;
-  if (c && !isUnavailable(c)) {
+  const live = livePosition(hass, e.position);
+  if (live !== null) cover = 1 - live;
+  else if (c && !isUnavailable(c)) {
     const pos = c.attributes.current_position;
     if (typeof pos === "number") cover = 1 - Math.min(100, Math.max(0, pos)) / 100;
     else cover = c.state === "closed" ? 1 : c.state === "opening" || c.state === "closing" ? 0.5 : 0;
@@ -422,6 +427,19 @@ export function openingState(
     return { open: 0, open2: 0, tilt: 0, tilt2: 0, cover };
   }
   return { open, open2, tilt: tilted ? 1 : 0, tilt2: tilted2 ? 1 : 0, cover };
+}
+
+/**
+ * Open fraction from a separate position sensor (Homematic "level" and the like): a percentage
+ * (unit "%" or a value above 1) or a fraction 0–1; null when unknown.
+ */
+function livePosition(hass: HomeAssistant, id: string | null | undefined): number | null {
+  const st = id ? hass.states[id] : undefined;
+  if (!st || isUnavailable(st)) return null;
+  const v = Number(st.state);
+  if (!Number.isFinite(v)) return null;
+  const percent = st.attributes.unit_of_measurement === "%" || v > 1;
+  return Math.min(1, Math.max(0, percent ? v / 100 : v));
 }
 
 // ------------------------------------------------------------------ grouping by device

@@ -118,6 +118,7 @@ async def test_opening_fields_get_defaults(hass: HomeAssistant, hass_ws_client) 
         "sensor": None,
         "sensor2": None,
         "tilt2": None,
+        "position": None,
     }
     assert got[1]["hinge"] == "right" and got[1]["cover"] == "cover.x" and got[1]["contact"] == "none"
 

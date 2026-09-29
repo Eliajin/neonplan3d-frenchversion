@@ -116,10 +116,25 @@ test("doors and windows get blinds and contacts of their room's area, or the one
   };
   const links = openingEntities(hass, [floor]);
   // the only blind of the area serves every window without its own choice; sensors go one per window
-  assert.deepEqual(links.get("w1"), { cover: "cover.rollo", contact: "binary_sensor.f1", tilt: null, contact2: null, tilt2: null });
-  assert.deepEqual(links.get("w2"), { cover: "cover.rollo", contact: "binary_sensor.f2", tilt: null, contact2: null, tilt2: null });
-  assert.deepEqual(links.get("w3"), { cover: null, contact: "binary_sensor.tuer", tilt: null, contact2: null, tilt2: null });
-  assert.deepEqual(links.get("d"), { cover: null, contact: "binary_sensor.tuer", tilt: null, contact2: null, tilt2: null });
+  assert.deepEqual(links.get("w1"), { cover: "cover.rollo", contact: "binary_sensor.f1", tilt: null, contact2: null, tilt2: null, position: null });
+  assert.deepEqual(links.get("w2"), { cover: "cover.rollo", contact: "binary_sensor.f2", tilt: null, contact2: null, tilt2: null, position: null });
+  assert.deepEqual(links.get("w3"), { cover: null, contact: "binary_sensor.tuer", tilt: null, contact2: null, tilt2: null, position: null });
+  assert.deepEqual(links.get("d"), { cover: null, contact: "binary_sensor.tuer", tilt: null, contact2: null, tilt2: null, position: null });
+});
+
+test("a position sensor drives the blind live, as a percentage or a fraction", () => {
+  const hass = hassWith();
+  hass.states["cover.rollo"] = { entity_id: "cover.rollo", state: "closing", attributes: { current_position: 100 } };
+  hass.states["sensor.level"] = { entity_id: "sensor.level", state: "0.25", attributes: {} };
+  const e = { cover: "cover.rollo", contact: null, tilt: null, position: "sensor.level" };
+  assert.equal(openingState(hass, e).cover, 0.75);
+  hass.states["sensor.level"].state = "60";
+  assert.equal(openingState(hass, e).cover, 0.4);
+  hass.states["sensor.level"] = { entity_id: "sensor.level", state: "1", attributes: { unit_of_measurement: "%" } };
+  assert.equal(openingState(hass, e).cover, 0.99);
+  // an unavailable sensor leaves the cover entity in charge (its position: fully open)
+  hass.states["sensor.level"].state = "unavailable";
+  assert.equal(openingState(hass, e).cover, 0);
 });
 
 test("opening states: open, tilted and blind position", () => {

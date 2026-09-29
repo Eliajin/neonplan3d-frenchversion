@@ -46,6 +46,8 @@ export interface Opening {
   /** The same for the second leaf of a double window, with its own tilt sensor. */
   sensor2?: "contact" | "handle" | "contact_tilt" | null;
   tilt2?: string | null;
+  /** A sensor reporting the blind's position while it moves (covers that only report at the end). */
+  position?: string | null;
   cover: EntityRef;
   contact: EntityRef;
   tilt: EntityRef;
