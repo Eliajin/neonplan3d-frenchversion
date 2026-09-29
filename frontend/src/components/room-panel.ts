@@ -57,6 +57,7 @@ export class Fp3dRoomPanel extends LitElement {
   /** Bumped every few seconds while the panel is open, so camera snapshots refresh. */
   private declare _tick: number;
   private cameraTimer: ReturnType<typeof setInterval> | undefined;
+  private memo: { entities: HomeAssistant["entities"]; floor: Floor | null; room: Room; shown: string[]; more: string[] } | null = null;
   private hasCameras = false;
 
   constructor() {
@@ -115,8 +116,13 @@ export class Fp3dRoomPanel extends LitElement {
     const room = this.room;
     if (!room || !this.hass) return nothing;
     const all = areaEntities(this.hass, room.area_id);
-    // what the plan shows in the room; the rest of the area on request (each device's main entity)
-    const { shown, more } = this.floor ? roomPanelEntities(this.hass, this.floor, room) : { shown: all, more: [] };
+    // what the plan shows in the room; the rest of the area on request (each device's main entity);
+    // worked out once per registry, room and floor (every state change renders the panel again)
+    const m = this.memo;
+    const { shown, more } =
+      m && m.entities === this.hass.entities && m.floor === this.floor && m.room === room
+        ? m
+        : (this.memo = { entities: this.hass.entities, floor: this.floor, room, ...(this.floor ? roomPanelEntities(this.hass, this.floor, room) : { shown: all, more: [] }) });
     const extra = groupByDevice(this.hass, more).map((g) => g.primary);
     const hiddenCount = extra.length;
     const ids = this._showAll ? [...shown, ...extra] : shown;
@@ -453,6 +459,19 @@ export class Fp3dRoomPanel extends LitElement {
         color: var(--fp3d-muted);
         font-size: 13px;
         font-variant-numeric: tabular-nums;
+      }
+      @media (pointer: coarse) {
+        .fp3d-rp-close {
+          width: 40px;
+          height: 40px;
+        }
+        .fp3d-rp-swatch {
+          width: 36px;
+          height: 36px;
+        }
+        .fp3d-rp-small {
+          min-height: 36px;
+        }
       }
       .fp3d-rp-close {
         display: grid;

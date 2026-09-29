@@ -89,7 +89,24 @@ stats: false            # optional: show the performance display
 markers: important      # optional: none | important | all
 heatmap: none           # optional: none | temperature | humidity | co2
 theme: neon             # optional: neon | blueprint | day
+energy: true            # optional: energy values at the top
+flows: false            # optional: power flow lines always on/off (without it: a switch in the card)
+room_panel: true        # optional: tapping a room opens its details
+fill: false             # optional: fill the screen below the dashboard header instead of a height
+controls: true          # optional: switches in the card, or a list of walls, floors, temperature, humidity, co2
+room_names: true        # optional: room names in 3D
+floor_stack: dim        # optional: floors below an opened floor: dim | stacked | single
+fullscreen_button: false
+floor_thumbs: true      # optional: floor pictures to switch floors (default: on without a start floor)
+alerts: true            # optional: smoke, gas, CO, water, alarm and windows open in the rain pulse
+alert_jump: false       # optional: jump to the room of a new warning
+scenes: true            # optional: scene and script buttons of the selected room
+idle_return: 0          # optional: kiosk – seconds without a touch until the start view returns
+night: "off"            # optional: kiosk – dim at night: off | sun | "22:00-06:00"
+idle_orbit: false       # optional: kiosk – slow camera turn after the idle return
 ```
+
+All options can also be set in the card's visual editor (no YAML needed).
 
 ## Development
 

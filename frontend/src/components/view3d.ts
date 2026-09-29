@@ -16,6 +16,7 @@ import {
   type FurnitureLinks,
   type OpeningEntities,
 } from "../devices.ts";
+import { alertColor, alertEntities, alertSources, alertText, findAlerts, type Alert, type AlertSources } from "../alerts.ts";
 import { iconPath, iconSvg } from "../icons.ts";
 import { energySummary, findConsumers, flowColor, flowSegments, powerSensorFor, readPower, type Consumer, type EnergySummary } from "../energy.ts";
 import { STAGE, type Theme } from "../themes.ts";
@@ -30,7 +31,7 @@ import { load3d } from "../load3d.ts";
 import { buildMarkers, openMoreInfo, placedEntities, stateText, toggleEntity } from "../markers.ts";
 import { isLamp, LAMP_MODEL, outdoorGround, pointInPolygon, surfaceHeight, type Building, type Furniture } from "../model.ts";
 import { floorCounts, floorInfoText, personsInRooms } from "../presence.ts";
-import { tokens } from "../styles.ts";
+import { controls, tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
 import type { DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Quality, ScreenState, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
 
@@ -68,6 +69,16 @@ export class Fp3dView3d extends LitElement {
     floorThumbs: { attribute: false },
     roomLabels: { attribute: false },
     floorStack: { attribute: false },
+    panelOpen: { attribute: false },
+    alerts: { attribute: false },
+    alertJump: { attribute: false },
+    scenes: { attribute: false },
+    dimmed: { attribute: false },
+    autoOrbit: { attribute: false },
+    _low: { state: true },
+    _narrowStage: { state: true },
+    _alerts: { state: true },
+    _sceneFired: { state: true },
   };
 
   declare hass: HomeAssistant;
@@ -106,6 +117,33 @@ export class Fp3dView3d extends LitElement {
   /** Floors below an opened floor: dimmed, stacked (the house up to it) or hidden. */
   declare floorStack: FloorStack;
   private declare _thumbs: { floorId: string; url: string }[];
+  /** The viewer runs at the tablet level: heavy CSS effects are left out as well. */
+  private declare _low: boolean;
+  /** A room panel (or sheet) is open next to the view: on small screens the view's own controls hide. */
+  declare panelOpen: boolean;
+  /** The stage is narrower than 700 px (smaller floor pictures, phone layout). */
+  private declare _narrowStage: boolean;
+  private resizeObs: ResizeObserver | null = null;
+  /** Warnings (smoke, water, alarm, window in the rain): pulsing rooms and a banner; jump to new ones. */
+  declare alerts: boolean;
+  declare alertJump: boolean;
+  private declare _alerts: Alert[];
+  private alertSrc: AlertSources | null = null;
+  private alertTimer: ReturnType<typeof setInterval> | undefined;
+  private seenAlerts = new Set<string>();
+  /** A room briefly lit up after a double tap switched its lights. */
+  private roomFlash: { roomId: string; until: number } | null = null;
+  /** Scene and script chips of the selected room. */
+  declare scenes: boolean;
+  private declare _sceneFired: string | null;
+  /** Night (kiosk): no effects, cables or floor pictures. */
+  declare dimmed: boolean;
+  /** Screensaver: the view turns slowly by itself. */
+  declare autoOrbit: boolean;
+  /** Search index (rooms and devices), built when the search opens and reused while it is open. */
+  private findIndex: SearchItem[] | null = null;
+  /** Room colours (heatmap) as last sent to the viewer. */
+  private tintSig = "";
   private thumbTimer: ReturnType<typeof setTimeout> | undefined;
   /** What the floor pictures show of the devices (lamps, blinds): they are drawn again when it changes. */
   private thumbSig = "";
@@ -159,6 +197,16 @@ export class Fp3dView3d extends LitElement {
     this.floorThumbs = true;
     this.roomLabels = true;
     this.floorStack = "dim";
+    this._low = false;
+    this.panelOpen = false;
+    this._narrowStage = false;
+    this.alerts = true;
+    this.alertJump = false;
+    this._alerts = [];
+    this.scenes = true;
+    this._sceneFired = null;
+    this.dimmed = false;
+    this.autoOrbit = false;
     try {
       this._flows = localStorage.getItem("floorplan_3d.flows") === "1";
     } catch {
@@ -168,17 +216,38 @@ export class Fp3dView3d extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
-    if (this.hasUpdated && !this.viewer) void this.start();
+    if (this.hasUpdated) {
+      this.observeStage();
+      if (!this.viewer) void this.start();
+    }
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.resizeObs?.disconnect();
+    this.resizeObs = null;
+    clearInterval(this.alertTimer);
+    this.alertTimer = undefined;
     this.viewer?.dispose();
     this.viewer = null;
   }
 
   protected firstUpdated(): void {
+    this.observeStage();
     void this.start();
+  }
+
+  /** Follows the stage's width: the floor pictures shrink on narrow screens. */
+  private observeStage(): void {
+    const stage = this.renderRoot.querySelector(".fp3d-stage");
+    if (!stage || this.resizeObs || typeof ResizeObserver !== "function") return;
+    this.resizeObs = new ResizeObserver((entries) => {
+      const narrow = (entries[0]?.contentRect.width ?? 1000) < 700;
+      if (narrow === this._narrowStage) return;
+      this._narrowStage = narrow;
+      this.scheduleThumbs();
+    });
+    this.resizeObs.observe(stage);
   }
 
   private async start(): Promise<void> {
@@ -198,6 +267,7 @@ export class Fp3dView3d extends LitElement {
         onBack: () => this.fire("back", {}),
         onDeviceTap: (id, x, y) => this.onDeviceTap(id, x, y),
         onDeviceHold: (id, x, y) => this.onDeviceHold(id, x, y),
+        onRoomDoubleTap: (floorId, roomId) => this.onRoomDoubleTap(floorId, roomId),
         onDeviceSwipe: (id, phase, dy, x, y) => this.onDeviceSwipe(id, phase, dy, x, y),
         onFurnitureSelect: (id) => this.fire("furniture-select", { id }),
         onFurnitureMove: (id, x, z) => this.fire("furniture-move", { id, x, z }),
@@ -210,6 +280,9 @@ export class Fp3dView3d extends LitElement {
       this.viewer.setTheme(this.theme);
       this.viewer.setFurnishMode(this.furnish);
       this.viewer.setFloorStack(this.floorStack);
+      this.viewer.setStats(this.showStats);
+      this.viewer.setAutoOrbit(this.autoOrbit ? 0.06 : 0);
+      this._low = this.viewer.low;
       this.viewer.setPacks([...getPacks()]);
       this.shownPacks = packsVersion();
       if (this.building) this.viewer.setBuilding(this.building);
@@ -234,9 +307,10 @@ export class Fp3dView3d extends LitElement {
     }
     if (changed.has("building") && this.building) v.setBuilding(this.building);
     if (changed.has("building") || changed.has("theme") || changed.has("floorThumbs") || changed.has("packs")) this.scheduleThumbs();
-    if (changed.has("building") || changed.has("hass") || changed.has("markerMode") || changed.has("heatMode") || changed.has("flows")) {
-      this.syncDevices(changed.has("building") || changed.has("markerMode") || changed.has("heatMode") || changed.has("flows"));
-    }
+    const forced = ["building", "markerMode", "heatMode", "flows", "alerts", "dimmed"].some((k) => changed.has(k));
+    if (forced || changed.has("hass")) this.syncDevices(forced);
+    if (changed.has("autoOrbit")) v.setAutoOrbit(this.autoOrbit ? 0.06 : 0);
+    if (changed.has("_thumbs") || changed.has("_narrowStage")) v.setLabelInset(this._thumbs.length ? (this.narrowThumbs ? 136 : 184) : 0);
     if (changed.has("floorId")) v.setFloor(this.floorId);
     if (changed.has("roomId") && (this.roomId || changed.get("roomId"))) v.selectRoom(this.roomId);
     if (changed.has("wallMode")) v.setWallMode(this.wallMode);
@@ -245,7 +319,12 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("theme")) v.setTheme(this.theme);
     if (changed.has("furnish")) v.setFurnishMode(this.furnish);
     if (changed.has("selectedFurniture")) v.selectFurniture(this.selectedFurniture);
-    if (changed.has("quality") && changed.get("quality") !== undefined) v.setQuality(this.quality);
+    if (changed.has("quality") && changed.get("quality") !== undefined) {
+      v.setQuality(this.quality);
+      this._low = v.low;
+    }
+    if (changed.has("showStats")) v.setStats(this.showStats);
+    if (changed.has("building")) this.findIndex = null;
   }
 
   /**
@@ -262,6 +341,7 @@ export class Fp3dView3d extends LitElement {
       this.openingLinks = openingEntities(hass, b.floors);
       this.furnitureLinks = furnitureEntities(hass, b.floors);
       this.linkedRegistry = hass.entities;
+      this.findIndex = null;
       const links = [...this.openingLinks.values()].flatMap((e) => [e.cover, e.contact, e.tilt, e.contact2 ?? null, e.tilt2 ?? null]);
       const placed = placedEntities(b);
       const power = placed.map((id) => powerSensorFor(hass, id));
@@ -273,7 +353,9 @@ export class Fp3dView3d extends LitElement {
         this.heatMode === "none"
           ? []
           : b.floors.flatMap((f) => f.rooms.flatMap((r) => areaEntities(hass, r.area_id).filter((id) => id.startsWith("sensor."))));
-      const all = [...placed, ...links, ...power, ...furniture, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights, ...heat, "sun.sun"];
+      this.alertSrc = this.alerts ? alertSources(hass, b) : null;
+      const warn = this.alertSrc ? alertEntities(this.alertSrc) : [];
+      const all = [...placed, ...links, ...power, ...furniture, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights, ...heat, ...warn, "sun.sun"];
       this.watched = [...new Set(all.filter((id): id is string => !!id))];
       force = true;
     }
@@ -291,7 +373,8 @@ export class Fp3dView3d extends LitElement {
     v.setDevices(
       [...deviceMarkers, ...furniture.markers].map((m) => {
         const power = byDevice.get(m.id) ?? null;
-        const marker = { ...m, power, powerText: power === null ? undefined : formatPower(hass, power) };
+        // at night (kiosk) colour effects rest
+        const marker = { ...m, power, powerText: power === null ? undefined : formatPower(hass, power), effect: this.dimmed ? false : m.effect };
         return { ...marker, pin: this.showPin(marker) };
       }),
     );
@@ -301,6 +384,7 @@ export class Fp3dView3d extends LitElement {
     const types = new Map(b.floors.flatMap((f) => f.openings.map((o) => [o.id, o.type] as const)));
     const openingStates = new Map([...this.openingLinks!].map(([id, e]) => [id, openingState(hass, e, types.get(id))]));
     v.setOpeningStates(openingStates);
+    this.setAlerts(this.alertSrc ? findAlerts(hass, b, this.alertSrc, this.openingLinks!) : []);
     // the floor pictures follow lamps and blinds (not sensors), at most every few seconds
     const lampSig = [...deviceMarkers, ...furniture.markers].map((m) => `${m.id}:${m.glow ? `${m.glow.level.toFixed(1)}/${m.glow.color.map((c) => c.toFixed(1)).join("/")}` : 0}`).join(";") + "|" + [...openingStates].map(([id, o]) => `${id}:${o.open}:${o.cover === null ? "-" : o.cover.toFixed(1)}`).join(";");
     if (lampSig !== this.thumbSig) {
@@ -310,7 +394,7 @@ export class Fp3dView3d extends LitElement {
     }
     const batteryPlaced = b.energy.battery ? b.floors.flatMap((f) => f.placements.filter((p) => p.entity_id === b.energy.battery).map((p) => ({ floorId: f.id, x: p.x, z: p.z })))[0] : null;
     v.setFlows(
-      !(this.flows ?? this._flows)
+      !(this.flows ?? this._flows) || this.dimmed
         ? []
         : flowSegments({ building: b, consumers, summary, battery: batteryPlaced ?? null }).map((f) => ({
         floorId: f.floorId,
@@ -330,16 +414,102 @@ export class Fp3dView3d extends LitElement {
     const elevation = typeof sun?.elevation === "number" ? sun.elevation : null;
     v.setSun(elevation !== null && typeof sun?.azimuth === "number" ? { elevation, azimuth: sun.azimuth } : null);
     this._sky = elevation === null ? 0 : Math.min(1, Math.max(0, (elevation + 4) / 16));
-    // heatmap
-    if (this.heatMode === "none") v.setRoomTint(null);
-    else {
+    this.applyTint();
+    const hasEnergy = summary.grid !== null || summary.solar !== null || summary.battery !== null || summary.tariff !== null;
+    const energy = hasEnergy ? summary : null;
+    // a new object would make Lit render again; only changed values do
+    if (JSON.stringify(energy) !== JSON.stringify(this._energy)) this._energy = energy;
+  }
+
+  /** New warnings start the pulse (and a jump to the room when wanted); none stops it. */
+  private setAlerts(alerts: Alert[]): void {
+    const keys = alerts.map((a) => `${a.kind}:${a.entity}`);
+    const fresh = alerts.filter((_, i) => !this.seenAlerts.has(keys[i]));
+    this.seenAlerts = new Set(keys);
+    if (keys.join() !== this._alerts.map((a) => `${a.kind}:${a.entity}`).join()) this._alerts = alerts;
+    if (alerts.length && !this.alertTimer) this.alertTimer = setInterval(() => !document.hidden && this.applyTint(), this._low ? 200 : 100);
+    if (!alerts.length && this.alertTimer) {
+      clearInterval(this.alertTimer);
+      this.alertTimer = undefined;
+    }
+    if (fresh.length && this.alertJump) this.jumpTo(fresh[0]);
+  }
+
+  /** Show where a warning is: its floor and room, or the house for an alarm. */
+  private jumpTo(a: Alert): void {
+    if (!a.floorId) {
+      this.fire("floor-tap", { floorId: null });
+      return;
+    }
+    if (this.floorId !== a.floorId) this.fire("floor-tap", { floorId: a.floorId });
+    // the host switches the floor first; the room follows once it has rendered
+    if (a.roomId) setTimeout(() => this.fire("room-tap", { floorId: a.floorId, roomId: a.roomId }), 60);
+  }
+
+  /** Double tap on a room: all its lights off when one is on, otherwise all on. */
+  private onRoomDoubleTap(floorId: string, roomId: string): void {
+    const b = this.building;
+    const hass = this.hass;
+    const floor = b?.floors.find((f) => f.id === floorId);
+    const room = floor?.rooms.find((r) => r.id === roomId);
+    if (!b || !hass || !floor || !room) return;
+    const ids = new Set(areaEntities(hass, room.area_id).filter((id) => kindOf(id) === "light"));
+    for (const p of floor.placements) if (kindOf(p.entity_id) === "light" && pointInPolygon([p.x, p.z], room.points)) ids.add(p.entity_id);
+    for (const f of floor.furniture) {
+      const e = this.furnitureLinks.get(f.id)?.entity;
+      if (e && isLamp(f.type) && pointInPolygon([f.x, f.z], room.points)) ids.add(e);
+    }
+    const lights = [...ids];
+    if (!lights.length) return;
+    const anyOn = lights.some((id) => hass.states[id]?.state === "on");
+    void hass.callService("homeassistant", anyOn ? "turn_off" : "turn_on", { entity_id: lights });
+    this.roomFlash = { roomId, until: performance.now() + 350 };
+    this.applyTint();
+    setTimeout(() => {
+      this.roomFlash = null;
+      this.applyTint();
+    }, 380);
+  }
+
+  private runScene(id: string): void {
+    void this.hass.callService(id.split(".")[0], "turn_on", { entity_id: id });
+    this._sceneFired = id;
+    setTimeout(() => (this._sceneFired = null), 600);
+  }
+
+  /**
+   * Floor colours of the rooms: the heatmap, the pulsing rooms of warnings and the flash of a double
+   * tap; sent to the viewer only when they changed.
+   */
+  private applyTint(): void {
+    const v = this.viewer;
+    const b = this.building;
+    const hass = this.hass;
+    if (!v || !b || !hass) return;
+    let tint: Map<string, [number, number, number]> | null = null;
+    if (this.heatMode !== "none") {
       const mode = this.heatMode;
       const values = roomValues(hass, b, mode);
       this.heatValues = values;
-      v.setRoomTint(new Map([...values].map(([id, value]) => [id, heatColor(mode, value)])));
+      tint = new Map([...values].map(([id, value]) => [id, heatColor(mode, value)]));
     }
-    const hasEnergy = summary.grid !== null || summary.solar !== null || summary.battery !== null || summary.tariff !== null;
-    this._energy = hasEnergy ? summary : null;
+    if (this._alerts.length) {
+      tint ??= new Map();
+      const k = 0.55 + 0.45 * Math.sin(performance.now() / 160);
+      for (const a of this._alerts) {
+        const c = alertColor(a.kind).map((x) => x * k) as [number, number, number];
+        if (a.roomId) tint.set(a.roomId, c);
+        else for (const f of b.floors) for (const r of f.rooms) tint.set(r.id, c);
+      }
+    }
+    if (this.roomFlash && performance.now() < this.roomFlash.until) {
+      tint ??= new Map();
+      tint.set(this.roomFlash.roomId, [0.9, 0.95, 1]);
+    }
+    const sig = tint ? [...tint].map(([id, c]) => `${id}:${c.map((x) => x.toFixed(2)).join(",")}`).join(";") : "";
+    if (sig === this.tintSig) return;
+    this.tintSig = sig;
+    v.setRoomTint(tint);
   }
 
   /**
@@ -526,17 +696,23 @@ export class Fp3dView3d extends LitElement {
       this._thumbs = [];
       return;
     }
-    // at most every few seconds, however often lamps change
-    const wait = Math.max(delay, this.thumbsAt + 4000 - Date.now());
+    // at most every few seconds, however often lamps change (the tablet level waits longer)
+    const wait = Math.max(delay, this.thumbsAt + (this._low ? 8000 : 4000) - Date.now());
     this.thumbTimer = setTimeout(() => {
-      if (!this.viewer) return;
+      // at night (kiosk) the pictures are drawn once and then rest
+      if (!this.viewer || (this.dimmed && this._thumbs.length)) return;
+      // a hidden tab draws nothing; the pictures follow once it shows again
+      if (document.hidden) {
+        this.scheduleThumbs(3000);
+        return;
+      }
       this.thumbsAt = Date.now();
       this._thumbs = this.viewer.floorThumbnails(this.narrowThumbs ? 104 : 150, this.narrowThumbs ? 78 : 112);
     }, wait);
   }
 
   private get narrowThumbs(): boolean {
-    return (this.renderRoot.querySelector(".fp3d-stage") as HTMLElement | null)?.clientWidth! < 700;
+    return this._narrowStage;
   }
 
   private renderThumbs() {
@@ -626,6 +802,29 @@ export class Fp3dView3d extends LitElement {
     setTimeout(() => this.viewer?.focus(item.floorId, item.x, item.z, item.y, item.entity), 120);
   }
 
+  private renderAlerts() {
+    const b = this.building;
+    if (!this._alerts.length || !b) return nothing;
+    const shown = this._alerts.slice(0, 3);
+    return html`<div class="fp3d-alert-banner" role="alert">
+      ${shown.map((a) => html`<button class="fp3d-alert fp3d-alert-${a.kind}" title=${alertText(this.hass, b, a)} @click=${() => this.jumpTo(a)}>${alertText(this.hass, b, a)}</button>`)}
+      ${this._alerts.length > 3 ? html`<span class="fp3d-alert-more">+${this._alerts.length - 3}</span>` : nothing}
+    </div>`;
+  }
+
+  /** Scenes and scripts of the selected room's area as chips (while no panel lists them). */
+  private renderScenes() {
+    const b = this.building;
+    if (!this.scenes || !this.roomId || this.panelOpen || !b || !this.hass) return nothing;
+    const room = b.floors.flatMap((f) => f.rooms).find((r) => r.id === this.roomId);
+    const ids = room ? areaEntities(this.hass, room.area_id).filter((id) => kindOf(id) === "scene" || kindOf(id) === "script").slice(0, 6) : [];
+    if (!ids.length) return nothing;
+    const areaName = room?.area_id ? this.hass.areas?.[room.area_id]?.name : undefined;
+    return html`<div class="fp3d-scenes">
+      ${ids.map((id) => html`<button class="fp3d-chip" aria-pressed=${this._sceneFired === id} @click=${() => this.runScene(id)}>${entityName(this.hass, id, areaName)}</button>`)}
+    </div>`;
+  }
+
   private renderFind() {
     const b = this.building;
     if (!b || !this.hass) return nothing;
@@ -634,7 +833,7 @@ export class Fp3dView3d extends LitElement {
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4.5 4.5" /></svg>
       </button>`;
     }
-    const results = searchItems(searchIndex(this.hass, b), this._find);
+    const results = searchItems((this.findIndex ??= searchIndex(this.hass, b)), this._find);
     return html`<div class="fp3d-find">
       <input
         type="search"
@@ -682,7 +881,7 @@ export class Fp3dView3d extends LitElement {
     const left = Math.max(8, Math.min(w - 240, m.x - 116));
     const top = Math.max(8, Math.min(h - 360, m.y - 170));
     return html`<div class="fp3d-menu-backdrop" @click=${() => (this._menu = null)}></div>
-      <fp3d-quick-menu style="left:${left}px;top:${top}px" .hass=${this.hass} .entity=${m.entity} @close=${() => (this._menu = null)}></fp3d-quick-menu>`;
+      <fp3d-quick-menu style="left:${left}px;top:${top}px" ?low=${this._low} .hass=${this.hass} .entity=${m.entity} @close=${() => (this._menu = null)}></fp3d-quick-menu>`;
   }
 
   private onDeviceTap(entityId: string, x = 0, y = 0): void {
@@ -760,9 +959,12 @@ export class Fp3dView3d extends LitElement {
     const mix = (a: number[], b: number[]) => `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * sky)).join(",")})`;
     const stage = STAGE[this.theme] ?? STAGE.neon;
     const style = `--fp3d-sky:${mix(stage.night[0], stage.day[0])};--fp3d-ground:${mix(stage.night[1], stage.day[1])}`;
-    return html`<div class="fp3d-stage ${this.roomLabels ? "" : "fp3d-no-room-names"}" style=${style}>
+    return html`<div
+      class="fp3d-stage ${this.roomLabels ? "" : "fp3d-no-room-names"} ${this._low ? "fp3d-low" : ""} ${this.panelOpen ? "fp3d-panel-open" : ""} ${this._alerts.length ? "fp3d-has-alerts" : ""}"
+      style=${style}
+    >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.renderEnergy()} ${this.renderLegend()}
-      ${this.renderThumbs()} ${this.renderFind()} ${this.renderSwipe()} ${this.renderMenu()}
+      ${this.renderAlerts()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderSwipe()} ${this.renderMenu()}
       ${this.showStats && this._stats
         ? html`<span class="fp3d-stats"
             ><b>${this._stats.fps ? translate(this.hass, "stats_fps", { fps: this._stats.fps, ms: this._stats.worstMs }) : translate(this.hass, "stats_idle")}</b> ·
@@ -775,16 +977,90 @@ export class Fp3dView3d extends LitElement {
 
   static styles = [
     tokens,
+    controls,
     css`
       :host {
         display: block;
         position: relative;
         min-height: 200px;
       }
+      .fp3d-alert-banner {
+        position: absolute;
+        left: 50%;
+        top: 10px;
+        transform: translateX(-50%);
+        display: flex;
+        justify-content: center;
+        gap: 6px;
+        max-width: calc(100% - 24px);
+        z-index: 4;
+      }
+      .fp3d-alert {
+        flex: 0 1 auto;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        padding: 7px 14px 7px 12px;
+        border: 0;
+        border-left: 4px solid #ff3b4f;
+        border-radius: 12px;
+        background: var(--fp3d-chrome-solid);
+        color: var(--fp3d-text);
+        font: 600 13.5px var(--fp3d-font);
+        box-shadow: 0 0 18px rgba(255, 59, 79, 0.35);
+        cursor: pointer;
+        animation: fp3d-alert-pulse 1.2s ease-in-out infinite;
+      }
+      .fp3d-alert-water,
+      .fp3d-alert-window_rain {
+        border-left-color: #4fb3ff;
+        box-shadow: 0 0 18px rgba(79, 179, 255, 0.35);
+      }
+      .fp3d-alert-alarm_pending {
+        border-left-color: #ffb547;
+        box-shadow: 0 0 18px rgba(255, 181, 71, 0.35);
+      }
+      .fp3d-alert-more {
+        align-self: center;
+        color: var(--fp3d-muted);
+        font-size: 13px;
+      }
+      @keyframes fp3d-alert-pulse {
+        50% {
+          box-shadow: 0 0 4px transparent;
+        }
+      }
+      .fp3d-has-alerts .fp3d-energy {
+        top: 58px;
+      }
+      .fp3d-scenes {
+        position: absolute;
+        left: 60px;
+        right: 60px;
+        bottom: calc(10px + var(--fp3d-bottom-inset, 0px));
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 6px;
+        z-index: 2;
+        pointer-events: none;
+      }
+      .fp3d-scenes .fp3d-chip {
+        pointer-events: auto;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .fp3d-alert,
+        .fp3d-dev-found {
+          animation: none;
+        }
+      }
       .fp3d-stage {
         position: absolute;
         inset: 0;
         overflow: hidden;
+        container-type: size;
+        container-name: fp3d;
         background: radial-gradient(ellipse at 50% 35%, var(--fp3d-sky, var(--fp3d-bg2)), var(--fp3d-ground, var(--fp3d-bg)) 72%);
         transition: background 2s ease;
       }
@@ -920,6 +1196,23 @@ export class Fp3dView3d extends LitElement {
       .fp3d-no-room-names .fp3d-pin {
         display: none !important;
       }
+      /* tablet level: blur over the canvas and glowing shadows are expensive on weak GPUs */
+      .fp3d-stage.fp3d-low {
+        transition: none;
+      }
+      .fp3d-low .fp3d-pin,
+      .fp3d-low .fp3d-dev,
+      .fp3d-low .fp3d-dev-on,
+      .fp3d-low .fp3d-energy-item,
+      .fp3d-low .fp3d-find input,
+      .fp3d-low .fp3d-find-list,
+      .fp3d-low .fp3d-find-btn,
+      .fp3d-low .fp3d-swipe,
+      .fp3d-low .fp3d-thumb {
+        backdrop-filter: none;
+        box-shadow: none;
+        transition: none;
+      }
       .fp3d-thumbs {
         position: absolute;
         left: 12px;
@@ -986,7 +1279,7 @@ export class Fp3dView3d extends LitElement {
       .fp3d-find-btn {
         position: absolute;
         left: 12px;
-        bottom: 10px;
+        bottom: calc(10px + var(--fp3d-bottom-inset, 0px));
         width: 40px;
         height: 40px;
         display: grid;
@@ -1001,7 +1294,7 @@ export class Fp3dView3d extends LitElement {
       .fp3d-find {
         position: absolute;
         left: 12px;
-        bottom: 10px;
+        bottom: calc(10px + var(--fp3d-bottom-inset, 0px));
         width: min(340px, calc(100% - 24px));
         display: flex;
         flex-direction: column-reverse;
@@ -1146,7 +1439,7 @@ export class Fp3dView3d extends LitElement {
       .fp3d-legend {
         position: absolute;
         left: 12px;
-        bottom: 60px;
+        bottom: calc(60px + var(--fp3d-bottom-inset, 0px));
         display: grid;
         gap: 4px;
         min-width: 180px;
@@ -1236,9 +1529,40 @@ export class Fp3dView3d extends LitElement {
       .fp3d-energy-tariff {
         border-left-color: #b98cff;
       }
-      @media (max-width: 600px) {
-        .fp3d-energy-item:nth-child(n + 4) {
+      /* narrow stages (portrait tablets, phones): the energy values scroll in one row */
+      @container fp3d (max-width: 900px) {
+        .fp3d-energy {
+          flex-wrap: nowrap;
+          overflow-x: auto;
+          scrollbar-width: none;
+          pointer-events: auto;
+        }
+        .fp3d-legend {
+          bottom: auto;
+          top: 62px;
+        }
+        .fp3d-has-alerts .fp3d-legend {
+          top: 110px;
+        }
+      }
+      /* a room sheet covers the lower half: the view's own controls step aside */
+      @container fp3d ((max-width: 700px) or ((orientation: portrait) and (max-width: 1000px))) {
+        .fp3d-panel-open :is(.fp3d-find-btn, .fp3d-find, .fp3d-thumbs, .fp3d-legend, .fp3d-stats, .fp3d-scenes) {
           display: none;
+        }
+      }
+      @media (pointer: coarse) {
+        .fp3d-find-close {
+          width: 40px;
+          height: 40px;
+          right: 1px;
+          bottom: 1px;
+        }
+        .fp3d-dev {
+          padding: 6px;
+        }
+        .fp3d-pin {
+          padding: 8px 12px;
         }
       }
       .fp3d-dev-full .fp3d-dev-text {
@@ -1282,7 +1606,7 @@ export class Fp3dView3d extends LitElement {
         background: var(--fp3d-chrome);
         position: absolute;
         right: 10px;
-        bottom: 8px;
+        bottom: calc(8px + var(--fp3d-bottom-inset, 0px));
         font-size: 11.5px;
         color: var(--fp3d-muted);
         font-variant-numeric: tabular-nums;

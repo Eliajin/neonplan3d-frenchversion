@@ -2700,7 +2700,7 @@ export class Fp3dEditor extends LitElement {
 
   private exportPlan(shareable: boolean): void {
     const day = new Date().toISOString().slice(0, 10);
-    download(`floorplan-3d-${shareable ? "vorlage" : "sicherung"}-${day}.json`, JSON.stringify(exportFile(this._doc, shareable), null, 2));
+    download(`floorplan-3d-${this.t(shareable ? "export_name_template" : "export_name_backup")}-${day}.json`, JSON.stringify(exportFile(this._doc, shareable), null, 2));
   }
 
   private async importPlan(e: Event): Promise<void> {
@@ -2712,7 +2712,8 @@ export class Fp3dEditor extends LitElement {
     try {
       building = parseExport(await file.text());
     } catch (err) {
-      alert(this.t("backup_import_error", { error: (err as Error).message }));
+      const code = (err as Error).message;
+      alert(code === "not_json" ? this.t("import_error_not_json") : code === "not_plan" ? this.t("import_error_not_plan") : this.t("backup_import_error", { error: code }));
       return;
     }
     if (!confirm(this.t("backup_import_confirm"))) return;

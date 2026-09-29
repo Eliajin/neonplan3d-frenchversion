@@ -7,48 +7,12 @@ import "./components/view3d.ts";
 import { translate } from "./i18n.ts";
 import { controls, tokens } from "./styles.ts";
 import type { HomeAssistant } from "./types.ts";
-import type { Quality, WallMode } from "./viewer/viewer3d.ts";
-
-export interface CardConfig {
-  type: string;
-  floor?: string;
-  height?: number;
-  walls?: WallMode;
-  /** Pull floors apart in the house view (default true). */
-  explode?: boolean;
-  quality?: Quality;
-  /** Show the performance display (frames per second, draw calls). */
-  stats?: boolean;
-  /** HTML markers: none | important (default) | all. */
-  markers?: "none" | "important" | "all";
-  /** Heatmap of the rooms: none | temperature | humidity | co2. */
-  heatmap?: "none" | "temperature" | "humidity" | "co2";
-  /** Look: neon | blueprint | day. */
-  theme?: "neon" | "blueprint" | "day";
-  /** Energy values at the top (default true). */
-  energy?: boolean;
-  /** Power flow lines always on or off; without it the card has its own switch. */
-  flows?: boolean;
-  /** Tapping a room opens its details (lights, blinds, cameras); default true. */
-  room_panel?: boolean;
-  /** Fill the screen below the dashboard header instead of a fixed height. */
-  fill?: boolean;
-  /** Switches in the card: all (true) or a list of walls, floors, temperature, humidity, co2. */
-  controls?: boolean | CardControl[];
-  /** Room names in 3D (default true). */
-  room_names?: boolean;
-  /** An opened floor with the floors below it dimmed (default), stacked, or on its own. */
-  floor_stack?: "dim" | "stacked" | "single";
-  /** A button for full screen (hides the dashboard around the card). */
-  fullscreen_button?: boolean;
-  /** Small pictures of the floors to switch between them (default: on without a start floor). */
-  floor_thumbs?: boolean;
-}
+import type { CardConfig, CardControl } from "./card-config.ts";
+import { nightActive } from "./kiosk.ts";
+import { loadCardEditor } from "./load-card-editor.ts";
+import type { WallMode } from "./viewer/viewer3d.ts";
 
 type HeatMode = NonNullable<CardConfig["heatmap"]>;
-
-export const CARD_CONTROLS = ["walls", "floors", "temperature", "humidity", "co2"] as const;
-export type CardControl = (typeof CARD_CONTROLS)[number];
 
 export class Floorplan3dCard extends LitElement {
   static properties = {
@@ -60,6 +24,8 @@ export class Floorplan3dCard extends LitElement {
     _heat: { state: true },
     _explode: { state: true },
     _fullscreen: { state: true },
+    _night: { state: true },
+    _orbit: { state: true },
   };
 
   declare hass: HomeAssistant;
@@ -72,6 +38,11 @@ export class Floorplan3dCard extends LitElement {
   private declare _heat: HeatMode | null;
   private declare _explode: boolean | null;
   private declare _fullscreen: boolean;
+  /** Kiosk: the night dimming is active; the screensaver turn runs (after an idle return). */
+  private declare _night: boolean;
+  private declare _orbit: boolean;
+  private idleTimer: ReturnType<typeof setTimeout> | undefined;
+  private nightTimer: ReturnType<typeof setInterval> | undefined;
 
   private readonly data = new BuildingController(this);
 
@@ -83,6 +54,28 @@ export class Floorplan3dCard extends LitElement {
     this._heat = null;
     this._explode = null;
     this._fullscreen = false;
+    this._night = false;
+    this._orbit = false;
+  }
+
+  /** Any touch ends the screensaver and restarts the idle clock. */
+  private readonly touch = () => {
+    if (this._orbit) this._orbit = false;
+    this.armIdle();
+  };
+
+  private armIdle(): void {
+    clearTimeout(this.idleTimer);
+    const s = this._config?.idle_return ?? 0;
+    if (s > 0) this.idleTimer = setTimeout(() => this.returnHome(), s * 1000);
+  }
+
+  /** Back to the start view (room closed, start floor, camera reset); the screensaver may start. */
+  private returnHome(): void {
+    this._roomId = null;
+    this._floorId = undefined;
+    (this.shadowRoot?.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void }) | null)?.resetView();
+    if (this._config?.idle_orbit) this._orbit = true;
   }
 
   private readonly onFullscreen = () => (this._fullscreen = !!document.fullscreenElement && this.shadowRoot?.contains(document.fullscreenElement) === true);
@@ -90,11 +83,16 @@ export class Floorplan3dCard extends LitElement {
   connectedCallback(): void {
     super.connectedCallback();
     document.addEventListener("fullscreenchange", this.onFullscreen);
+    this.armIdle();
+    // a time range for the night needs a look at the clock now and then
+    this.nightTimer = setInterval(() => (this._night = nightActive(this._config?.night, this.hass)), 60000);
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
     document.removeEventListener("fullscreenchange", this.onFullscreen);
+    clearTimeout(this.idleTimer);
+    clearInterval(this.nightTimer);
   }
 
   private toggleFullscreen(): void {
@@ -104,7 +102,7 @@ export class Floorplan3dCard extends LitElement {
 
   /** Visual editor in the dashboard (no YAML needed). */
   static async getConfigElement(): Promise<HTMLElement> {
-    await import("./card-editor.ts");
+    await loadCardEditor();
     return document.createElement("floorplan-3d-card-editor");
   }
 
@@ -119,6 +117,9 @@ export class Floorplan3dCard extends LitElement {
     this._walls = null;
     this._heat = null;
     this._explode = null;
+    this._orbit = false;
+    this._night = nightActive(config.night, this.hass);
+    this.armIdle();
   }
 
   getCardSize(): number {
@@ -130,7 +131,11 @@ export class Floorplan3dCard extends LitElement {
   }
 
   protected willUpdate(changed: PropertyValues): void {
-    if (changed.has("hass") && this.hass) this.data.setHass(this.hass);
+    if (changed.has("hass") && this.hass) {
+      this.data.setHass(this.hass);
+      const night = nightActive(this._config?.night, this.hass);
+      if (night !== this._night) this._night = night;
+    }
   }
 
   /** One level up: room -> floor -> house. */
@@ -166,8 +171,10 @@ export class Floorplan3dCard extends LitElement {
     const explode = this._explode ?? c?.explode ?? true;
     // full screen, the screen below the dashboard header, or a fixed height
     const size = this._fullscreen ? "100vh" : c?.fill ? "calc(100vh - var(--header-height, 56px) - 16px)" : `${height}px`;
+    // the bar of switches at the bottom (the back button belongs to it)
+    const bar = !!b && (canGoBack || (!!c?.controls && !(this._roomId && c.room_panel !== false)));
     const t = (k: Parameters<typeof translate>[1]) => translate(this.hass, k);
-    return html`<ha-card>
+    return html`<ha-card class=${this._night ? "fp3d-night" : ""} @pointerdown=${this.touch} @keydown=${this.touch} @wheel=${this.touch}>
       <div class="fp3d-card-body" style="height:${size}">
         ${b && b.floors.some((f) => f.rooms.length)
           ? html`<fp3d-view3d
@@ -188,6 +195,13 @@ export class Floorplan3dCard extends LitElement {
               .floorThumbs=${this.thumbs}
               .roomLabels=${c?.room_names !== false}
               .floorStack=${c?.floor_stack ?? "dim"}
+              .panelOpen=${!!this._roomId && c?.room_panel !== false}
+              .alerts=${c?.alerts !== false}
+              .alertJump=${!!c?.alert_jump}
+              .scenes=${c?.scenes !== false}
+              .dimmed=${this._night}
+              .autoOrbit=${this._orbit}
+              style=${bar ? "--fp3d-bottom-inset: 52px" : ""}
               @room-tap=${(e: CustomEvent<{ floorId: string; roomId: string | null }>) => {
                 // in the house view (or on another floor) a tap first opens the whole floor
                 if (this.canSwitch && (b?.floors.length ?? 0) > 1 && e.detail.floorId && floorId !== e.detail.floorId) {
@@ -214,9 +228,9 @@ export class Floorplan3dCard extends LitElement {
               @close=${() => (this._roomId = null)}
             ></fp3d-room-panel>`
           : nothing}
-        ${canGoBack ? html`<button class="fp3d-card-back" @click=${() => this.back()}>${translate(this.hass, "back")}</button>` : nothing}
-        ${c?.controls && b && !(this._roomId && c.room_panel !== false)
+        ${bar && b
           ? html`<div class="fp3d-card-controls">
+              ${canGoBack ? html`<button class="fp3d-chip" @click=${() => this.back()}>${t("back")}</button>` : nothing}
               ${shows("walls")
                 ? html`<div class="fp3d-seg">
                     <button aria-pressed=${walls === "auto"} @click=${() => (this._walls = "auto")}>${t("walls_auto")}</button>
@@ -287,10 +301,16 @@ export class Floorplan3dCard extends LitElement {
         background: var(--fp3d-bg);
         height: 100%;
       }
+      /* night (kiosk): the whole card dimmed */
+      ha-card.fp3d-night .fp3d-card-body {
+        filter: brightness(0.55);
+      }
       .fp3d-card-body {
         position: relative;
         display: flex;
         height: 100%;
+        container-type: size;
+        container-name: fp3d;
       }
       fp3d-view3d {
         flex: 1;
@@ -311,17 +331,17 @@ export class Floorplan3dCard extends LitElement {
         flex-direction: column;
         pointer-events: none;
       }
-      .fp3d-card-back {
-        position: absolute;
-        left: 10px;
-        bottom: 60px;
-        font: 500 13px var(--fp3d-font);
-        color: var(--fp3d-text);
-        background: var(--fp3d-chrome);
-        border: 1px solid var(--fp3d-line);
-        border-radius: 999px;
-        padding: 6px 12px;
-        cursor: pointer;
+      /* phones and portrait tablets: the room panel becomes a sheet at the bottom */
+      @container fp3d ((max-width: 700px) or ((orientation: portrait) and (max-width: 1000px))) {
+        .fp3d-card-panel {
+          top: auto;
+          left: 8px;
+          right: 8px;
+          bottom: 8px;
+          width: auto;
+          height: 55%;
+          justify-content: flex-end;
+        }
       }
     `,
   ];

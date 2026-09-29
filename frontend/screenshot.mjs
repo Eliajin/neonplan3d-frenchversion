@@ -122,6 +122,17 @@ const shots = [
   { name: "view-furnish", query: "", width: 1280, height: 800, click: "Erdgeschoss", furnishDrag: { id: "m2", dx: -160, dy: 60 } },
   { name: "save-failed", query: "?savefail", width: 1280, height: 800, editor: true, editRoomName: "Wohnen", reload: true },
   { name: "tablet", query: "", width: 800, height: 1280, click: "Obergeschoss" },
+  { name: "tablet-portrait-house", query: "", width: 800, height: 1280 },
+  { name: "tablet-portrait-room", query: "", width: 800, height: 1280, click: "Erdgeschoss", then: "Wohnzimmer" },
+  { name: "phone-floor", query: "", width: 420, height: 800, click: "Erdgeschoss" },
+  { name: "card-portrait-room", query: "?card&floor=eg", width: 700, height: 1000, click: "Wohnzimmer" },
+  { name: "view-alert-banner", query: "?alerts", width: 1280, height: 800, click: "Erdgeschoss" },
+  { name: "card-alert", query: "?card&alerts", width: 1400, height: 900 },
+  { name: "card-scenes", query: "?card&nopanel", width: 1400, height: 900, click: "Wohnzimmer" },
+  { name: "card-night", query: "?card&night", width: 1400, height: 900 },
+  { name: "card-kiosk-orbit", query: "?card&kiosk", width: 1400, height: 900, wait: 2600 },
+  { name: "view-floor-stack-panel", query: "", width: 1280, height: 800, click: "Obergeschoss", then: "Einzeln" },
+  { name: "view-room-names-off", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Raumnamen" },
   { name: "empty", query: "?empty", width: 1280, height: 800 },
 ];
 
@@ -175,6 +186,7 @@ for (const shot of shots.filter((s) => !only || only.includes(s.name))) {
     if (at) await page.mouse.move(at[0], at[1]);
     await new Promise((r) => setTimeout(r, 1500));
   };
+  if (shot.wait) await new Promise((r) => setTimeout(r, shot.wait));
   if (shot.editor) await clickText("Editor");
   if (shot.select) await clickText(shot.select);
   if (shot.click) await clickText(shot.click);

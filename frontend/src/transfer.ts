@@ -31,17 +31,17 @@ export function exportFile(b: Building, shareable: boolean): ExportFile {
   return { format: EXPORT_FORMAT, version: 1, exported_at: new Date().toISOString(), building: shareable ? withoutEntities(b) : structuredClone(b) };
 }
 
-/** Reads an export file; throws with a short reason when it is none. */
+/** Reads an export file; throws "not_json" or "not_plan" when it is none. */
 export function parseExport(text: string): Building {
   let data: unknown;
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error("no JSON");
+    throw new Error("not_json");
   }
   const file = data as Partial<ExportFile>;
   const b = (file?.format === EXPORT_FORMAT ? file.building : data) as Building | undefined;
-  if (!b || b.version !== 1 || !Array.isArray(b.floors) || !b.settings) throw new Error("no Floorplan 3D plan");
+  if (!b || b.version !== 1 || !Array.isArray(b.floors) || !b.settings) throw new Error("not_plan");
   // background images are not part of an export
   for (const f of b.floors) f.background = null;
   return normalizeBuilding(b);

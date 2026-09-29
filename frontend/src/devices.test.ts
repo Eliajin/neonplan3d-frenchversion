@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { appColor, areaEntities, autoPlace, entityName, furnitureEntities, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, primaryEntities, roomPanelEntities, windowPosition } from "./devices.ts";
+import { appColor, areaEntities, autoPlace, entityName, furnitureEntities, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, powerSensorsOf, primaryEntities, roomPanelEntities, windowPosition } from "./devices.ts";
 import type { Floor, Opening, Room } from "./model.ts";
 import { centroid, newFloor, pointInPolygon } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -275,4 +275,24 @@ test("each leaf of a double window has its own kind of sensor", () => {
   // the second leaf tilts with a handle sensor too
   hass.states["sensor.griff_rechts"] = { entity_id: "sensor.griff_rechts", state: "gekippt", attributes: {} };
   assert.equal(openingState(hass, { ...e, contact2: "sensor.griff_rechts" }, "window").tilt2, 1);
+});
+
+test("area and power lookups are cached per registry and refreshed when the registry changes", () => {
+  const hass = hassWith();
+  hass.entities!["sensor.leistung"] = { entity_id: "sensor.leistung", device_id: "d1" };
+  hass.states["sensor.leistung"] = { entity_id: "sensor.leistung", state: "12", attributes: { device_class: "power" } };
+  const first = areaEntities(hass, "wohnen");
+  // the same registry gives the same list (no scan, no new array)
+  assert.equal(areaEntities(hass, "wohnen"), first);
+  assert.deepEqual(powerSensorsOf(hass, "d1"), ["sensor.leistung"]);
+  // Home Assistant replaces the registry object when an entity is added
+  hass.entities = { ...hass.entities, "light.neu": { entity_id: "light.neu", area_id: "wohnen" } };
+  hass.states = { ...hass.states, "light.neu": { entity_id: "light.neu", state: "off", attributes: {} } };
+  assert.ok(areaEntities(hass, "wohnen").includes("light.neu"));
+  // a state that appears for a known entity (the registry object stays) is picked up as well
+  hass.entities = { ...hass.entities, "light.spaet": { entity_id: "light.spaet", area_id: "wohnen" } };
+  hass.states = { ...hass.states };
+  assert.ok(!areaEntities(hass, "wohnen").includes("light.spaet"));
+  hass.states = { ...hass.states, "light.spaet": { entity_id: "light.spaet", state: "on", attributes: {} } };
+  assert.ok(areaEntities(hass, "wohnen").includes("light.spaet"));
 });

@@ -14,7 +14,7 @@ import type { HeatMode } from "./heatmap.ts";
 import { THEMES, type Theme } from "./themes.ts";
 import { snapToWall } from "./geometry/snap.ts";
 import { furnitureName } from "./furniture-names.ts";
-import type { Quality, WallMode } from "./viewer/viewer3d.ts";
+import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
 
 type Mode = "view" | "editor";
 
@@ -55,6 +55,8 @@ export class Floorplan3dPanel extends LitElement {
     _theme: { state: true },
     _furnish: { state: true },
     _selFurniture: { state: true },
+    _floorStack: { state: true },
+    _roomNames: { state: true },
   };
 
   declare hass: HomeAssistant;
@@ -76,6 +78,9 @@ export class Floorplan3dPanel extends LitElement {
   private declare _theme: Theme;
   private declare _furnish: boolean;
   private declare _selFurniture: string | null;
+  /** Floors below an opened floor, and whether room names show (both kept per device). */
+  private declare _floorStack: FloorStack;
+  private declare _roomNames: boolean;
 
   private readonly data = new BuildingController(this);
 
@@ -100,6 +105,9 @@ export class Floorplan3dPanel extends LitElement {
     this._theme = theme && THEMES.includes(theme) ? theme : "neon";
     this._furnish = false;
     this._selFurniture = null;
+    const stack = prefs.get("floor_stack");
+    this._floorStack = stack === "stacked" || stack === "single" ? stack : "dim";
+    this._roomNames = prefs.get("room_names") !== "0";
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
@@ -192,7 +200,7 @@ export class Floorplan3dPanel extends LitElement {
           if (Number.isFinite(v) && v > 0) this.editFurniture(id, (m) => (m[key] = Math.round(v * 1000) / 1000));
         }}
     /></label>`;
-    return html`${field("w", "B")}${field("d", "T")}${field("h", "H")}`;
+    return html`${field("w", this.t("size_short_w"))}${field("d", this.t("size_short_d"))}${field("h", this.t("size_short_h"))}`;
   }
 
   private turnFurniture(delta: number): void {
@@ -392,12 +400,15 @@ export class Floorplan3dPanel extends LitElement {
           ),
         )}
       </nav>
-      <div class="fp3d-stage-wrap">
+      <div class="fp3d-stage-wrap ${this._roomId ? "fp3d-room-open" : ""}">
         <fp3d-view3d
           class="fp3d-body"
           .hass=${this.hass}
           .building=${b}
           .packs=${this.data.packs}
+          .floorStack=${this._floorStack}
+          .roomLabels=${this._roomNames}
+          .panelOpen=${!!this._roomId}
           .floorId=${b.floors.length > 1 ? this._floorId : (b.floors[0]?.id ?? null)}
           .roomId=${this._roomId}
           .wallMode=${this._wallMode}
@@ -438,6 +449,22 @@ export class Floorplan3dPanel extends LitElement {
                 <button aria-pressed=${!this._explode} @click=${() => this.setExplode(false)}>${this.t("floors_stacked")}</button>
               </div>`
             : nothing}
+          ${b.floors.length > 1 && this._floorId
+            ? html`<div class="fp3d-seg" role="group" aria-label=${this.t("card_floor_stack")}>
+                ${(["dim", "stacked", "single"] as FloorStack[]).map(
+                  (m) =>
+                    html`<button
+                      aria-pressed=${this._floorStack === m}
+                      @click=${() => {
+                        this._floorStack = m;
+                        prefs.set("floor_stack", m);
+                      }}
+                    >
+                      ${this.t(`floor_stack_short_${m}` as I18nKey)}
+                    </button>`,
+                )}
+              </div>`
+            : nothing}
           <div class="fp3d-seg" role="group" aria-label=${this.t("heatmap")}>
             ${(["none", "temperature", "humidity", "co2"] as HeatMode[]).map(
               (m) =>
@@ -452,6 +479,16 @@ export class Floorplan3dPanel extends LitElement {
                 </button>`,
             )}
           </div>
+          <button
+            class="fp3d-chip"
+            aria-pressed=${this._roomNames}
+            @click=${() => {
+              this._roomNames = !this._roomNames;
+              prefs.set("room_names", this._roomNames ? "1" : "0");
+            }}
+          >
+            ${this.t("room_names_short")}
+          </button>
           ${this.isAdmin
             ? html`<button
                 class="fp3d-chip ${this._furnish ? "fp3d-chip-on" : ""}"
@@ -630,6 +667,8 @@ export class Floorplan3dPanel extends LitElement {
         flex: 1;
         min-height: 0;
         display: flex;
+        container-type: size;
+        container-name: fp3d;
       }
       .fp3d-stage-wrap fp3d-view3d {
         flex: 1;
@@ -645,8 +684,15 @@ export class Floorplan3dPanel extends LitElement {
         justify-content: flex-start;
         pointer-events: none;
       }
-      /* phones and portrait tablets: panel as a sheet at the bottom */
-      @media (max-width: 700px), (orientation: portrait) and (max-width: 1000px) {
+      /* the switches sit at the bottom (as in the card), where they never meet the energy values or warnings */
+      fp3d-view3d {
+        --fp3d-bottom-inset: 52px;
+      }
+      .fp3d-furnish-bar {
+        bottom: 68px;
+      }
+      /* phones and portrait tablets: panel as a sheet at the bottom, the switches step aside */
+      @container fp3d ((max-width: 700px) or ((orientation: portrait) and (max-width: 1000px))) {
         .fp3d-room-panel {
           top: auto;
           left: 8px;
@@ -656,15 +702,18 @@ export class Floorplan3dPanel extends LitElement {
           height: 55%;
           justify-content: flex-end;
         }
+        .fp3d-room-open .fp3d-overlay {
+          display: none;
+        }
       }
       .fp3d-overlay {
         position: absolute;
-        right: 14px;
-        top: 10px;
-        left: 14px;
+        right: 12px;
+        bottom: 12px;
+        left: 60px;
         display: flex;
         flex-wrap: wrap;
-        justify-content: flex-end;
+        justify-content: center;
         gap: 8px;
         align-items: center;
         pointer-events: none;

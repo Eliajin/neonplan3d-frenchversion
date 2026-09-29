@@ -37,7 +37,7 @@ const DOMAIN_KIND: Record<string, DeviceKind> = {
 
 /** Sensors worth showing: room climate, and power (consumers of the energy flow). */
 const SENSOR_CLASSES = new Set(["temperature", "humidity", "power", "carbon_dioxide"]);
-const BINARY_CLASSES = new Set(["door", "window", "opening", "garage_door", "motion", "occupancy", "presence", "smoke", "moisture", "gas"]);
+const BINARY_CLASSES = new Set(["door", "window", "opening", "garage_door", "motion", "occupancy", "presence", "smoke", "moisture", "gas", "carbon_monoxide"]);
 
 /** Order in lists and panels. */
 export const KIND_ORDER: DeviceKind[] = ["light", "cover", "climate", "media", "switch", "fan", "lock", "binary", "sensor", "camera", "scene", "script"];
@@ -79,16 +79,62 @@ export function isRelevant(hass: HomeAssistant, entityId: string): boolean {
   return true;
 }
 
-/** Entities of an area, sorted by kind and name. */
+/**
+ * Lookups over the whole entity registry (entities per area, power sensors per device). They are
+ * built once per registry and reused: every state change would otherwise scan thousands of
+ * entities per room. Home Assistant replaces `entities`, `devices` and `states` with new objects when
+ * they change, so their identity is the cache key; a changed number of states (entities that appear
+ * after the registry) rebuilds as well.
+ */
+interface Registry {
+  entities: HomeAssistant["entities"];
+  devices: HomeAssistant["devices"];
+  states: HomeAssistant["states"];
+  stateCount: number;
+  areas: Map<string, string[]>;
+  power: Map<string, string[]>;
+}
+
+let registry: Registry | null = null;
+
+function registryOf(hass: HomeAssistant): Registry {
+  const reg = registry;
+  if (reg && reg.entities === hass.entities && reg.devices === hass.devices) {
+    if (reg.states === hass.states) return reg;
+    reg.states = hass.states;
+    if (Object.keys(hass.states).length === reg.stateCount) return reg;
+  }
+  const areas = new Map<string, string[]>();
+  const power = new Map<string, string[]>();
+  for (const id of Object.keys(hass.entities ?? {})) {
+    const device = hass.entities![id].device_id;
+    if (device && isPower(hass, id)) (power.get(device) ?? power.set(device, []).get(device)!).push(id);
+    if (!isRelevant(hass, id)) continue;
+    const area = entityAreaId(hass, id);
+    if (area) (areas.get(area) ?? areas.set(area, []).get(area)!).push(id);
+  }
+  for (const [areaId, ids] of areas) {
+    const areaName = hass.areas?.[areaId]?.name;
+    ids.sort((a, b) => {
+      const ka = KIND_ORDER.indexOf(kindOf(a)!);
+      const kb = KIND_ORDER.indexOf(kindOf(b)!);
+      return ka - kb || entityName(hass, a, areaName).localeCompare(entityName(hass, b, areaName));
+    });
+  }
+  registry = { entities: hass.entities, devices: hass.devices, states: hass.states, stateCount: Object.keys(hass.states).length, areas, power };
+  return registry;
+}
+
+/** Entities of an area, sorted by kind and name (a shared array: do not change it). */
 export function areaEntities(hass: HomeAssistant, areaId: string | null): string[] {
   if (!areaId || !hass.entities) return [];
-  const ids = Object.keys(hass.entities).filter((id) => entityAreaId(hass, id) === areaId && isRelevant(hass, id));
-  const areaName = hass.areas?.[areaId]?.name;
-  return ids.sort((a, b) => {
-    const ka = KIND_ORDER.indexOf(kindOf(a)!);
-    const kb = KIND_ORDER.indexOf(kindOf(b)!);
-    return ka - kb || entityName(hass, a, areaName).localeCompare(entityName(hass, b, areaName));
-  });
+  return registryOf(hass).areas.get(areaId) ?? [];
+}
+
+/** Power sensors of a device, in registry order (a shared array: do not change it). */
+export function powerSensorsOf(hass: HomeAssistant, deviceId: string): string[] {
+  if (!hass.entities) return [];
+  return registryOf(hass).power.get(deviceId) ?? [];
 }
 
 /** Friendly name without a leading area name ("Wohnzimmer Deckenlicht" in the Wohnzimmer -> "Deckenlicht"). */
@@ -467,8 +513,8 @@ function isPower(hass: HomeAssistant, id: string): boolean {
 function devicePower(hass: HomeAssistant, id: string): string | null {
   if (isPower(hass, id)) return id;
   const device = hass.entities?.[id]?.device_id;
-  if (!device || !hass.entities) return null;
-  return Object.values(hass.entities).find((e) => e.device_id === device && e.entity_id !== id && isPower(hass, e.entity_id))?.entity_id ?? null;
+  if (!device) return null;
+  return powerSensorsOf(hass, device).find((e) => e !== id) ?? null;
 }
 
 /**

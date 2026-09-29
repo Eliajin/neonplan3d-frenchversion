@@ -3,7 +3,7 @@
 
 import { css, html, LitElement, nothing } from "lit";
 import { fetchBuilding } from "./api.ts";
-import { CARD_CONTROLS, type CardConfig, type CardControl } from "./card.ts";
+import { CARD_CONTROLS, type CardConfig, type CardControl } from "./card-config.ts";
 import { translate, type I18nKey } from "./i18n.ts";
 import type { HomeAssistant } from "./types.ts";
 
@@ -24,6 +24,12 @@ const DEFAULTS: Partial<CardConfig> = {
   fullscreen_button: false,
   room_names: true,
   floor_stack: "dim",
+  alerts: true,
+  alert_jump: false,
+  scenes: true,
+  idle_return: 0,
+  night: "off",
+  idle_orbit: false,
 };
 
 type Choice = [value: string, label: I18nKey];
@@ -87,7 +93,7 @@ export class Floorplan3dCardEditor extends LitElement {
     </label>`;
   }
 
-  private toggle(key: "explode" | "energy" | "room_panel" | "stats" | "fullscreen_button" | "room_names", label: I18nKey, hint?: I18nKey) {
+  private toggle(key: "explode" | "energy" | "room_panel" | "stats" | "fullscreen_button" | "room_names" | "alerts" | "alert_jump" | "scenes" | "idle_orbit", label: I18nKey, hint?: I18nKey) {
     const on = this.value[key];
     return html`<label class="toggle">
       <input type="checkbox" .checked=${on} @change=${(e: Event) => this.set(key, (e.target as HTMLInputElement).checked)} />
@@ -140,6 +146,46 @@ export class Floorplan3dCardEditor extends LitElement {
             )}
           </div>`
         : nothing}`;
+  }
+
+  /** Kiosk: idle return, night dimming (sun or a time range) and the screensaver turn. */
+  private renderKiosk() {
+    const v = this.value;
+    const night = v.night === "off" || v.night === "sun" ? v.night : "time";
+    const minutes = [0, 1, 2, 5, 10];
+    return html`<h3>${this.t("card_section_kiosk")}</h3>
+      <div class="grid">
+        <label class="field"
+          >${this.t("card_idle_return")}
+          <select @change=${(e: Event) => this.set("idle_return", Number((e.target as HTMLSelectElement).value) || undefined)}>
+            ${minutes.map((m) => html`<option value=${m * 60} ?selected=${v.idle_return === m * 60}>${m ? this.t("card_idle_min", { n: m }) : this.t("card_idle_off")}</option>`)}
+          </select>
+        </label>
+        <label class="field"
+          >${this.t("card_night")}
+          <select @change=${(e: Event) => this.set("night", { off: undefined, sun: "sun", time: "22:00-06:00" }[(e.target as HTMLSelectElement).value])}>
+            <option value="off" ?selected=${night === "off"}>${this.t("card_night_off")}</option>
+            <option value="sun" ?selected=${night === "sun"}>${this.t("card_night_sun")}</option>
+            <option value="time" ?selected=${night === "time"}>${this.t("card_night_time")}</option>
+          </select>
+        </label>
+        ${night === "time"
+          ? html`<label class="field wide"
+              >${this.t("card_night_range")}
+              <input
+                type="text"
+                pattern="\\d{1,2}:\\d{2}-\\d{1,2}:\\d{2}"
+                placeholder="22:00-06:00"
+                .value=${v.night}
+                @change=${(e: Event) => this.set("night", (e.target as HTMLInputElement).value.trim() || undefined)}
+              />
+            </label>`
+          : nothing}
+      </div>
+      <p class="hint">${this.t("card_idle_hint")}</p>
+      ${this.toggle("idle_orbit", "card_idle_orbit", "card_idle_orbit_hint")}
+      ${this.toggle("alerts", "card_alerts", "card_alerts_hint")} ${this.toggle("alert_jump", "card_alert_jump", "card_alert_jump_hint")}
+      ${this.toggle("scenes", "card_scenes", "card_scenes_hint")}`;
   }
 
   protected render() {
@@ -206,6 +252,7 @@ export class Floorplan3dCardEditor extends LitElement {
       ${this.toggle("energy", "card_energy")} ${this.toggle("room_panel", "card_room_panel", "card_room_panel_hint")}
       ${this.toggle("fullscreen_button", "card_fullscreen_button", "card_fullscreen_button_hint")}
       ${this.toggle("explode", "card_explode")} ${this.toggle("stats", "card_stats", "card_stats_hint")}
+      ${this.renderKiosk()}
     `;
   }
 
@@ -243,7 +290,8 @@ export class Floorplan3dCardEditor extends LitElement {
       color: var(--secondary-text-color);
     }
     select,
-    input[type="number"] {
+    input[type="number"],
+    input[type="text"] {
       box-sizing: border-box;
       width: 100%;
       min-height: 40px;

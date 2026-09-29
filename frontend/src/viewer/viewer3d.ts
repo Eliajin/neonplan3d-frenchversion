@@ -30,6 +30,8 @@ import {
   TextureLoader,
   type Texture,
   Float32BufferAttribute,
+  Uint32BufferAttribute,
+  DynamicDrawUsage,
   BufferGeometry as Geometry,
   Vector2,
   Vector3,
@@ -38,7 +40,8 @@ import {
   type BufferGeometry,
   type Material,
 } from "three";
-import type { Building, Floor, Furniture } from "../model.ts";
+import type { Building, Floor, Furniture, Room } from "../model.ts";
+import { recolorLamps, SHADE_SENTINEL, shadeFactors } from "./lamp-colors.ts";
 import { centroid } from "../model.ts";
 import { buildFloorGeometry, SLAB, stairHoles, type FloorGeometry } from "./build.ts";
 import { OrbitControls } from "./controls.ts";
@@ -73,6 +76,8 @@ export interface ViewerOptions {
   onBack?: () => void;
   /** Short tap on a device marker. */
   onDeviceTap?: (entityId: string, x: number, y: number) => void;
+  /** Double tap on a room of the opened floor (without it, a double tap goes one level back). */
+  onRoomDoubleTap?: (floorId: string, roomId: string) => void;
   /** Long press on a device marker. */
   onDeviceHold?: (entityId: string, x: number, y: number) => void;
   /**
@@ -281,7 +286,15 @@ interface FloorView {
   /** Content signatures: meshes are only rebuilt when these change. */
   flowLayout: string;
   glowSig: string;
-  lampSig: string;
+  /** Lamp shapes (rebuilt when they change) and lamp colours (written into the mesh in place). */
+  lampShapeSig: string;
+  lampColorSig: string;
+  /** Shade factor per lamp vertex (0 = body) and the triangle range of every lamp, by device id. */
+  lampShade: Float32Array;
+  lampRanges: Map<string, { start: number; end: number }>;
+  /** Room box and room labels with their centres, so labels are placed without recomputing them. */
+  bbox: { x0: number; x1: number; z0: number; z1: number } | null;
+  roomPins: { pin: HTMLButtonElement; room: Room; cx: number; cz: number }[];
   /** Size of the floor label, measured once per text (reading it every frame forces a layout). */
   labelSize: { w: number; h: number } | null;
   materials: FloorMaterials;
@@ -335,9 +348,11 @@ export class FloorplanViewer {
   private persons: PersonPin[] = [];
   private readonly personPins = new Map<string, HTMLDivElement>();
   private floorInfo = new Map<string, string>();
-  private readonly groundTexture: CanvasTexture;
+  /** Ground grid texture, made when the ground first shows (the tablet level never shows it). */
+  private groundTexture: CanvasTexture | null = null;
   private devices: DeviceMarker[] = [];
-  private readonly devicePins = new Map<string, HTMLButtonElement>();
+  /** Device markers with the last written fields, so unchanged fields are not written again. */
+  private readonly devicePins = new Map<string, { el: HTMLButtonElement; icon: string; text: string; watt: string; label: string; active: boolean; unavailable: boolean; glow: string }>();
   private readonly ground: Mesh;
   private floors: FloorView[] = [];
   private building: Building | null = null;
@@ -369,6 +384,26 @@ export class FloorplanViewer {
   private robotLast = 0;
   private robotTimer: ReturnType<typeof setTimeout> | undefined;
   private floorStack: FloorStack = "dim";
+  /** Floors by id, and per-frame bookkeeping so labels are only placed when something moved. */
+  private floorMap = new Map<string, FloorView>();
+  private labelsDirty = true;
+  private readonly viewKey = new Float64Array(6);
+  private readonly placed = new WeakMap<HTMLElement, string>();
+  private readonly pinMode = new WeakMap<HTMLElement, string>();
+  private size = { w: 1, h: 1 };
+  /** Width taken on the left by the host (the floor pictures); floor labels keep clear of it. */
+  private labelInset = 0;
+  /** Floors with lamps that run a colour effect, and the floor of every device (for flashes). */
+  private effectFloors = new Set<string>();
+  private deviceFloor = new Map<string, string>();
+  private statsOn = false;
+  /** Slow automatic turn of the view (kiosk screensaver), in radians per second. */
+  private orbitSpeed = 0;
+  private orbitLast = 0;
+  private orbitTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The host is inside the viewport (a card scrolled away renders nothing). */
+  private onScreen = true;
+  private intersection: IntersectionObserver | null = null;
   /** The device a running swipe acts on. */
   private swipe: { entity: string; x: number; y: number } | null = null;
   /** Furnishing in 3D: items can be dragged; the selected one shows a wireframe box. */
@@ -394,12 +429,8 @@ export class FloorplanViewer {
     host.append(this.labels);
     this.patternTexture = makePatternTexture();
     this.blindTexture = makeBlindTexture();
-    this.groundTexture = makeGroundTexture();
     this.haloTexture = makeHaloTexture();
-    this.ground = new Mesh(
-      new PlaneGeometry(1, 1),
-      new MeshBasicMaterial({ map: this.groundTexture, transparent: true, blending: AdditiveBlending, depthWrite: false }),
-    );
+    this.ground = new Mesh(new PlaneGeometry(1, 1), new MeshBasicMaterial({ transparent: true, blending: AdditiveBlending, depthWrite: false }));
     this.ground.rotation.x = -Math.PI / 2;
     this.ground.renderOrder = -1;
     this.scene.add(this.ground, this.root);
@@ -407,15 +438,51 @@ export class FloorplanViewer {
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(host);
     document.addEventListener("visibilitychange", this.onVisibility);
+    if (typeof IntersectionObserver === "function") {
+      this.intersection = new IntersectionObserver((entries) => {
+        const on = entries.some((e) => e.isIntersecting);
+        if (on === this.onScreen) return;
+        this.onScreen = on;
+        if (on) this.invalidate();
+      });
+      this.intersection.observe(host);
+    }
     this.resize();
+  }
+
+  /** Whether the tablet level is active (hosts lighten their own work with it). */
+  get low(): boolean {
+    return this.lowQuality;
+  }
+
+  /** Frame statistics are only gathered while something shows them. */
+  setStats(on: boolean): void {
+    this.statsOn = on;
+  }
+
+  /** Space on the left the floor labels leave free (the floor pictures of the host). */
+  setLabelInset(px: number): void {
+    if (this.labelInset === px) return;
+    this.labelInset = px;
+    this.labelsDirty = true;
+    this.invalidate();
+  }
+
+  /** Turn the view slowly by itself (0 stops); a touch pauses it. */
+  setAutoOrbit(speed: number): void {
+    this.orbitSpeed = speed;
+    this.orbitLast = 0;
+    this.invalidate();
   }
 
   setQuality(quality: Quality): void {
     const canvas = this.renderer.domElement;
     const next = this.makeRenderer(quality);
-    this.applyDetail();
+    this.rebuildTier();
+    this.applyTierFlags();
     canvas.replaceWith(next.domElement);
     this.renderer.dispose();
+    this.renderer.forceContextLoss();
     this.renderer = next;
     const view = this.controls.view;
     this.controls.dispose();
@@ -445,6 +512,7 @@ export class FloorplanViewer {
   setFloor(floorId: string | null, animate = true): void {
     this.floorId = floorId;
     this.roomId = null;
+    this.labelsDirty = true;
     this.applyTargets(!animate);
     this.applyHighlight();
     this.fit(animate ? 700 : 0);
@@ -468,6 +536,7 @@ export class FloorplanViewer {
   /** Highlight a room and fly into it (null = back to the floor overview). */
   selectRoom(roomId: string | null): void {
     this.roomId = roomId;
+    this.labelsDirty = true;
     this.applyHighlight();
     if (!roomId) {
       this.fit(700);
@@ -493,34 +562,57 @@ export class FloorplanViewer {
   /** Replace the device markers; pins are reused per entity, light cones rebuilt per floor. */
   setDevices(devices: DeviceMarker[]): void {
     this.devices = devices;
+    this.labelsDirty = true;
+    this.effectFloors = new Set(devices.filter((d) => d.effect && d.glow).map((d) => d.floorId));
+    this.deviceFloor = new Map(devices.map((d) => [d.id, d.floorId]));
     const seen = new Set<string>();
     for (const d of devices) {
       seen.add(d.id);
       let pin = this.devicePins.get(d.id);
       if (!pin) {
-        pin = this.makeDevicePin(d.id);
+        pin = { el: this.makeDevicePin(d.id), icon: "", text: "", watt: "", label: "", active: false, unavailable: false, glow: "" };
         this.devicePins.set(d.id, pin);
-        this.labels.append(pin);
+        this.labels.append(pin.el);
       }
-      if (pin.dataset.icon !== d.icon) {
-        pin.dataset.icon = d.icon;
-        pin.querySelector(".fp3d-dev-icon")!.innerHTML = d.icon;
+      // every write below invalidates style or layout: only fields that changed are written
+      const el = pin.el;
+      if (pin.icon !== d.icon) {
+        pin.icon = d.icon;
+        el.querySelector(".fp3d-dev-icon")!.innerHTML = d.icon;
       }
-      pin.querySelector(".fp3d-dev-text")!.textContent = d.text;
-      const watt = pin.querySelector(".fp3d-dev-watt")!;
-      watt.textContent = d.power !== null && d.power !== undefined && d.power >= 1 ? (d.powerText ?? `${Math.round(d.power)} W`) : "";
-      pin.title = d.name;
-      pin.setAttribute("aria-label", `${d.name}: ${d.text}`);
-      pin.classList.toggle("fp3d-dev-on", d.active);
-      pin.classList.toggle("fp3d-dev-na", d.unavailable);
-      if (d.glow) {
-        const [r, g, b] = d.glow.color.map((c) => Math.round(c * 255));
-        pin.style.setProperty("--fp3d-glow", `rgb(${r}, ${g}, ${b})`);
-      } else pin.style.removeProperty("--fp3d-glow");
+      if (pin.text !== d.text) {
+        pin.text = d.text;
+        el.querySelector(".fp3d-dev-text")!.textContent = d.text;
+      }
+      const watt = d.power !== null && d.power !== undefined && d.power >= 1 ? (d.powerText ?? `${Math.round(d.power)} W`) : "";
+      if (pin.watt !== watt) {
+        pin.watt = watt;
+        el.querySelector(".fp3d-dev-watt")!.textContent = watt;
+      }
+      const label = `${d.name}: ${d.text}`;
+      if (pin.label !== label) {
+        pin.label = label;
+        el.title = d.name;
+        el.setAttribute("aria-label", label);
+      }
+      if (pin.active !== d.active) {
+        pin.active = d.active;
+        el.classList.toggle("fp3d-dev-on", d.active);
+      }
+      if (pin.unavailable !== d.unavailable) {
+        pin.unavailable = d.unavailable;
+        el.classList.toggle("fp3d-dev-na", d.unavailable);
+      }
+      const glow = d.glow ? `rgb(${d.glow.color.map((c) => Math.round(c * 255)).join(", ")})` : "";
+      if (pin.glow !== glow) {
+        pin.glow = glow;
+        if (glow) el.style.setProperty("--fp3d-glow", glow);
+        else el.style.removeProperty("--fp3d-glow");
+      }
     }
     for (const [id, pin] of this.devicePins) {
       if (seen.has(id)) continue;
-      pin.remove();
+      pin.el.remove();
       this.devicePins.delete(id);
     }
     for (const fv of this.floors) {
@@ -550,6 +642,7 @@ export class FloorplanViewer {
 
   /** People in their rooms (pink markers in the floor and room views). */
   setPersons(persons: PersonPin[]): void {
+    this.labelsDirty = true;
     this.persons = persons;
     const seen = new Set<string>();
     for (const p of persons) {
@@ -657,6 +750,7 @@ export class FloorplanViewer {
       if (span && span.textContent !== text) {
         span.textContent = text;
         fv.labelSize = null;
+        this.labelsDirty = true;
       }
     }
     this.invalidate();
@@ -677,7 +771,10 @@ export class FloorplanViewer {
     cancelAnimationFrame(this.frame);
     clearTimeout(this.flowTimer);
     clearTimeout(this.effectTimer);
+    clearTimeout(this.robotTimer);
+    clearTimeout(this.orbitTimer);
     this.resizeObserver.disconnect();
+    this.intersection?.disconnect();
     document.removeEventListener("visibilitychange", this.onVisibility);
     this.controls.dispose();
     this.clear();
@@ -687,15 +784,22 @@ export class FloorplanViewer {
     (this.ground.material as Material).dispose();
     this.patternTexture.dispose();
     this.blindTexture.dispose();
-    this.groundTexture.dispose();
+    this.groundTexture?.dispose();
     this.haloTexture.dispose();
+    for (const r of this.robots.values()) r.led.dispose();
+    this.robots.clear();
+    this.robotGeo?.dispose();
+    this.robotLedGeo?.dispose();
+    this.robotMat?.dispose();
     this.renderer.dispose();
+    // frees the GPU context now instead of when the garbage collector gets to it
+    this.renderer.forceContextLoss();
     this.renderer.domElement.remove();
     this.labels.remove();
   }
 
   invalidate(): void {
-    if (this.frame || this.disposed || document.hidden) return;
+    if (this.frame || this.disposed || document.hidden || !this.onScreen) return;
     this.frame = requestAnimationFrame((t) => this.render(t));
   }
 
@@ -728,7 +832,11 @@ export class FloorplanViewer {
       grab: (x, y) => this.grabFurniture(x, y),
       drag: (x, y) => this.dragFurniture(x, y),
       drop: () => this.dropFurniture(),
-      doubleTap: () => this.options.onBack?.(),
+      doubleTap: (x, y) => {
+        const hit = this.floorId && this.options.onRoomDoubleTap ? this.pick(x, y) : null;
+        if (hit && !("entity" in hit) && hit.roomId) this.options.onRoomDoubleTap!(hit.floorId, hit.roomId);
+        else this.options.onBack?.();
+      },
     });
   }
 
@@ -739,6 +847,8 @@ export class FloorplanViewer {
   private resize(): void {
     const w = this.host.clientWidth || 1;
     const h = this.host.clientHeight || 1;
+    this.size = { w, h };
+    this.labelsDirty = true;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
@@ -746,6 +856,8 @@ export class FloorplanViewer {
   }
 
   private clear(): void {
+    // robots share one geometry: keep them out of the floor groups while those are disposed
+    for (const r of this.robots.values()) r.group.removeFromParent();
     for (const fv of this.floors) {
       for (const pic of fv.screenPics.values()) {
         (pic.mesh.material as Material).dispose();
@@ -759,6 +871,7 @@ export class FloorplanViewer {
       this.root.remove(fv.group);
     }
     this.floors = [];
+    this.floorMap = new Map();
     // device pins survive a rebuild; only floor and room labels are recreated
     for (const el of [...this.labels.children]) if (!(el as HTMLElement).dataset.entity) el.remove();
   }
@@ -821,6 +934,11 @@ export class FloorplanViewer {
     g.setAttribute("position", new Float32BufferAttribute(surface.pos, 3));
     g.setAttribute("color", new Float32BufferAttribute(new Float32Array(surface.pos.length), 3));
     g.setAttribute("fold", new Float32BufferAttribute(surface.fold, 1));
+    // the index lists the lit quads; it is filled in place (a new index every change would leak)
+    const index = new Uint32BufferAttribute(new Uint32Array(surface.pos.length / 3), 1);
+    index.setUsage(DynamicDrawUsage);
+    g.setIndex(index);
+    g.setDrawRange(0, 0);
     g.computeBoundingSphere();
     fv.glowMesh.geometry.dispose();
     fv.glowMesh.geometry = g;
@@ -881,24 +999,28 @@ export class FloorplanViewer {
       doorOpen.map((o) => o.toFixed(1)).join(",");
     if (sig === fv.glowSig) return;
     fv.glowSig = sig;
-    const attr = fv.glowMesh.geometry.getAttribute("color") as Float32BufferAttribute;
+    const g = fv.glowMesh.geometry;
+    const attr = g.getAttribute("color") as Float32BufferAttribute;
     // the heatmap is an analysis view: room light would wash out its colours
     if (!sources.length || this.roomTint) {
       fv.glowMesh.visible = false;
+      g.setDrawRange(0, 0);
       return;
     }
     const colors = lightColors(surface, sources, 0.42, doorOpen);
     (attr.array as Float32Array).set(colors);
     attr.needsUpdate = true;
     // only quads that receive light are drawn (dark ones would cost fill rate for nothing)
-    const index: number[] = [];
+    const index = g.index!.array as Uint32Array;
+    let n = 0;
     for (let q = 0; q < colors.length / 18; q++) {
       let lit = false;
       for (let k = q * 18; k < q * 18 + 18 && !lit; k++) lit = colors[k] > 0.004;
-      if (lit) for (let v = 0; v < 6; v++) index.push(q * 6 + v);
+      if (lit) for (let v = 0; v < 6; v++) index[n++] = q * 6 + v;
     }
-    fv.glowMesh.geometry.setIndex(index);
-    fv.glowMesh.visible = index.length > 0;
+    g.index!.needsUpdate = true;
+    g.setDrawRange(0, n);
+    fv.glowMesh.visible = n > 0;
   }
 
   private makeMaterials(mask: FoldMasks): FloorMaterials {
@@ -1038,6 +1160,26 @@ export class FloorplanViewer {
       this.labels.append(label);
 
       const prev = previous.get(floor.id);
+      const roomPins: FloorView["roomPins"] = [];
+      let bbox: FloorView["bbox"] = null;
+      for (const room of floor.rooms) {
+        const pin = document.createElement("button");
+        pin.className = "fp3d-pin";
+        pin.dataset.room = room.id;
+        pin.dataset.floor = floor.id;
+        pin.textContent = room.name || "–";
+        pin.addEventListener("click", () => this.options.onRoomTap?.(floor.id, room.id));
+        this.labels.append(pin);
+        const [cx, cz] = centroid(room.points);
+        roomPins.push({ pin, room, cx, cz });
+        for (const [x, z] of room.points) {
+          bbox ??= { x0: x, x1: x, z0: z, z1: z };
+          bbox.x0 = Math.min(bbox.x0, x);
+          bbox.x1 = Math.max(bbox.x1, x);
+          bbox.z0 = Math.min(bbox.z0, z);
+          bbox.z1 = Math.max(bbox.z1, z);
+        }
+      }
       this.floors.push({
         floor,
         rank: ordered.indexOf(floor),
@@ -1067,7 +1209,12 @@ export class FloorplanViewer {
         screenPics: new Map(),
         flowLayout: "",
         glowSig: "",
-        lampSig: "",
+        lampShapeSig: "",
+        lampColorSig: "",
+        lampShade: new Float32Array(0),
+        lampRanges: new Map(),
+        bbox,
+        roomPins,
         labelSize: null,
         materials,
         mask,
@@ -1079,16 +1226,9 @@ export class FloorplanViewer {
         appliedO: -1,
         label,
       });
-      for (const room of floor.rooms) {
-        const pin = document.createElement("button");
-        pin.className = "fp3d-pin";
-        pin.dataset.room = room.id;
-        pin.dataset.floor = floor.id;
-        pin.textContent = room.name || "–";
-        pin.addEventListener("click", () => this.options.onRoomTap?.(floor.id, room.id));
-        this.labels.append(pin);
-      }
     }
+    this.floorMap = new Map(this.floors.map((f) => [f.floor.id, f]));
+    this.labelsDirty = true;
     if (this.floorId && !b.floors.some((f) => f.id === this.floorId)) this.floorId = null;
     for (const fv of this.floors) {
       this.buildLamps(fv);
@@ -1102,7 +1242,7 @@ export class FloorplanViewer {
     }
     this.applyTargets(previous.size === 0);
     this.applyHighlight();
-    this.applyDetail();
+    this.applyTierFlags();
     this.buildRoofMesh();
     this.updateGhost();
   }
@@ -1134,7 +1274,7 @@ export class FloorplanViewer {
   private placeRoof(dt = 1000): boolean {
     const roof = this.roof;
     if (!roof) return false;
-    const fv = this.floors.find((f) => f.floor.id === roof.floorId);
+    const fv = this.floorMap.get(roof.floorId);
     if (!fv) return false;
     const zoom = Math.min(1, Math.max(0, (this.controls.view.radius / this.houseRadius - 0.62) / 0.3));
     const target = this.floorId === null && this.wallMode !== "cut" ? 0.94 * zoom : 0;
@@ -1154,18 +1294,25 @@ export class FloorplanViewer {
    * Tablet level: leave out the passes that cover the whole picture but add little (floor patterns,
    * baked floor shadows, the ground grid, the wide glow around cables).
    */
-  private applyDetail(): void {
+  private applyTierFlags(): void {
     const low = this.lowQuality;
     this.ground.visible = !low && this.theme !== "day" && this.floors.some((f) => f.floor.rooms.length > 0);
     for (const fv of this.floors) {
       fv.patternMesh.visible = !low;
       fv.shadowMesh.visible = !low && fv.o > 0.98;
+    }
+    this.invalidate();
+  }
+
+  /** The meshes that depend on the level (cable glow, light surface cell, lamp halos). */
+  private rebuildTier(): void {
+    for (const fv of this.floors) {
       fv.flowLayout = "";
       this.buildFlows(fv);
       this.buildLightSurface(fv);
+      fv.lampShapeSig = "";
       this.buildLamps(fv);
     }
-    this.invalidate();
   }
 
   /** True when the house view shows several floors (floor labels instead of room labels). */
@@ -1175,7 +1322,7 @@ export class FloorplanViewer {
 
   /** Target height offset and opacity of every floor for the current view. */
   private applyTargets(immediate: boolean): void {
-    const sel = this.floors.find((f) => f.floor.id === this.floorId);
+    const sel = this.floorId ? this.floorMap.get(this.floorId) : undefined;
     for (const fv of this.floors) {
       let ty = 0;
       let to = 1;
@@ -1248,6 +1395,7 @@ export class FloorplanViewer {
         if (dy !== 0 || dO !== 0) {
           fv.y = fv.ty;
           fv.o = fv.to;
+          this.labelsDirty = true;
           this.applyFloor(fv);
         }
         continue;
@@ -1268,6 +1416,9 @@ export class FloorplanViewer {
       let changed = false;
       for (const [id, cur] of fv.openings) {
         const target = this.openingTargets.get(id) ?? CLOSED;
+        // nothing to do for an opening that rests at its target (the usual case)
+        const near = (a: number | null | undefined, b: number | null | undefined) => (a ?? null) === (b ?? null) || (typeof a === "number" && typeof b === "number" && Math.abs(a - b) < 0.003);
+        if (near(target.open, cur.open) && near(target.open2 ?? 0, cur.open2 ?? 0) && near(target.tilt, cur.tilt) && near(target.tilt2 ?? 0, cur.tilt2 ?? 0) && near(target.cover, cur.cover)) continue;
         const next = { ...cur, open2: cur.open2 ?? 0, tilt2: cur.tilt2 ?? 0 };
         let busy = false;
         for (const key of ["open", "open2", "tilt", "tilt2"] as const) {
@@ -1316,7 +1467,11 @@ export class FloorplanViewer {
     return { color: [c.r, c.g, c.b], level: d.glow.level };
   }
 
-  /** Lamp models of the lights on a floor, merged into one mesh; lit shades take the light colour. */
+  /**
+   * Lamp models of the lights on a floor, merged into one mesh. The shapes are rebuilt only when a
+   * lamp moves or changes; the shade colours (light colour, brightness, tap flash) are written into
+   * the mesh in place, so colour effects cost no geometry.
+   */
   private buildLamps(fv: FloorView): void {
     const now = performance.now();
     const flash = (id: string) => {
@@ -1327,46 +1482,60 @@ export class FloorplanViewer {
       const k = left > FLASH_MS ? 0.5 + 0.5 * Math.sin(left / 140) : left / FLASH_MS;
       return Math.round(k * 10) / 10;
     };
-    const sig =
+    const lamps = this.devices.filter((d) => d.floorId === fv.floor.id && d.lamp);
+    const shapeSig =
       this.wallMode +
       (this.lowQuality ? "L" : this.highQuality ? "H" : "M") +
-      this.devices
-        .filter((d) => d.floorId === fv.floor.id && d.lamp)
-        .map(
-          (d) =>
-            `${d.id},${d.lamp},${d.variant},${d.x},${d.z},${d.rotation ?? 0},${d.size?.join("/")},${d.base ?? 0},${flash(d.id)},${this.glowOf(d) ? `${this.glowOf(d)!.level.toFixed(3)},${this.glowOf(d)!.color.map((c) => c.toFixed(3)).join("/")}` : "off"}`,
-        )
-        .join(";");
-    if (sig === fv.lampSig && fv.lampMesh.geometry.getAttribute("position")) return;
-    fv.lampSig = sig;
-    const buf = new GeoBuffer();
-    const tris: FloorView["lampTris"] = [];
-    const furnTris: FloorView["lampFurnTris"] = [];
-    const H = fv.floor.height;
-    for (const d of this.devices) {
-      if (d.floorId !== fv.floor.id || !d.lamp) continue;
-      // hanging lamps would float above cut walls
-      if (HANGING.has(d.lamp) && this.wallMode === "cut") continue;
-      const start = buf.count;
-      const glow = this.glowOf(d);
+      lamps.map((d) => `${d.id},${d.lamp},${d.variant},${d.x},${d.z},${d.rotation ?? 0},${d.size?.join("/")},${d.base ?? 0},${d.pack ?? ""}`).join(";");
+    const glows = lamps.map((d) => this.glowOf(d));
+    const colorSig = lamps.map((d, i) => `${flash(d.id)},${glows[i] ? `${glows[i]!.level.toFixed(3)},${glows[i]!.color.map((c) => c.toFixed(3)).join("/")}` : "off"}`).join(";");
+    if (shapeSig !== fv.lampShapeSig || !fv.lampMesh.geometry.getAttribute("position")) {
+      fv.lampShapeSig = shapeSig;
+      fv.lampColorSig = "";
+      const buf = new GeoBuffer();
+      const tris: FloorView["lampTris"] = [];
+      const furnTris: FloorView["lampFurnTris"] = [];
+      const ranges = new Map<string, { start: number; end: number }>();
+      const H = fv.floor.height;
+      for (const d of lamps) {
+        // hanging lamps would float above cut walls
+        if (!d.lamp || (HANGING.has(d.lamp) && this.wallMode === "cut")) continue;
+        const start = buf.count;
+        const packed = d.pack ? packItem(d.pack) : undefined;
+        const [pw, pd, ph] = d.size ?? [0.3, 0.3, 0.3];
+        // shades get the sentinel colour and are recoloured below
+        if (packed) pushPackLamp(buf, packed, { x: d.x, z: d.z, rotation: d.rotation ?? 0, w: pw, d: pd, h: ph }, d.base ?? 0, SHADE_SENTINEL);
+        else pushLampModel(buf, { ...d, lamp: d.lamp }, H, SHADE_SENTINEL);
+        ranges.set(d.id, { start, end: buf.count });
+        if (d.pickable !== false) tris.push({ id: d.id, start, end: buf.count });
+        if (d.furnitureId) furnTris.push({ id: d.furnitureId, start, end: buf.count });
+      }
+      fv.lampTris = tris;
+      fv.lampFurnTris = furnTris;
+      fv.lampRanges = ranges;
+      fv.lampShade = shadeFactors(buf.c);
+      fv.lampMesh.geometry.dispose();
+      fv.lampMesh.geometry = buf.geometry();
+      fv.lampMesh.visible = buf.count > 0;
+    }
+    if (colorSig === fv.lampColorSig) return;
+    fv.lampColorSig = colorSig;
+    const attr = fv.lampMesh.geometry.getAttribute("color") as Float32BufferAttribute;
+    const colors = attr.array as Float32Array;
+    lamps.forEach((d, i) => {
+      const range = fv.lampRanges.get(d.id);
+      if (!range) return;
+      const glow = glows[i];
       // a lit shade glows in the light's colour, brighter with more brightness; a tap flashes it white
       const k = glow ? 0.55 + 0.45 * glow.level : 0;
       const shadeC = glow ? new Color(...(glow.color.map((c) => Math.min(1, c * k)) as [number, number, number])) : new Color(LAMP_SHADE);
       const f = flash(d.id);
       if (f > 0) shadeC.lerp(new Color(1, 1, 1), 0.7 * f);
-      const shadeCol = shadeC.getHex();
-      const packed = d.pack ? packItem(d.pack) : undefined;
-      const [pw, pd, ph] = d.size ?? [0.3, 0.3, 0.3];
-      if (packed) pushPackLamp(buf, packed, { x: d.x, z: d.z, rotation: d.rotation ?? 0, w: pw, d: pd, h: ph }, d.base ?? 0, glow ? shadeCol : LAMP_SHADE);
-      else pushLampModel(buf, { ...d, lamp: d.lamp }, H, shadeCol);
-      if (d.pickable !== false) tris.push({ id: d.id, start, end: buf.count });
-      if (d.furnitureId) furnTris.push({ id: d.furnitureId, start, end: buf.count });
-    }
-    fv.lampTris = tris;
-    fv.lampFurnTris = furnTris;
-    fv.lampMesh.geometry.dispose();
-    fv.lampMesh.geometry = buf.geometry();
-    fv.lampMesh.visible = buf.count > 0;
+      // the model's colours come from hex values: convert the same way (colour management)
+      const c = new Color(shadeC.getHex());
+      recolorLamps(colors, fv.lampShade, range, [c.r, c.g, c.b]);
+    });
+    attr.needsUpdate = true;
     this.buildHalos(fv);
   }
 
@@ -1422,6 +1591,11 @@ export class FloorplanViewer {
 
   /** Glow points at lit shades (not at the tablet level) and light cones under spots (level "High"). */
   private buildHalos(fv: FloorView): void {
+    if (this.lowQuality) {
+      fv.haloMesh.visible = false;
+      fv.coneMesh.visible = false;
+      return;
+    }
     const H = fv.floor.height;
     const hp: number[] = [];
     const hc: number[] = [];
@@ -1479,7 +1653,7 @@ export class FloorplanViewer {
     g.setAttribute("color", new Float32BufferAttribute(hc, 3));
     fv.haloMesh.geometry.dispose();
     fv.haloMesh.geometry = g;
-    fv.haloMesh.visible = hp.length > 0 && !this.lowQuality;
+    fv.haloMesh.visible = hp.length > 0;
     fv.coneMesh.geometry.dispose();
     fv.coneMesh.geometry = cones.geometry();
     fv.coneMesh.visible = cones.count > 0;
@@ -1746,6 +1920,12 @@ export class FloorplanViewer {
     }
     this.ground.visible = !box.isEmpty() && !this.lowQuality && this.theme !== "day";
     if (box.isEmpty()) return;
+    if (this.ground.visible && !this.groundTexture) {
+      this.groundTexture = makeGroundTexture();
+      const m = this.ground.material as MeshBasicMaterial;
+      m.map = this.groundTexture;
+      m.needsUpdate = true;
+    }
     const c = box.getCenter(new Vector3());
     const s = box.getSize(new Vector3());
     // the texture has 32 cells: 1 m each for a normal house, 2 m for a very large one
@@ -1858,7 +2038,7 @@ export class FloorplanViewer {
 
   private dragFurniture(x: number, y: number): void {
     const g = this.grab;
-    const fv = g && this.floors.find((f) => f.floor.id === g.floorId);
+    const fv = g && this.floorMap.get(g.floorId);
     if (!g || !fv) return;
     const p = this.floorPoint(fv, x, y);
     if (!p) return;
@@ -1955,7 +2135,7 @@ export class FloorplanViewer {
   floorThumbnails(width = 200, height = 150): { floorId: string; url: string }[] {
     const floors = this.floors.filter((fv) => fv.floor.rooms.some((r) => r.points.length >= 3));
     if (!floors.length) return [];
-    const scale = Math.min(2, window.devicePixelRatio || 1);
+    const scale = this.lowQuality ? 1 : Math.min(2, window.devicePixelRatio || 1);
     const w = Math.round(width * scale);
     const h = Math.round(height * scale);
     const target = new WebGLRenderTarget(w, h);
@@ -2108,7 +2288,7 @@ export class FloorplanViewer {
     this.robotLast = now;
     let active = false;
     for (const r of this.robots.values()) {
-      const fv = this.floors.find((f) => f.floor.id === r.info.floorId);
+      const fv = this.floorMap.get(r.info.floorId);
       if (!fv) continue;
       if (r.group.parent !== fv.group) fv.group.add(r.group);
       if (dt > 0) active = stepRobot(r.motion, r.info, dt) || active;
@@ -2122,7 +2302,7 @@ export class FloorplanViewer {
 
   /** Fly to a point of a floor (search) and let the device there flash. */
   focus(floorId: string, x: number, z: number, y: number, entityId: string | null): void {
-    const fv = this.floors.find((f) => f.floor.id === floorId);
+    const fv = this.floorMap.get(floorId);
     if (!fv) return;
     this.controls.flyTo({ target: new Vector3(x, fv.floor.elevation + fv.ty + y, z), radius: 5.5, phi: 0.78 }, 900);
     if (entityId) {
@@ -2138,14 +2318,26 @@ export class FloorplanViewer {
     this.frame = 0;
     if (this.disposed) return;
     const dt = this.lastFrame ? Math.min(100, now - this.lastFrame) : 16;
+    let orbiting = false;
+    if (this.orbitSpeed && !this.controls.active) {
+      if (this.orbitLast) this.controls.view.theta += (this.orbitSpeed * Math.min(100, now - this.orbitLast)) / 1000;
+      this.orbitLast = now;
+      orbiting = true;
+    } else this.orbitLast = 0;
     const cameraMoving = this.controls.update(now);
     const floorsMoving = this.stepFloors(dt);
     const openingsMoving = this.stepOpenings(dt);
     let flashing = false;
     if (this.flashes.size) {
-      for (const [id, until] of this.flashes) if (until <= now) this.flashes.delete(id);
+      // only the floors with a flashing lamp are recoloured (an expired flash needs one last pass)
+      const touched = new Set<string>();
+      for (const [id, until] of this.flashes) {
+        const floorId = this.deviceFloor.get(id);
+        if (floorId) touched.add(floorId);
+        if (until <= now) this.flashes.delete(id);
+      }
       flashing = this.flashes.size > 0;
-      for (const fv of this.floors) this.buildLamps(fv);
+      for (const fv of this.floors) if (touched.has(fv.floor.id)) this.buildLamps(fv);
     }
     const roofMoving = this.placeRoof(dt);
     const robotsMoving = this.stepRobots(now);
@@ -2154,22 +2346,34 @@ export class FloorplanViewer {
     this.flowTime.value = this.flowSeconds();
     this.updateWalls();
     this.renderer.render(this.scene, this.camera);
-    this.updateLabels();
+    // labels are placed only when the view or something on it moved (style writes cost layout)
+    if (this.viewChanged() || floorsMoving || this.labelsDirty) {
+      this.labelsDirty = false;
+      this.updateLabels();
+    }
     // the energy flow counts as motion here, so its frame rate shows too
     this.reportStats(now, moving || this.flowActive);
     if (moving) this.invalidate();
-    const effects = this.devices.some((d) => d.effect && d.glow);
-    if (effects && !this.effectTimer && !document.hidden) {
+    if (this.effectFloors.size && !this.effectTimer && !document.hidden) {
       // colour effects: a few steps per second are enough and keep the tablet idle in between
+      const ms = this.lowQuality ? 2 * EFFECT_MS : EFFECT_MS;
       this.effectTimer = setTimeout(() => {
         this.effectTimer = undefined;
-        this.effectTime += EFFECT_MS / 1000;
+        this.effectTime += ms / 1000;
         for (const fv of this.floors) {
+          if (fv.o < 0.02 || !this.effectFloors.has(fv.floor.id)) continue;
           this.buildLamps(fv);
           this.buildGlow(fv);
         }
         this.invalidate();
-      }, EFFECT_MS);
+      }, ms);
+    }
+    if (!moving && orbiting && !this.orbitTimer) {
+      // the screensaver turn: about 30 frames per second, 15 on the tablet level
+      this.orbitTimer = setTimeout(() => {
+        this.orbitTimer = undefined;
+        this.invalidate();
+      }, this.lowQuality ? 66 : 33);
     }
     if (!moving && robotsMoving && !this.robotTimer) {
       // a driving robot: about 30 frames per second, 15 on the tablet level
@@ -2183,7 +2387,7 @@ export class FloorplanViewer {
       this.flowTimer = setTimeout(() => {
         this.flowTimer = undefined;
         this.invalidate();
-      }, FLOW_FRAME_MS);
+      }, this.lowQuality ? 2 * FLOW_FRAME_MS : FLOW_FRAME_MS);
     }
   }
 
@@ -2211,31 +2415,66 @@ export class FloorplanViewer {
     }
   }
 
+  /** True when the camera view differs from the last frame's. */
+  private viewChanged(): boolean {
+    const v = this.controls.view;
+    const k = this.viewKey;
+    if (k[0] === v.target.x && k[1] === v.target.y && k[2] === v.target.z && k[3] === v.radius && k[4] === v.theta && k[5] === v.phi) return false;
+    k[0] = v.target.x;
+    k[1] = v.target.y;
+    k[2] = v.target.z;
+    k[3] = v.radius;
+    k[4] = v.theta;
+    k[5] = v.phi;
+    return true;
+  }
+
+  /** Move a label (null hides it); transform and hidden are only written when they changed. */
+  private place(el: HTMLElement, transform: string | null): void {
+    const hidden = transform === null;
+    if (el.hidden !== hidden) el.hidden = hidden;
+    if (transform !== null && this.placed.get(el) !== transform) {
+      this.placed.set(el, transform);
+      el.style.transform = transform;
+    }
+  }
+
   private updateLabels(): void {
-    const w = this.host.clientWidth;
-    const h = this.host.clientHeight;
+    const { w, h } = this.size;
     const v = new Vector3();
     const house = this.houseView;
     const placed: { fv: FloorView; left: number; y: number; h: number }[] = [];
     for (const fv of this.floors) {
-      const show = house && fv.o > 0.5 && fv.floor.rooms.length > 0;
-      fv.label.hidden = !show;
-      if (!show) continue;
-      // left of the leftmost corner of the floor's bounding box, at half the cut height
+      const box = fv.bbox;
+      if (!(house && fv.o > 0.5 && box)) {
+        this.place(fv.label, null);
+        continue;
+      }
+      // left of the leftmost corner of the floor's bounding box, at half the cut height;
+      // right of the rightmost one when the floor pictures take that space
       let best: { x: number; y: number } | null = null;
-      const xs = fv.floor.rooms.flatMap((r) => r.points.map((p) => p[0]));
-      const zs = fv.floor.rooms.flatMap((r) => r.points.map((p) => p[1]));
+      let right: { x: number; y: number } | null = null;
       const y = fv.floor.elevation + fv.y + fv.floor.cut_height * 0.5;
-      for (const x of [Math.min(...xs), Math.max(...xs)]) {
-        for (const z of [Math.min(...zs), Math.max(...zs)]) {
+      for (const x of [box.x0, box.x1]) {
+        for (const z of [box.z0, box.z1]) {
           v.set(x, y, z).project(this.camera);
           const sx = ((v.x + 1) / 2) * w;
-          if (!best || sx < best.x) best = { x: sx, y: ((1 - v.y) / 2) * h };
+          const sy = ((1 - v.y) / 2) * h;
+          if (!best || sx < best.x) best = { x: sx, y: sy };
+          if (!right || sx > right.x) right = { x: sx, y: sy };
         }
       }
+      if (fv.label.hidden) fv.label.hidden = false;
       fv.labelSize ??= { w: fv.label.offsetWidth, h: fv.label.offsetHeight };
       const lw = fv.labelSize.w;
-      placed.push({ fv, left: Math.max(8, Math.min(w - lw - 8, best!.x - lw - 14)), y: best!.y, h: fv.labelSize.h });
+      const minLeft = 8 + this.labelInset;
+      let left = best!.x - lw - 14;
+      let py = best!.y;
+      if (left < minLeft && this.labelInset) {
+        left = right!.x + 14;
+        py = right!.y;
+      }
+      placed.push({ fv, left: Math.max(minLeft, Math.min(w - lw - 8, left)), y: py, h: fv.labelSize.h });
     }
     // top floor first; each lower label keeps below the one above so labels never cover each other
     placed.sort((a, b) => b.fv.rank - a.fv.rank);
@@ -2243,22 +2482,22 @@ export class FloorplanViewer {
       const above = placed[i - 1];
       placed[i].y = Math.max(placed[i].y, above.y + (above.h + placed[i].h) / 2 + 8);
     }
-    for (const p of placed) p.fv.label.style.transform = `translate(${p.left}px, ${p.y}px) translate(0, -50%)`;
+    for (const p of placed) this.place(p.fv.label, `translate(${p.left}px, ${p.y}px) translate(0, -50%)`);
     this.updateDevicePins(w, h);
-    for (const pin of this.labels.querySelectorAll<HTMLElement>(".fp3d-pin[data-room]")) {
-      const fv = this.floors.find((f) => f.floor.id === pin.dataset.floor);
-      const room = fv?.floor.rooms.find((r) => r.id === pin.dataset.room);
-      // in the house view, room labels would pile up between the floors; in a room its panel names it
+    for (const fv of this.floors) {
+      // in the house view, room labels would pile up between the floors; in a room its panel names it;
       // floors stacked below an opened floor carry no labels
-      if (!fv || !room || fv.to < 0.99 || fv.o < 0.9 || house || this.roomId || this.otherFloor(fv)) {
-        pin.hidden = true;
-        continue;
+      const hide = fv.to < 0.99 || fv.o < 0.9 || house || this.roomId !== null || this.otherFloor(fv);
+      const y = fv.floor.elevation + fv.y + 0.05;
+      for (const rp of fv.roomPins) {
+        if (hide) {
+          this.place(rp.pin, null);
+          continue;
+        }
+        v.set(rp.cx, y, rp.cz).project(this.camera);
+        const off = v.z > 1 || Math.abs(v.x) > 1.1 || Math.abs(v.y) > 1.1;
+        this.place(rp.pin, off ? null : `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -50%)`);
       }
-      const [cx, cz] = centroid(room.points);
-      v.set(cx, fv.floor.elevation + fv.y + 0.05, cz).project(this.camera);
-      const off = v.z > 1 || Math.abs(v.x) > 1.1 || Math.abs(v.y) > 1.1;
-      pin.hidden = off;
-      if (!off) pin.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -50%)`;
     }
   }
 
@@ -2272,39 +2511,43 @@ export class FloorplanViewer {
     const house = this.houseView;
     for (const p of this.persons) {
       const pin = this.personPins.get(p.id);
-      const fv = this.floors.find((f) => f.floor.id === p.floorId);
+      const fv = this.floorMap.get(p.floorId);
       if (!pin) continue;
       if (!fv || house || fv.to < 0.99 || fv.o < 0.9 || this.otherFloor(fv)) {
-        pin.hidden = true;
+        this.place(pin, null);
         continue;
       }
       v.set(p.x, fv.floor.elevation + fv.y + 0.9, p.z).project(this.camera);
       const off = v.z > 1 || Math.abs(v.x) > 1.05 || Math.abs(v.y) > 1.05;
-      pin.hidden = off;
-      if (!off) pin.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -50%)`;
+      this.place(pin, off ? null : `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -50%)`);
     }
     for (const d of this.devices) {
-      const pin = this.devicePins.get(d.id);
+      const pin = this.devicePins.get(d.id)?.el;
       if (!pin) continue;
-      const fv = this.floors.find((f) => f.floor.id === d.floorId);
+      const fv = this.floorMap.get(d.floorId);
       // device markers belong to the floor and room views; the house view only shows floor labels
       if (!fv || house || fv.to < 0.99 || fv.o < 0.9 || d.pin === false || this.otherFloor(fv)) {
-        pin.hidden = true;
+        this.place(pin, null);
         continue;
       }
       v.set(d.x, fv.floor.elevation + fv.y + d.y, d.z).project(this.camera);
       const off = v.z > 1 || Math.abs(v.x) > 1.05 || Math.abs(v.y) > 1.05;
-      pin.hidden = off;
-      if (off) continue;
-      const inRoom = this.roomId !== null && d.roomId === this.roomId;
-      pin.classList.toggle("fp3d-dev-full", inRoom);
-      pin.classList.toggle("fp3d-dev-dim", this.roomId !== null && !inRoom);
-      pin.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -50%)`;
+      if (off) {
+        this.place(pin, null);
+        continue;
+      }
+      const mode = this.roomId === null ? "" : d.roomId === this.roomId ? "full" : "dim";
+      if (this.pinMode.get(pin) !== mode) {
+        this.pinMode.set(pin, mode);
+        pin.classList.toggle("fp3d-dev-full", mode === "full");
+        pin.classList.toggle("fp3d-dev-dim", mode === "dim");
+      }
+      this.place(pin, `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -50%)`);
     }
   }
 
   private reportStats(now: number, moving: boolean): void {
-    if (!this.options.onStats) return;
+    if (!this.statsOn || !this.options.onStats) return;
     if (!this.fpsStart) this.fpsStart = now;
     if (this.lastStatsFrame && moving) this.worstFrame = Math.max(this.worstFrame, now - this.lastStatsFrame);
     this.lastStatsFrame = moving ? now : 0;

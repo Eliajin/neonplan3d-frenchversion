@@ -82,6 +82,11 @@ export class OrbitControls {
     for (const [type, fn] of this.listeners) this.el.removeEventListener(type, fn);
   }
 
+  /** A finger or the mouse holds the view, or a flight runs (an automatic orbit waits meanwhile). */
+  get active(): boolean {
+    return this.pointers.size > 0 || this.flight !== null;
+  }
+
   /** Apply the view to the camera. Returns true while inertia or a flight is running. */
   update(now: number): boolean {
     let active = false;

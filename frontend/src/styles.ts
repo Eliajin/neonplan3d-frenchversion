@@ -113,4 +113,12 @@ export const controls = css`
   .fp3d-field select option {
     background: var(--fp3d-chrome-solid);
   }
+  /* fingers need 40 px */
+  @media (pointer: coarse) {
+    .fp3d-seg button,
+    .fp3d-chip,
+    .fp3d-btn {
+      min-height: 40px;
+    }
+  }
 `;

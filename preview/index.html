@@ -146,6 +146,11 @@
         },
       };
 
+      if (params.has("alerts")) {
+        // ?alerts: smoke in the kitchen while it rains on open windows
+        hass.states["binary_sensor.kueche_rauch"].state = "on";
+        hass.states["weather.zuhause"].state = "rainy";
+      }
       let current = hass;
       await import("../custom_components/floorplan_3d/frontend/floorplan-3d.js");
       if (params.has("card")) {
@@ -158,7 +163,19 @@
         editorBox.style.cssText = "background:#1c1c1c;border-radius:12px;padding:20px";
         const editor = await CardClass.getConfigElement();
         const card = document.createElement("floorplan-3d-card");
-        let config = { type: "custom:floorplan-3d-card", quality: "low", floor: params.get("floor") || "eg", flows: false, controls: ["walls", "temperature"], fullscreen_button: true, floor_thumbs: true, ...(params.get("stack") ? { floor_stack: params.get("stack") } : {}) };
+        let config = {
+          type: "custom:floorplan-3d-card",
+          quality: "low",
+          floor: params.get("floor") || "eg",
+          flows: false,
+          controls: ["walls", "temperature"],
+          fullscreen_button: true,
+          floor_thumbs: true,
+          ...(params.get("stack") ? { floor_stack: params.get("stack") } : {}),
+          ...(params.has("nopanel") ? { room_panel: false } : {}),
+          ...(params.has("night") ? { night: "00:00-23:59" } : {}),
+          ...(params.has("kiosk") ? { idle_return: 1, idle_orbit: true } : {}),
+        };
         card.setConfig(config);
         editor.setConfig(config);
         editor.addEventListener("config-changed", (e) => {

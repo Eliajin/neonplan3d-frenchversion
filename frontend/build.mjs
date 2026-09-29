@@ -18,6 +18,8 @@ const common = {
 };
 
 const viewerConfig = { ...common, entryPoints: ["src/viewer/viewer3d.ts"], outfile: `${out}/floorplan-3d-3d.js` };
+// the card's visual editor only loads in the dashboard's card dialog
+const cardEditorConfig = { ...common, entryPoints: ["src/card-editor.ts"], outfile: `${out}/floorplan-3d-card-editor.js` };
 // the editor is only needed by admins who open it, so it is a bundle of its own as well
 // (it draws furniture previews with the 3D bundle, so it knows that bundle's hash too)
 const editorConfig = (viewerHash) => ({
@@ -30,13 +32,14 @@ const editorConfig = (viewerHash) => ({
 // never taken from the browser cache (the integration version only changes after a restart).
 // the frontend knows its own version, to notice a backend that still runs an older one
 const version = JSON.parse(readFileSync("../custom_components/floorplan_3d/manifest.json", "utf8")).version;
-const mainConfig = (viewerHash, editorHash) => ({
+const mainConfig = (viewerHash, editorHash, cardEditorHash) => ({
   ...common,
   entryPoints: ["src/main.ts"],
   outfile: `${out}/floorplan-3d.js`,
   define: {
     __FP3D_VIEWER_HASH__: JSON.stringify(viewerHash),
     __FP3D_EDITOR_HASH__: JSON.stringify(editorHash),
+    __FP3D_CARD_EDITOR_HASH__: JSON.stringify(cardEditorHash),
     __FP3D_VERSION__: JSON.stringify(version),
   },
 });
@@ -56,17 +59,18 @@ function copyFonts() {
   }
 }
 
-const BUDGET = { "floorplan-3d.js": 250 * 1024, "floorplan-3d-3d.js": 650 * 1024, "floorplan-3d-editor.js": 250 * 1024 };
+const BUDGET = { "floorplan-3d.js": 250 * 1024, "floorplan-3d-3d.js": 650 * 1024, "floorplan-3d-editor.js": 250 * 1024, "floorplan-3d-card-editor.js": 80 * 1024 };
 
 copyFonts();
 if (watch) {
   // in watch mode the hash is not tracked; a dev reload fetches the bundle anyway
-  for (const c of [viewerConfig, editorConfig("dev"), mainConfig("dev", "dev")]) await (await context(c)).watch();
+  for (const c of [viewerConfig, editorConfig("dev"), cardEditorConfig, mainConfig("dev", "dev", "dev")]) await (await context(c)).watch();
 } else {
   await build(viewerConfig);
   const editor = editorConfig(hashOf(viewerConfig.outfile));
   await build(editor);
-  await build(mainConfig(hashOf(viewerConfig.outfile), hashOf(editor.outfile)));
+  await build(cardEditorConfig);
+  await build(mainConfig(hashOf(viewerConfig.outfile), hashOf(editor.outfile), hashOf(cardEditorConfig.outfile)));
   let over = false;
   for (const [file, limit] of Object.entries(BUDGET)) {
     const size = statSync(`${out}/${file}`).size;

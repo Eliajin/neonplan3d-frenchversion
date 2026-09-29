@@ -8,6 +8,7 @@
 
 import { generateWalls } from "./geometry/walls.ts";
 import type { Building, Floor, Room, Vec2 } from "./model.ts";
+import { powerSensorsOf } from "./devices.ts";
 import { pointInPolygon, signedArea } from "./model.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
 
@@ -71,9 +72,8 @@ function isPowerSensor(hass: HomeAssistant, id: string): boolean {
 export function powerSensorFor(hass: HomeAssistant, entityId: string): string | null {
   if (isPowerSensor(hass, entityId)) return entityId;
   const device = hass.entities?.[entityId]?.device_id;
-  if (!device || !hass.entities) return null;
-  const sibling = Object.values(hass.entities).find((e) => e.device_id === device && e.entity_id !== entityId && isPowerSensor(hass, e.entity_id));
-  return sibling?.entity_id ?? null;
+  if (!device) return null;
+  return powerSensorsOf(hass, device).find((e) => e !== entityId) ?? null;
 }
 
 /** Placed entities that report power, with their position and current power. */

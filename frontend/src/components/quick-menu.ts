@@ -38,10 +38,13 @@ export class Fp3dQuickMenu extends LitElement {
   static properties = {
     hass: { attribute: false },
     entity: { attribute: false },
+    low: { type: Boolean, reflect: true },
   };
 
   declare hass: HomeAssistant;
   declare entity: string;
+  /** Tablet level: no blur behind the menu. */
+  declare low: boolean;
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
     return translate(this.hass, key, vars);
@@ -187,6 +190,11 @@ export class Fp3dQuickMenu extends LitElement {
         background: var(--fp3d-chrome);
         box-shadow: var(--fp3d-shadow), 0 0 0 1px var(--fp3d-line);
         backdrop-filter: blur(10px);
+      }
+      :host([low]) .qm {
+        backdrop-filter: none;
+        box-shadow: 0 0 0 1px var(--fp3d-line);
+        animation: none;
         color: var(--fp3d-text);
         text-align: center;
         animation: qm-in 140ms ease-out;
