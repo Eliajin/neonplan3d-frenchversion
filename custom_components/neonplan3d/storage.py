@@ -6,9 +6,7 @@ stores so frequent saves from the editor never rewrite the large image data.
 
 from __future__ import annotations
 
-import json
 import logging
-from pathlib import Path
 import time
 from typing import Any
 import uuid
@@ -58,24 +56,24 @@ class _BuildingStore(Store):
 _STORE_KEYS = (STORAGE_KEY_BUILDING, STORAGE_KEY_IMAGES, STORAGE_KEY_HISTORY, STORAGE_KEY_PACKS)
 
 
-def _copy_legacy_stores(storage_dir: str) -> list[str]:
-    """Copy the store files of the earlier name (floorplan_3d.*) to the new keys, unless those exist."""
+async def async_migrate_legacy_stores(hass: HomeAssistant) -> None:
+    """A renamed installation keeps its plan: the stores of the earlier name (floorplan_3d.*) are
+    copied to the new keys once, before the stores load; existing new stores are left alone."""
     copied = []
     for key in _STORE_KEYS:
-        new = Path(storage_dir) / key
-        old = Path(storage_dir) / key.replace(f"{DOMAIN}.", f"{LEGACY_DOMAIN}.", 1)
-        if new.exists() or not old.exists():
+        if await Store(hass, STORAGE_VERSION, key).async_load() is not None:
             continue
-        data = json.loads(old.read_text(encoding="utf-8"))
-        data["key"] = key
-        new.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        old_key = key.replace(f"{DOMAIN}.", f"{LEGACY_DOMAIN}.", 1)
+        old_store = (
+            _BuildingStore(hass, STORAGE_VERSION, old_key, minor_version=STORAGE_MINOR_VERSION)
+            if key == STORAGE_KEY_BUILDING
+            else Store(hass, STORAGE_VERSION, old_key)
+        )
+        data = await old_store.async_load()
+        if data is None:
+            continue
+        await Store(hass, STORAGE_VERSION, key, minor_version=STORAGE_MINOR_VERSION).async_save(data)
         copied.append(key)
-    return copied
-
-
-async def async_migrate_legacy_stores(hass: HomeAssistant) -> None:
-    """A renamed installation keeps its plan: the old files are copied before the stores load."""
-    copied = await hass.async_add_executor_job(_copy_legacy_stores, hass.config.path(".storage"))
     if copied:
         _LOGGER.info("Took over the data of %s: %s", LEGACY_DOMAIN, ", ".join(copied))
 
