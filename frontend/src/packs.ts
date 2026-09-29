@@ -6,7 +6,8 @@ import { ELECTRIC_FURNITURE, FURNITURE_SIZE, surfaceHeight, type Floor, type Fur
 import type { LampModel } from "./viewer/viewer3d.ts";
 
 export interface PackPart {
-  shape: "box" | "cyl";
+  /** A box, a cylinder, or a loft: a box whose top face is another rectangle (sloped sides). */
+  shape: "box" | "cyl" | "loft";
   /** Centre across and in depth (fractions -0.5..0.5 of the item's width and depth, front at +z). */
   x: number;
   z: number;
@@ -19,9 +20,17 @@ export interface PackPart {
   /** "#rrggbb" or a palette role ("body", "fabric", "wood", …). */
   color: string;
   top?: string;
-  edges?: boolean;
+  /** Outline: true (soft blue), "glow" (cyan like the walls) or "faint". */
+  edges?: boolean | "glow" | "faint";
   /** Lamps: shines in the colour and brightness of the linked light. */
   glow?: boolean;
+  /** Loft: centre and extent of the top rectangle (defaults: the same as the bottom). */
+  tx?: number;
+  tz?: number;
+  tw?: number;
+  td?: number;
+  /** Cylinder axis: upright (y, default) or lying along x or z (wheels, pipes, rollers). */
+  axis?: "x" | "y" | "z";
 }
 
 export type PackSymbol =

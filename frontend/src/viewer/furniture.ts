@@ -6,7 +6,7 @@
 import { Color } from "three";
 import type { Furniture, Vec2 } from "../model.ts";
 import { packItem, type PackItem } from "../packs.ts";
-import { ALWAYS, type GeoBuffer, LineBuffer, pushPrism, shade } from "./geo.ts";
+import { ALWAYS, EDGE_TOP, type GeoBuffer, LineBuffer, pushLoft, pushLyingCyl, pushPrism, shade } from "./geo.ts";
 
 const C = {
   body: 0x172238,
@@ -50,6 +50,44 @@ class Builder {
     const poly = [this.tf(x0, z0), this.tf(x0, z1), this.tf(x1, z1), this.tf(x1, z0)];
     pushPrism(this.buf, ccw(poly), y0, y1, side, top, { aoFrom: 0, bottom: y0 > 0.05 });
     if (edges) this.outline(poly, y0, y1, edges);
+  }
+
+  /** A box whose top face is the rectangle `t` (sloped sides): hoods, windscreens, tapered shades. */
+  loft(b: [number, number, number, number], t: [number, number, number, number], y0: number, y1: number, side: number, top = side, edges: Color | null = null): void {
+    if (y1 - y0 < 1e-4) return;
+    const lo: Vec2[] = [this.tf(b[0], b[2]), this.tf(b[0], b[3]), this.tf(b[1], b[3]), this.tf(b[1], b[2])];
+    const hi: Vec2[] = [this.tf(t[0], t[2]), this.tf(t[0], t[3]), this.tf(t[1], t[3]), this.tf(t[1], t[2])];
+    if (lo !== ccw(lo)) {
+      lo.reverse();
+      hi.reverse();
+    }
+    pushLoft(this.buf, lo, hi, y0, y1, side, top);
+    if (edges) {
+      for (let i = 0; i < 4; i++) {
+        this.line(hi[i], hi[(i + 1) % 4], y1, y1, edges);
+        this.line(lo[i], hi[i], y0, y1, edges);
+      }
+    }
+  }
+
+  /** A cylinder lying along x or z (wheels, rollers); `edges` draws both rims. */
+  lyingCyl(axis: "x" | "z", cx: number, cz: number, y0: number, y1: number, len: number, dia: number, side: number, cap = side, n = 12, edges: Color | null = null): void {
+    const r = Math.min(dia, y1 - y0) / 2;
+    if (r < 1e-4 || len < 1e-4) return;
+    const cy = (y0 + y1) / 2;
+    const along = axis === "x" ? cx : cz;
+    const across = axis === "x" ? cz : cx;
+    const at = (a: number, c: number): Vec2 => (axis === "x" ? this.tf(a, c) : this.tf(c, a));
+    pushLyingCyl(this.buf, at, along - len / 2, along + len / 2, across, cy, r, side, cap, n);
+    if (edges) {
+      for (const a of [along - len / 2, along + len / 2]) {
+        for (let i = 0; i < n; i++) {
+          const t0 = (i / n) * Math.PI * 2;
+          const t1 = ((i + 1) / n) * Math.PI * 2;
+          this.line(at(a, across + Math.sin(t0) * r), at(a, across + Math.sin(t1) * r), cy + Math.cos(t0) * r, cy + Math.cos(t1) * r, edges);
+        }
+      }
+    }
   }
 
   /** Vertical cylinder with `n` sides. */
@@ -766,9 +804,18 @@ function packModel(b: Builder, item: PackItem, w: number, d: number, h: number, 
     const top = lit ? glow : (packColor(p.top, false) ?? packColor(p.color, true) ?? shade(side, 1.25).getHex());
     const y0 = base + p.y * h;
     const y1 = base + Math.min(h, (p.y + p.h) * h);
-    const edges = p.edges ? EDGE_FURN : null;
-    if (p.shape === "cyl") b.cyl(p.x * w, p.z * d, (Math.min(p.w * w, p.d * d)) / 2, y0, y1, side, top, 14, edges);
-    else b.box((p.x - p.w / 2) * w, (p.x + p.w / 2) * w, y0, y1, (p.z - p.d / 2) * d, (p.z + p.d / 2) * d, side, top, edges);
+    // "glow" lines are as bright as the wall lines, so a pack item can be drawn like the walls
+    const edges = p.edges === "glow" ? EDGE_TOP : p.edges === "faint" ? EDGE_FAINT : p.edges ? EDGE_FURN : null;
+    if (p.shape === "cyl" && (p.axis === "x" || p.axis === "z")) {
+      b.lyingCyl(p.axis, p.x * w, p.z * d, y0, y1, p.axis === "x" ? p.w * w : p.d * d, p.axis === "x" ? p.d * d : p.w * w, side, top, 14, edges);
+    } else if (p.shape === "cyl") b.cyl(p.x * w, p.z * d, (Math.min(p.w * w, p.d * d)) / 2, y0, y1, side, top, 14, edges);
+    else if (p.shape === "loft") {
+      const tx = p.tx ?? p.x;
+      const tz = p.tz ?? p.z;
+      const tw = p.tw ?? p.w;
+      const td = p.td ?? p.d;
+      b.loft([(p.x - p.w / 2) * w, (p.x + p.w / 2) * w, (p.z - p.d / 2) * d, (p.z + p.d / 2) * d], [(tx - tw / 2) * w, (tx + tw / 2) * w, (tz - td / 2) * d, (tz + td / 2) * d], y0, y1, side, top, edges);
+    } else b.box((p.x - p.w / 2) * w, (p.x + p.w / 2) * w, y0, y1, (p.z - p.d / 2) * d, (p.z + p.d / 2) * d, side, top, edges);
   }
 }
 

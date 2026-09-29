@@ -349,6 +349,7 @@ DEMO_BUILDING.floors[0].furniture = [
   item("stairs", 9.42, 6.3, 1.0, 3.2, 2.75),
   item("wardrobe", 7.1, 6.4, 1.2, 0.4, 2.0, 270),
   { ...item("robot_vacuum", 5.7, 3.2, 0.36, 0.5, 0.1, 270), entity: "vacuum.saugi" },
+  item("pack:mastershort.vehicles:van", 11.7, 2.6, 2.0, 4.85, 1.78, 270),
 ];
 DEMO_BUILDING.floors[1].furniture = [
   item("bed", 1.0, 1.4, 1.0, 2.05, 0.8, 90),

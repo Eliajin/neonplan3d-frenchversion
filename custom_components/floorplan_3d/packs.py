@@ -46,7 +46,7 @@ _METRES = vol.All(vol.Coerce(float), vol.Range(min=0.01, max=10))
 # and height of the item height. A cylinder's diameter is the smaller of w and d.
 PART_SCHEMA = vol.Schema(
     {
-        vol.Required("shape"): vol.In(["box", "cyl"]),
+        vol.Required("shape"): vol.In(["box", "cyl", "loft"]),
         vol.Required("x"): _FRACTION,
         vol.Required("z"): _FRACTION,
         vol.Required("w"): _SPAN,
@@ -55,9 +55,17 @@ PART_SCHEMA = vol.Schema(
         vol.Required("h"): _SPAN,
         vol.Required("color"): _COLOR,
         vol.Optional("top"): _COLOR,
-        vol.Optional("edges", default=False): bool,
+        # outline: True (soft blue), "glow" (cyan like the walls) or "faint"
+        vol.Optional("edges", default=False): vol.Any(bool, vol.In(["glow", "faint"])),
         # lamps: the part shines in the colour and brightness of the linked light
         vol.Optional("glow", default=False): bool,
+        # loft: centre and extent of the top rectangle (default: the same as the bottom)
+        vol.Optional("tx"): _FRACTION,
+        vol.Optional("tz"): _FRACTION,
+        vol.Optional("tw"): _SPAN,
+        vol.Optional("td"): _SPAN,
+        # cylinder axis: upright (default) or lying along x or z (wheels, rollers)
+        vol.Optional("axis"): vol.In(["x", "y", "z"]),
     }
 )
 

@@ -51,12 +51,17 @@ dessen öffentlicher Schlüssel zusätzlich in `PACK_PUBLIC_KEYS` eingetragen un
 
 - `size`: Standardgröße in Metern (Breite, Tiefe, Höhe). Im Plan lässt sich jedes Möbel danach frei
   skalieren; alle Teile wachsen mit.
-- `parts` (max. 60): `box` oder `cyl`. Alle Maße sind **Anteile der Möbelgröße**: `x`/`z` Mitte
-  (−0,5 … 0,5, vorne ist +z), `w`/`d` Breite/Tiefe (0 … 1), `y` Unterkante und `h` Höhe (0 … 1 der
-  Höhe). Ein Zylinder hat den kleineren Wert von `w` und `d` als Durchmesser.
+- `parts` (max. 60): `box`, `cyl` oder `loft`. Alle Maße sind **Anteile der Möbelgröße**: `x`/`z`
+  Mitte (−0,5 … 0,5, vorne ist +z), `w`/`d` Breite/Tiefe (0 … 1), `y` Unterkante und `h` Höhe (0 … 1
+  der Höhe). Ein Zylinder hat den kleineren Wert von `w` und `d` als Durchmesser; mit `axis: "x"` oder
+  `"z"` liegt er (Räder, Rollen – die Länge ist die Ausdehnung entlang der Achse, der Durchmesser der
+  kleinere Wert aus Querausdehnung und `h`). Ein `loft` ist ein Quader, dessen Oberseite ein anderes
+  Rechteck ist (`tx`/`tz` Mitte, `tw`/`td` Größe; Standard wie unten) – für schräge Flächen wie
+  Motorhauben, Windschutzscheiben oder Lampenschirme.
 - `color`: `#rrggbb` oder eine Rolle der eingebauten Palette (`body`, `fabric`, `cushion`, `wood`,
   `white`, `metal`, `dark`, `glass`, `plant`, `pot`, `accent`) – Rollen passen zum Look. `top` setzt
-  eine eigene Farbe für die Oberseite, `edges` zeichnet leuchtende Kanten.
+  eine eigene Farbe für die Oberseite, `edges` zeichnet leuchtende Kanten (`true`: dezent blau,
+  `"glow"`: cyan wie die Wände, `"faint"`: sehr zart).
 - `symbol` (optional, max. 40): Draufsicht im Plan aus `rect` (`fill` für gefüllt), `circle` (`r` als
   Anteil der kleineren Seite) und `line` (`x1`, `z1`, `x2`, `z2`). Ohne Symbol zeichnet der Plan die
   Teile von oben.

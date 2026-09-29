@@ -189,7 +189,7 @@ function packSymbol(item: PackItem, w: number, d: number): Part[] {
   return item.parts
     .filter((p) => p.w < 0.98 || p.d < 0.98)
     .map((p) =>
-      p.shape === "cyl"
+      p.shape === "cyl" && (p.axis ?? "y") === "y"
         ? circle(p.x * w, p.z * d, Math.min(p.w * w, p.d * d) / 2)
         : rect((p.x - p.w / 2) * w, (p.z - p.d / 2) * d, (p.x + p.w / 2) * w, (p.z + p.d / 2) * d),
     );

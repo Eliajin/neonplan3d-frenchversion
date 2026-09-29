@@ -83,6 +83,23 @@ def test_changed_or_foreign_packs_are_rejected() -> None:
     assert err.value.code == "not_a_pack"
 
 
+def test_sloped_and_lying_parts_are_accepted() -> None:
+    private, keys = _key()
+    shaped = copy.deepcopy(PAYLOAD)
+    box = {"x": 0, "z": 0.2, "w": 1, "d": 0.6, "y": 0, "h": 0.5, "color": "body"}
+    shaped["items"][0]["parts"] = [
+        {"shape": "loft", **box, "tx": 0, "tz": 0.1, "tw": 0.9, "td": 0.2, "edges": "glow"},
+        {"shape": "cyl", "axis": "x", **box, "edges": "faint"},
+    ]
+    payload = packs.verify_pack(_sign(private, keys, shaped), keys)
+    assert payload["items"][0]["parts"][0]["edges"] == "glow"
+    assert payload["items"][0]["parts"][1]["axis"] == "x"
+    bad = copy.deepcopy(shaped)
+    bad["items"][0]["parts"][1]["axis"] = "w"
+    with pytest.raises(packs.PackError):
+        packs.verify_pack(_sign(private, keys, bad), keys)
+
+
 def test_pack_content_is_checked() -> None:
     private, keys = _key()
     heavy = copy.deepcopy(PAYLOAD)
