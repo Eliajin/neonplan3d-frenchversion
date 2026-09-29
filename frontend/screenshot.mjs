@@ -87,6 +87,7 @@ const shots = [
   { name: "editor-opening", query: "", width: 1280, height: 800, editor: true, editorState: { _openingId: "o2", _roomId: "wohnen" } },
   { name: "editor-opening-leaves", query: "", width: 1280, height: 800, editor: true, editorState: { _openingId: "o2", _roomId: "wohnen" }, scrollSide: true },
   { name: "editor-furniture", query: "", width: 1280, height: 800, editor: true, editorState: { _furnitureId: "m2" } },
+  { name: "editor-parking", query: "", width: 1280, height: 900, editor: true, editorScript: "e._furnitureId = e._doc.floors[0].furniture.find((f) => f.type === 'parking').id;" },
   { name: "editor-furniture-tool", query: "", width: 1280, height: 800, editor: true, editorState: { _tool: "furniture", _roomId: "wohnen" } },
   { name: "editor-energy", query: "", width: 1280, height: 1400, editor: true, openDetails: true, scrollSide: true },
   { name: "editor-device", query: "", width: 1280, height: 900, editor: true, editorState: { _deviceId: "light.wohnzimmer_decke", _roomId: "wohnen" } },

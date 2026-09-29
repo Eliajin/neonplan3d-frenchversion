@@ -50,6 +50,8 @@ export interface PackItem {
   wall_y?: number;
   /** Its top carries other items. */
   surface?: boolean;
+  /** A vehicle: offered for parking spots. */
+  vehicle?: boolean;
   /** A lamp: how its light spreads. */
   light?: LampModel;
   parts: PackPart[];

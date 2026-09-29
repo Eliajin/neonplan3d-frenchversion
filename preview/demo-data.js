@@ -160,6 +160,9 @@ const DEVICES = [
   entity("sensor.wohnzimmer_feuchte", "wohnzimmer", "48", { friendly_name: "Wohnzimmer Luftfeuchtigkeit", device_class: "humidity", unit_of_measurement: "%" }),
   entity("binary_sensor.kueche_fenster", "kueche", "on", { friendly_name: "Küche Fenster", device_class: "window" }),
   entity("binary_sensor.kueche_rauch", "kueche", "off", { friendly_name: "Küche Rauchmelder", device_class: "smoke" }),
+  entity("binary_sensor.garage_auto", "garage", "on", { friendly_name: "Auto in der Garage", device_class: "occupancy" }),
+  entity("sensor.garage_fahrzeugtyp", "garage", "van", { friendly_name: "Fahrzeugtyp Garage" }),
+  entity("device_tracker.zweitwagen", null, "not_home", { friendly_name: "Zweitwagen" }),
   entity("weather.zuhause", null, "sunny", { friendly_name: "Wetter" }),
   entity("alarm_control_panel.haus", null, "disarmed", { friendly_name: "Alarmanlage" }),
   entity("scene.wohnzimmer_kino", "wohnzimmer", "unknown", { friendly_name: "Wohnzimmer Kino" }),
@@ -349,7 +352,18 @@ DEMO_BUILDING.floors[0].furniture = [
   item("stairs", 9.42, 6.3, 1.0, 3.2, 2.75),
   item("wardrobe", 7.1, 6.4, 1.2, 0.4, 2.0, 270),
   { ...item("robot_vacuum", 5.7, 3.2, 0.36, 0.5, 0.1, 270), entity: "vacuum.saugi" },
-  item("pack:mastershort.vehicles:van", 11.7, 2.6, 2.0, 4.85, 1.78, 270),
+  {
+    ...item("parking", 11.7, 2.6, 2.6, 5.2, 0.02, 270),
+    entity: "binary_sensor.garage_auto",
+    vehicle: "pack:mastershort.vehicles:van",
+    scale: 0.95,
+    type_entity: "sensor.garage_fahrzeugtyp",
+    types: [
+      { state: "van", vehicle: "pack:mastershort.vehicles:van" },
+      { state: "suv", vehicle: "pack:mastershort.vehicles:suv" },
+    ],
+  },
+  { ...item("parking", 16.2, 2.7, 2.6, 5.2, 0.02, 90), entity: "device_tracker.zweitwagen", vehicle: "pack:mastershort.vehicles:compact" },
 ];
 DEMO_BUILDING.floors[1].furniture = [
   item("bed", 1.0, 1.4, 1.0, 2.05, 0.8, 90),

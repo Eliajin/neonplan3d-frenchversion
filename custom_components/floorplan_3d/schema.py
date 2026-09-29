@@ -68,6 +68,11 @@ OPENING_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
+# parking spots: which vehicle a state of the type sensor means
+_VEHICLE_TYPE_SCHEMA = vol.Schema(
+    {vol.Required("state"): vol.All(str, vol.Length(max=64)), vol.Required("vehicle"): vol.All(str, vol.Length(max=96))}
+)
+
 FURNITURE_SCHEMA = vol.Schema(
     {
         vol.Required("id"): _ID,
@@ -83,6 +88,12 @@ FURNITURE_SCHEMA = vol.Schema(
         # linked entities (e.g. the TV's media player, a power sensor): None = automatic, "none" = no entity
         vol.Optional("entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Optional("power", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        # parking spots: the vehicle shown (a pack item type) while the entity reports a car, its size
+        # factor, and a sensor naming the kind of vehicle with a state -> vehicle mapping
+        vol.Optional("vehicle", default=None): vol.Any(None, vol.All(str, vol.Length(max=96))),
+        vol.Optional("scale", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0.2, max=2)),
+        vol.Optional("type_entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        vol.Optional("types", default=[]): vol.All([_VEHICLE_TYPE_SCHEMA], vol.Length(max=20)),
     },
     extra=vol.ALLOW_EXTRA,
 )

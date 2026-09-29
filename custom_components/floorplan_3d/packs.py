@@ -98,6 +98,8 @@ ITEM_SCHEMA = vol.Schema(
         vol.Optional("wall_y", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0, max=3)),
         # its top carries other items (like a table or a worktop)
         vol.Optional("surface", default=False): bool,
+        # a vehicle: offered for parking spots
+        vol.Optional("vehicle", default=False): bool,
         # a lamp: how its light spreads (like the built-in lamp of that kind)
         vol.Optional("light"): vol.In(
             [

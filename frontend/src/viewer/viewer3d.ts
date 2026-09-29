@@ -48,6 +48,7 @@ import { OrbitControls } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
 import { pushPackLamp, screenRect } from "./furniture.ts";
 import { mountBase, packItem, setPacks, type FurniturePack } from "../packs.ts";
+import { withVehicles } from "../parking.ts";
 import { buildRoof } from "./roof.ts";
 import { lineBlending, themed, themeIndex, type Theme, type ThemeUniform } from "./theme.ts";
 
@@ -402,6 +403,9 @@ export class FloorplanViewer {
   private effectFloors = new Set<string>();
   private deviceFloor = new Map<string, string>();
   private statsOn = false;
+  /** Vehicles standing in parking spots (spot id -> pack item type); they join the floor geometry. */
+  private parked = new Map<string, string>();
+  private parkedSig = "";
   /** Slow automatic turn of the view (kiosk screensaver), in radians per second. */
   private orbitSpeed = 0;
   private orbitLast = 0;
@@ -458,6 +462,21 @@ export class FloorplanViewer {
   /** Whether the tablet level is active (hosts lighten their own work with it). */
   get low(): boolean {
     return this.lowQuality;
+  }
+
+  /** Vehicles in the parking spots (spot id -> pack item type); a change rebuilds the floors. */
+  setParked(parked: Map<string, string>): void {
+    const sig = [...parked]
+      .map(([id, v]) => `${id}=${v}`)
+      .sort()
+      .join("|");
+    if (sig === this.parkedSig) return;
+    this.parkedSig = sig;
+    this.parked = parked;
+    if (this.building) {
+      this.rebuild();
+      this.invalidate();
+    }
   }
 
   /** Frame statistics are only gathered while something shows them. */
@@ -1095,7 +1114,7 @@ export class FloorplanViewer {
     if (!b) return;
     const ordered = [...b.floors].sort((p, q) => p.elevation - q.elevation);
     for (const floor of b.floors) {
-      const geo = buildFloorGeometry(floor, b.settings.wall_exterior, b.settings.wall_interior, stairHoles(b.floors, floor));
+      const geo = buildFloorGeometry(withVehicles(floor, this.parked), b.settings.wall_exterior, b.settings.wall_interior, stairHoles(b.floors, floor));
       const mask: FoldMasks = { standing: { value: 0xffff }, glass: { value: 0 } };
       const materials = this.makeMaterials(mask);
       const group = new Group();

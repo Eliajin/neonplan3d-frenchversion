@@ -55,7 +55,7 @@ import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
 import { importPack, removePack } from "../api.ts";
 import { load3d } from "../load3d.ts";
 import { furnitureName } from "../furniture-names.ts";
-import { furnitureSize, isElectric, packItemName, packType, setPacks, type FurniturePack } from "../packs.ts";
+import { furnitureSize, isElectric, packItem, packItemName, packType, setPacks, type FurniturePack } from "../packs.ts";
 
 type Tool = "select" | "rect" | "polygon" | "measure" | "opening" | "furniture" | "outdoor" | "meter";
 
@@ -2300,7 +2300,7 @@ export class Fp3dEditor extends LitElement {
             >
           </div>`
         : nothing}
-      ${isElectric(f.type) ? this.renderFurnitureLinks(f) : nothing}
+      ${isElectric(f.type) ? this.renderFurnitureLinks(f) : nothing} ${f.type === "parking" ? this.renderParkingForm(f) : nothing}
       ${admin
         ? html`<div class="fp3d-actions">
             <button class="fp3d-btn" @click=${() => this.rotateFurniture(-90)}>${this.t("rotate_left")}</button>
@@ -2425,6 +2425,62 @@ export class Fp3dEditor extends LitElement {
         ${lamp ? nothing : this.entitySelect(this.t("furn_power"), f.power ?? null, autoPick("power"), power, (v) => this.updateFurniture({ power: v }))}
       </div>
       <p class="fp3d-sub">${this.t(lamp ? (f.type === "lamp_pendant" ? "lamp_hint_pendant" : "lamp_hint") : media ? "furn_links_hint_tv" : f.type === "robot_vacuum" ? "robot_hint" : "furn_links_hint")}</p>`;
+  }
+
+  /** Parking spot: presence sensor, the vehicle shown, its size, and an optional vehicle type sensor. */
+  private renderParkingForm(f: Furniture) {
+    const admin = this.isAdmin;
+    const lang = this.hass?.language ?? "en";
+    const vehicles = (this.packs ?? []).flatMap((p) => p.items.filter((it) => it.vehicle).map((it) => ({ id: packType(p.id, it.id), label: `${packItemName(it, lang)} · ${p.name}` })));
+    const presence = this.entityOptions((id) => /^(binary_sensor|device_tracker|input_boolean|switch|sensor)\./.test(id));
+    const typeSensors = this.entityOptions((id) => /^(sensor|input_select|select|input_text)\./.test(id));
+    const typeState = f.type_entity ? this.hass?.states[f.type_entity] : undefined;
+    const options = Array.isArray(typeState?.attributes.options) ? (typeState.attributes.options as string[]) : [];
+    const types = f.types ?? [];
+    const setTypes = (next: { state: string; vehicle: string }[]) => this.updateFurniture({ types: next });
+    const vehicleSelect = (value: string | null, onChange: (v: string | null) => void) =>
+      html`<select ?disabled=${!admin} @change=${(e: Event) => onChange((e.target as HTMLSelectElement).value || null)}>
+        <option value="" ?selected=${!value}>${this.t("parking_vehicle_none")}</option>
+        ${vehicles.map((v) => html`<option value=${v.id} ?selected=${v.id === value}>${v.label}</option>`)}
+      </select>`;
+    // the room's height against the vehicle's: a hint when it would not fit
+    const floor = this.floor;
+    const room = floor?.rooms.find((r) => r.points.length >= 3 && pointInPolygon([f.x, f.z], r.points));
+    const item = f.vehicle ? packItem(f.vehicle) : undefined;
+    const carH = item ? item.size[2] * (f.scale ?? 1) : 0;
+    const tooTall = !!room && !!floor && carH > floor.height + 1e-6;
+    return html`<div class="fp3d-form fp3d-links">
+        ${this.entitySelect(this.t("parking_entity"), f.entity ?? null, undefined, presence, (v) => this.updateFurniture({ entity: v === "none" ? null : v }))}
+        <label class="fp3d-field fp3d-wide">${this.t("parking_vehicle")} ${vehicleSelect(f.vehicle ?? null, (v) => this.updateFurniture({ vehicle: v }))}</label>
+        ${vehicles.length ? nothing : html`<p class="fp3d-sub fp3d-wide">${this.t("parking_no_pack")}</p>`}
+        ${this.num(this.t("parking_scale"), Math.round((f.scale ?? 1) * 100), (v) => this.updateFurniture({ scale: Math.min(150, Math.max(30, v)) / 100 }), 5, 30)}
+        ${this.entitySelect(this.t("parking_type_entity"), f.type_entity ?? null, undefined, typeSensors, (v) => this.updateFurniture({ type_entity: v === "none" ? null : v }))}
+        ${f.type_entity
+          ? html`<div class="fp3d-wide">
+              <div class="fp3d-sub">${this.t("parking_types")}</div>
+              ${types.map(
+                (t, i) => html`<div class="fp3d-parking-row">
+                  <input
+                    type="text"
+                    list="fp3d-parking-states"
+                    placeholder=${this.t("parking_type_state")}
+                    .value=${t.state}
+                    ?disabled=${!admin}
+                    @change=${(e: Event) => setTypes(types.map((x, j) => (j === i ? { ...x, state: (e.target as HTMLInputElement).value } : x)))}
+                  />
+                  ${vehicleSelect(t.vehicle, (v) => setTypes(types.map((x, j) => (j === i ? { ...x, vehicle: v ?? "" } : x))))}
+                  <button class="fp3d-btn" ?disabled=${!admin} title=${this.t("delete")} @click=${() => setTypes(types.filter((_, j) => j !== i))}>✕</button>
+                </div>`,
+              )}
+              <datalist id="fp3d-parking-states">${options.map((o) => html`<option value=${o}></option>`)}</datalist>
+              ${admin
+                ? html`<button class="fp3d-btn" @click=${() => setTypes([...types, { state: options[types.length] ?? "", vehicle: vehicles[0]?.id ?? "" }])}>${this.t("parking_add_type")}</button>`
+                : nothing}
+            </div>`
+          : nothing}
+      </div>
+      ${tooTall ? html`<p class="fp3d-sub fp3d-warn">${this.t("parking_too_tall", { car: formatNumber(this.hass, carH, 2), room: formatNumber(this.hass, floor!.height, 2) })}</p>` : nothing}
+      <p class="fp3d-sub">${this.t("parking_hint")}</p>`;
   }
 
   private renderFurnitureLibrary() {
@@ -2841,6 +2897,17 @@ export class Fp3dEditor extends LitElement {
       .fp3d-warn {
         color: var(--fp3d-warm);
         font-size: 12.5px;
+      }
+      .fp3d-parking-row {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        margin: 4px 0;
+      }
+      .fp3d-parking-row input,
+      .fp3d-parking-row select {
+        flex: 1;
+        min-width: 0;
       }
       .fp3d-canvas-wrap {
         position: relative;

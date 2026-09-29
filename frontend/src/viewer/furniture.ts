@@ -767,6 +767,16 @@ export function pushFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuff
     case "tv_wall":
       tvWall(b, w, d, h);
       return;
+    case "parking": {
+      // only the marking of the spot: a vehicle standing in it is added by the viewer
+      const y = 0.012;
+      const corners: [number, number][] = [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]];
+      for (let i = 0; i < 4; i++) b.seg(corners[i][0], y, corners[i][1], corners[(i + 1) % 4][0], y, corners[(i + 1) % 4][1], EDGE_FAINT);
+      // an arrow head at the front: the direction the vehicle faces
+      b.seg(-w * 0.15, y, d / 2 - 0.45, 0, y, d / 2 - 0.2, EDGE_FURN);
+      b.seg(0, y, d / 2 - 0.2, w * 0.15, y, d / 2 - 0.45, EDGE_FURN);
+      return;
+    }
     case "robot_vacuum":
       // only the dock: the robot itself is drawn (and moved) by the viewer
       b.box(-w * 0.45, w * 0.45, 0, h, -d / 2, -d / 2 + d * 0.3, C.white, C.whiteTop, EDGE_FURN);

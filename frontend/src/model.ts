@@ -69,6 +69,13 @@ export interface Furniture {
   entity?: EntityRef;
   /** Power sensor (null = automatic: the linked entity's device or a matching name). */
   power?: EntityRef;
+  /** Parking spots: the vehicle shown (a pack item type) while `entity` reports a car. */
+  vehicle?: string | null;
+  /** Parking spots: size factor of the vehicle (1 = the pack item's size). */
+  scale?: number;
+  /** Parking spots: a sensor naming the kind of vehicle, and which vehicle each state means. */
+  type_entity?: string | null;
+  types?: { state: string; vehicle: string }[];
 }
 
 export type LampMount = "ceiling" | "floor" | "table" | "wall";
@@ -325,6 +332,7 @@ export const FURNITURE_TYPES = [
   "coat_rack",
   "stairs",
   "robot_vacuum",
+  "parking",
 ] as const;
 
 /** Furniture library sections (the editor lists them in this order). */
@@ -336,6 +344,7 @@ export const FURNITURE_GROUPS: Record<string, FurnitureType[]> = {
   sleeping: ["bed", "bunk_bed", "nightstand", "wardrobe", "dresser"],
   bath: ["bathtub", "shower", "wc", "washbasin", "washer", "dryer"],
   work: ["desk", "office_chair", "tall_cabinet", "coat_rack", "radiator", "stairs", "robot_vacuum"],
+  vehicles: ["parking"],
 };
 
 /** Furniture that can show a linked entity (TV state, power, …). */
@@ -466,6 +475,7 @@ export const FURNITURE_SIZE: Record<FurnitureType, [number, number, number]> = {
   lamp_garden: [0.12, 0.12, 0.3],
   radiator: [1.0, 0.1, 0.6],
   robot_vacuum: [0.36, 0.5, 0.1],
+  parking: [2.6, 5.2, 0.02],
   lamp_pendant: [0.4, 0.4, 0.8],
   lamp_floor: [0.4, 0.4, 1.7],
   lamp_table: [0.28, 0.28, 0.45],

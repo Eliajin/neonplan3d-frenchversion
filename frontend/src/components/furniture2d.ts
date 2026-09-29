@@ -124,6 +124,9 @@ export function furnitureSymbol(type: string, w: number, d: number): Part[] | ty
     case "lamp_bollard":
     case "lamp_garden":
       return [circle(0, 0, Math.min(w, d) * 0.5, "fp3d-sym-fill"), circle(0, 0, Math.min(w, d) * 1.6)];
+    case "parking":
+      // the spot's marking with an arrow head at the front
+      return [rect(-w / 2 + 0.08, -d / 2 + 0.08, w / 2 - 0.08, d / 2 - 0.08), line(-w * 0.15, d / 2 - 0.5, 0, d / 2 - 0.22, "fp3d-sym-strong"), line(0, d / 2 - 0.22, w * 0.15, d / 2 - 0.5, "fp3d-sym-strong")];
     case "robot_vacuum":
       // dock at the back, the robot resting in front of it
       return [rect(-w * 0.45, -d / 2, w * 0.45, -d / 2 + d * 0.3, "fp3d-sym-fill"), circle(0, d * 0.14, Math.min(w, d) * 0.47)];

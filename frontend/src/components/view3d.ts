@@ -24,6 +24,7 @@ import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from 
 import { furnitureName } from "../furniture-names.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { getPacks, mountBase, packItem, packsVersion } from "../packs.ts";
+import { parkedVehicles, parkingEntities } from "../parking.ts";
 import { searchIndex, searchItems, type SearchItem } from "../search.ts";
 import { coverPositionable, lightAbilities } from "./quick-menu.ts";
 import "./quick-menu.ts";
@@ -304,6 +305,8 @@ export class Fp3dView3d extends LitElement {
     if (this.shownPacks !== packsVersion()) {
       this.shownPacks = packsVersion();
       v.setPacks([...getPacks()]);
+      // vehicles in parking spots come from packs too: look them up again now that the packs are here
+      if (this.hass && this.building) v.setParked(parkedVehicles(this.hass, this.building));
     }
     if (changed.has("building") && this.building) v.setBuilding(this.building);
     if (changed.has("building") || changed.has("theme") || changed.has("floorThumbs") || changed.has("packs")) this.scheduleThumbs();
@@ -355,7 +358,8 @@ export class Fp3dView3d extends LitElement {
           : b.floors.flatMap((f) => f.rooms.flatMap((r) => areaEntities(hass, r.area_id).filter((id) => id.startsWith("sensor."))));
       this.alertSrc = this.alerts ? alertSources(hass, b) : null;
       const warn = this.alertSrc ? alertEntities(this.alertSrc) : [];
-      const all = [...placed, ...links, ...power, ...furniture, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights, ...heat, ...warn, "sun.sun"];
+      const parking = parkingEntities(b.floors);
+      const all = [...placed, ...links, ...power, ...furniture, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights, ...heat, ...warn, ...parking, "sun.sun"];
       this.watched = [...new Set(all.filter((id): id is string => !!id))];
       force = true;
     }
@@ -381,6 +385,7 @@ export class Fp3dView3d extends LitElement {
     v.setPickTargets(furniture.targets, this.openingTargets());
     v.setScreens(furniture.screens);
     v.setRobots(this.robotInfos(hass, b));
+    v.setParked(parkedVehicles(hass, b));
     const types = new Map(b.floors.flatMap((f) => f.openings.map((o) => [o.id, o.type] as const)));
     const openingStates = new Map([...this.openingLinks!].map(([id, e]) => [id, openingState(hass, e, types.get(id))]));
     v.setOpeningStates(openingStates);
