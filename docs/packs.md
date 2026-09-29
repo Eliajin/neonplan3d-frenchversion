@@ -80,5 +80,26 @@ dessen öffentlicher Schlüssel zusätzlich in `PACK_PUBLIC_KEYS` eingetragen un
 (vorher `npm run build`) je Pack ein Übersichtsbild (`overview.png`, 3200 × 2400) und ein freigestelltes
 PNG pro Möbel (`items/<id>.png`).
 
+## Personalisierte Downloads im Shop
+
+Zwei Schlüssel sind eingetragen: der **Master-Schlüssel** (offline, signiert die Packs) und der
+**Shop-Schlüssel** (auf dem Server, signiert jeden Kauf mit dem Käufernamen). Wird der Server je
+kompromittiert, fliegt nur der Shop-Schlüssel aus `PACK_PUBLIC_KEYS`; alte Signaturen bleiben gültig.
+
+Damit der Server nicht die ganze Kanonisierung nachbauen muss, liegt neben jeder Pack-Datei eine
+**Vorlage** `<pack>.canonical.json` (die kanonischen Bytes ohne Lizenznehmer, aus
+`python tools/fp3dpack.py canonical <pack>.json`; `private/packs/build.py` erzeugt sie mit). Der Shop
+ersetzt darin das letzte `"licensee":null` durch den Namen und signiert genau diese Bytes –
+`tools/shop/ms-np-sign.php` macht das für WooCommerce (Hook `woocommerce_download_product`).
+
+Einrichtung auf dem Server:
+
+1. Seed des Shop-Schlüssels ausgeben: `python tools/fp3dpack.py seed shop-signing-key.pem` und in
+   `wp-config.php` eintragen: `define('MS_NP_SIGNING_SEED', '<base64>');`
+2. `<pack>.canonical.json` zu jeder `<pack>.fp3dpack` in den WooCommerce-Upload-Ordner legen.
+3. `tools/shop/ms-np-sign.php` in den Code-Ordner des Shops kopieren.
+
+Fehlt Seed oder Vorlage, liefert WooCommerce die unpersonalisierte Datei wie bisher aus.
+
 Möbel eines entfernten Packs bleiben im Plan als einfache Kästen stehen und erscheinen wieder, wenn das
 Pack erneut importiert wird.

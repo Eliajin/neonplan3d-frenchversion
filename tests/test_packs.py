@@ -100,6 +100,25 @@ def test_sloped_and_lying_parts_are_accepted() -> None:
         packs.verify_pack(_sign(private, keys, bad), keys)
 
 
+def test_shop_signing_from_the_canonical_template() -> None:
+    """The shop replaces the last "licensee":null of the canonical template with the buyer's name and
+    signs those bytes (tools/shop/ms-np-sign.php); the result must verify and carry the name."""
+    private, keys = _key()
+    template = packs.canonical({**copy.deepcopy(PAYLOAD), "licensee": None})
+    name = 'Jürgen Müller-Lüdenscheidt "Jü"'
+    marker = b'"licensee":null'
+    at = template.rfind(marker)
+    assert at > 0
+    encoded = json.dumps(name, ensure_ascii=False).encode()
+    signed = template[:at] + b'"licensee":' + encoded + template[at + len(marker) :]
+    sig = base64.b64encode(private.sign(signed)).decode()
+    text = '{"payload":' + signed.decode() + ',"signature":{"key":"' + next(iter(keys)) + '","sig":"' + sig + '"}}'
+    payload = packs.verify_pack(text, keys)
+    assert payload["licensee"] == name
+    # the same bytes, canonicalised again by the integration, are what was signed
+    assert packs.canonical(json.loads(text)["payload"]) == signed
+
+
 def test_pack_content_is_checked() -> None:
     private, keys = _key()
     heavy = copy.deepcopy(PAYLOAD)

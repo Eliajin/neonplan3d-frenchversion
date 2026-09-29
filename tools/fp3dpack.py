@@ -5,6 +5,8 @@
         for PACK_PUBLIC_KEYS in custom_components/neonplan3d/packs.py.
 
     python tools/fp3dpack.py sign SOURCE.json --key KEYFILE [--licensee "Name"] [--out PACK.fp3dpack]
+    python tools/fp3dpack.py canonical SOURCE.json [--out PACK.canonical.json]   (template for the shop)
+    python tools/fp3dpack.py seed KEYFILE                                        (seed for the shop server)
         Checks the pack source (the payload, see packs.py) and writes the signed pack. With
         --licensee the buyer's name is signed into the pack and shown when it is imported.
 
@@ -55,8 +57,8 @@ def keygen(path: Path) -> None:
 
 def sign(source: Path, key: Path, licensee: str | None, out: Path | None) -> None:
     payload = json.loads(source.read_text(encoding="utf-8"))
-    if licensee is not None:
-        payload["licensee"] = licensee
+    # the licensee is always present, so a shop can put a buyer's name into the canonical form later
+    payload["licensee"] = licensee
     packs.validate_payload(payload)
     private = serialization.load_pem_private_key(key.read_bytes(), password=None)
     if not isinstance(private, Ed25519PrivateKey):
@@ -70,6 +72,28 @@ def sign(source: Path, key: Path, licensee: str | None, out: Path | None) -> Non
         json.dumps({"payload": payload, "signature": signature}, ensure_ascii=False, indent=1), encoding="utf-8"
     )
     print(f"Signed {len(payload['items'])} items -> {target}")
+
+
+def canonical(source: Path, out: Path | None) -> None:
+    """Write the canonical bytes of a pack without a licensee: the template a shop signs per buyer
+    (see tools/shop/ms-np-sign.php), which replaces the last "licensee":null with the buyer's name."""
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    payload["licensee"] = None
+    packs.validate_payload(payload)
+    target = out or source.with_suffix(".canonical.json")
+    target.write_bytes(packs.canonical(payload))
+    print(f"Canonical template -> {target}")
+
+
+def seed(key: Path) -> None:
+    """Print the 32-byte seed of a key (base64) for a server that signs with PHP sodium."""
+    private = serialization.load_pem_private_key(key.read_bytes(), password=None)
+    if not isinstance(private, Ed25519PrivateKey):
+        sys.exit("not an Ed25519 key")
+    raw = private.private_bytes(
+        serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption()
+    )
+    print(base64.b64encode(raw).decode())
 
 
 def verify(path: Path) -> None:
@@ -95,11 +119,20 @@ def main() -> None:
     p.add_argument("--out", type=Path)
     p = sub.add_parser("verify")
     p.add_argument("pack", type=Path)
+    p = sub.add_parser("canonical")
+    p.add_argument("source", type=Path)
+    p.add_argument("--out", type=Path)
+    p = sub.add_parser("seed")
+    p.add_argument("keyfile", type=Path)
     args = parser.parse_args()
     if args.command == "keygen":
         keygen(args.keyfile)
     elif args.command == "sign":
         sign(args.source, args.key, args.licensee, args.out)
+    elif args.command == "canonical":
+        canonical(args.source, args.out)
+    elif args.command == "seed":
+        seed(args.keyfile)
     else:
         verify(args.pack)
 

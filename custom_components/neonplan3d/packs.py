@@ -26,8 +26,10 @@ MAX_PACK_SIZE = 1_000_000
 
 # Publisher keys whose packs are accepted: key id -> raw Ed25519 public key (base64).
 PACK_PUBLIC_KEYS: dict[str, str] = {
-    # Mastershort
+    # Mastershort (master key, kept offline)
     "62863e45df5a": "D3sbiEQibaCVm1OWcYUrQc424c2t+pmSQqWg6l6fNSE=",
+    # Mastershort shop (signs purchased packs with the buyer's name; revocable by removing it here)
+    "867371cc70e6": "uP74xZzFJ2yysjdIZVq5q9G/yn5hVX4HJ6wHv7pqqwo=",
 }
 
 _ID = vol.All(str, vol.Match(r"^[a-z0-9][a-z0-9_.-]{0,39}$"))
