@@ -181,6 +181,8 @@ export interface PersonPin {
 export interface ViewerStats {
   /** Frames per second while something moves; 0 at rest (nothing is drawn then). */
   fps: number;
+  /** What keeps the picture moving: camera, floors, openings, flash, roof, flow, effect, robot, orbit, tint. */
+  busy: string[];
   /** Slowest frame of the last measuring window (ms). */
   worstMs: number;
   calls: number;
@@ -371,6 +373,9 @@ export class FloorplanViewer {
   private highQuality = false;
   /** Seconds used for animated colour effects (advanced in steps while an effect runs). */
   private effectTime = 0;
+  /** The frame was asked for by the effect timer or a room tint (shown in the statistics). */
+  private effectTick = false;
+  private tintTick = false;
   private effectTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly haloTexture: CanvasTexture;
   /** Roof over the top floor (house view only), its opacity and the camera distance of the house view. */
@@ -725,6 +730,7 @@ export class FloorplanViewer {
   setRoomTint(tint: Map<string, [number, number, number]> | null): void {
     const changed = !!tint !== !!this.roomTint;
     this.roomTint = tint;
+    this.tintTick = true;
     this.applyHighlight();
     if (changed) {
       for (const fv of this.floors) {
@@ -2342,6 +2348,18 @@ export class FloorplanViewer {
     const roofMoving = this.placeRoof(dt);
     const robotsMoving = this.stepRobots(now);
     const moving = cameraMoving || floorsMoving || openingsMoving || flashing || roofMoving;
+    const busy: string[] = [];
+    if (cameraMoving) busy.push("camera");
+    if (floorsMoving) busy.push("floors");
+    if (openingsMoving) busy.push("openings");
+    if (flashing) busy.push("flash");
+    if (roofMoving) busy.push("roof");
+    if (this.flowActive) busy.push("flow");
+    if (this.effectTick) busy.push("effect");
+    if (robotsMoving) busy.push("robot");
+    if (orbiting) busy.push("orbit");
+    if (this.tintTick) busy.push("tint");
+    this.effectTick = this.tintTick = false;
     this.lastFrame = moving ? now : 0;
     this.flowTime.value = this.flowSeconds();
     this.updateWalls();
@@ -2351,8 +2369,8 @@ export class FloorplanViewer {
       this.labelsDirty = false;
       this.updateLabels();
     }
-    // the energy flow counts as motion here, so its frame rate shows too
-    this.reportStats(now, moving || this.flowActive);
+    // everything that keeps drawing (also the energy flow, effects, robots) shows in the frame rate
+    this.reportStats(now, busy);
     if (moving) this.invalidate();
     if (this.effectFloors.size && !this.effectTimer && !document.hidden) {
       // colour effects: a few steps per second are enough and keep the tablet idle in between
@@ -2360,6 +2378,7 @@ export class FloorplanViewer {
       this.effectTimer = setTimeout(() => {
         this.effectTimer = undefined;
         this.effectTime += ms / 1000;
+        this.effectTick = true;
         for (const fv of this.floors) {
           if (fv.o < 0.02 || !this.effectFloors.has(fv.floor.id)) continue;
           this.buildLamps(fv);
@@ -2546,8 +2565,9 @@ export class FloorplanViewer {
     }
   }
 
-  private reportStats(now: number, moving: boolean): void {
+  private reportStats(now: number, busy: string[]): void {
     if (!this.statsOn || !this.options.onStats) return;
+    const moving = busy.length > 0;
     if (!this.fpsStart) this.fpsStart = now;
     if (this.lastStatsFrame && moving) this.worstFrame = Math.max(this.worstFrame, now - this.lastStatsFrame);
     this.lastStatsFrame = moving ? now : 0;
@@ -2557,6 +2577,7 @@ export class FloorplanViewer {
       const info = this.renderer.info.render;
       this.options.onStats({
         fps: moving ? Math.round((this.fpsFrames * 1000) / elapsed) : 0,
+        busy,
         worstMs: Math.round(this.worstFrame),
         calls: info.calls,
         triangles: info.triangles,

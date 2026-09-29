@@ -22,7 +22,7 @@ import { energySummary, findConsumers, flowColor, flowSegments, powerSensorFor, 
 import { STAGE, type Theme } from "../themes.ts";
 import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from "../heatmap.ts";
 import { furnitureName } from "../furniture-names.ts";
-import { formatNumber, translate } from "../i18n.ts";
+import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { getPacks, mountBase, packItem, packsVersion } from "../packs.ts";
 import { searchIndex, searchItems, type SearchItem } from "../search.ts";
 import { coverPositionable, lightAbilities } from "./quick-menu.ts";
@@ -967,7 +967,8 @@ export class Fp3dView3d extends LitElement {
       ${this.renderAlerts()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderSwipe()} ${this.renderMenu()}
       ${this.showStats && this._stats
         ? html`<span class="fp3d-stats"
-            ><b>${this._stats.fps ? translate(this.hass, "stats_fps", { fps: this._stats.fps, ms: this._stats.worstMs }) : translate(this.hass, "stats_idle")}</b> ·
+            ><b>${this._stats.fps ? translate(this.hass, "stats_fps", { fps: this._stats.fps, ms: this._stats.worstMs }) : translate(this.hass, "stats_idle")}</b>
+            ${this._stats.busy.length ? html`(${this._stats.busy.map((b) => translate(this.hass, `stats_busy_${b}` as I18nKey)).join(", ")})` : nothing} ·
             ${translate(this.hass, "stats", { calls: this._stats.calls, tris: this._stats.triangles.toLocaleString() })} ·
             ${translate(this.hass, this._stats.low ? "stats_low" : "stats_full", { r: formatNumber(this.hass, this._stats.pixelRatio, 2) })}</span
           >`
