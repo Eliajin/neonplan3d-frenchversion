@@ -69,66 +69,73 @@ for (const source of sources) {
         img.onload = () => ok(img);
         img.src = src;
       });
-      // overview: title, then the items in a grid of tiles
-      const W = 1600;
-      const H = 1200;
-      const c = document.createElement("canvas");
-      c.width = W * 2;
-      c.height = H * 2;
-      const g = c.getContext("2d");
-      g.scale(2, 2);
-      const bg = g.createRadialGradient(W / 2, H * 0.35, 50, W / 2, H * 0.45, W * 0.75);
-      bg.addColorStop(0, "#15213d");
-      bg.addColorStop(1, "#060a13");
-      g.fillStyle = bg;
-      g.fillRect(0, 0, W, H);
-      // faint floor grid
-      g.strokeStyle = "rgba(91,124,255,0.07)";
-      g.lineWidth = 1;
-      for (let x = 0; x <= W; x += 40) g.strokeRect(x, 0, 0, H);
-      for (let y = 0; y <= H; y += 40) g.strokeRect(0, y, W, 0);
-      g.fillStyle = "#37e0ff";
-      g.font = "600 22px Figtree";
-      g.fillText("FLOORPLAN 3D · MÖBEL-PACK", 70, 86);
-      g.fillStyle = "#f2f5ff";
-      g.font = "800 64px 'Bricolage Grotesque'";
-      g.fillText(pack.name, 68, 150);
-      g.fillStyle = "#8d9bc2";
-      g.font = "500 24px Figtree";
-      g.fillText(`${pack.items.length} Möbel · für Home Assistant${pack.publisher ? ` · von ${pack.publisher}` : ""}`, 70, 192);
-      const n = items.length;
-      const cols = n <= 4 ? n : n <= 6 ? 3 : n <= 8 ? 4 : n <= 12 ? 4 : 5;
-      const rows = Math.ceil(n / cols);
-      const top = 240;
-      const gap = 22;
-      const tw = (W - 140 - gap * (cols - 1)) / cols;
-      const th = Math.min(tw * 1.08, (H - top - 60 - gap * (rows - 1)) / rows);
-      for (let i = 0; i < n; i++) {
-        const x = 70 + (i % cols) * (tw + gap);
-        const y = top + Math.floor(i / cols) * (th + gap);
-        g.fillStyle = "rgba(27,40,72,0.55)";
-        g.strokeStyle = "rgba(55,224,255,0.22)";
-        g.lineWidth = 1.5;
-        g.beginPath();
-        g.roundRect(x, y, tw, th, 20);
-        g.fill();
-        g.stroke();
-        const img = await load(items[i].url);
-        const s = Math.min(tw - 30, th - 70);
-        g.drawImage(img, x + (tw - s) / 2, y + 12, s, s);
-        g.fillStyle = "#e8eeff";
-        g.font = `600 ${tw < 260 ? 18 : 21}px Figtree`;
-        g.textAlign = "center";
-        g.fillText(items[i].name, x + tw / 2, y + th - 24, tw - 20);
-        g.textAlign = "left";
-      }
-      return { items, overview: c.toDataURL("image/png") };
+      // overview sheets: title, then up to 12 items per sheet in a grid of tiles
+      const PER_PAGE = 12;
+      const pages = Math.ceil(items.length / PER_PAGE);
+      const sheet = async (page, pageNo) => {
+        const W = 1600;
+        const H = 1200;
+        const c = document.createElement("canvas");
+        c.width = W * 2;
+        c.height = H * 2;
+        const g = c.getContext("2d");
+        g.scale(2, 2);
+        const bg = g.createRadialGradient(W / 2, H * 0.35, 50, W / 2, H * 0.45, W * 0.75);
+        bg.addColorStop(0, "#15213d");
+        bg.addColorStop(1, "#060a13");
+        g.fillStyle = bg;
+        g.fillRect(0, 0, W, H);
+        // faint floor grid
+        g.strokeStyle = "rgba(91,124,255,0.07)";
+        g.lineWidth = 1;
+        for (let x = 0; x <= W; x += 40) g.strokeRect(x, 0, 0, H);
+        for (let y = 0; y <= H; y += 40) g.strokeRect(0, y, W, 0);
+        g.fillStyle = "#37e0ff";
+        g.font = "600 22px Figtree";
+        g.fillText("FLOORPLAN 3D · MÖBEL-PACK", 70, 86);
+        g.fillStyle = "#f2f5ff";
+        g.font = "800 64px 'Bricolage Grotesque'";
+        g.fillText(pack.name, 68, 150);
+        g.fillStyle = "#8d9bc2";
+        g.font = "500 24px Figtree";
+        g.fillText(`${pack.items.length} Möbel · für Home Assistant${pack.publisher ? ` · von ${pack.publisher}` : ""}${pages > 1 ? ` · Seite ${pageNo} von ${pages}` : ""}`, 70, 192);
+        const n = page.length;
+        const cols = n <= 4 ? n : n <= 6 ? 3 : n <= 8 ? 4 : n <= 12 ? 4 : 5;
+        const rows = Math.ceil(n / cols);
+        const top = 240;
+        const gap = 22;
+        const tw = (W - 140 - gap * (cols - 1)) / cols;
+        const th = Math.min(tw * 1.08, (H - top - 60 - gap * (rows - 1)) / rows);
+        for (let i = 0; i < n; i++) {
+          const x = 70 + (i % cols) * (tw + gap);
+          const y = top + Math.floor(i / cols) * (th + gap);
+          g.fillStyle = "rgba(27,40,72,0.55)";
+          g.strokeStyle = "rgba(55,224,255,0.22)";
+          g.lineWidth = 1.5;
+          g.beginPath();
+          g.roundRect(x, y, tw, th, 20);
+          g.fill();
+          g.stroke();
+          const img = await load(page[i].url);
+          const s = Math.min(tw - 30, th - 70);
+          g.drawImage(img, x + (tw - s) / 2, y + 12, s, s);
+          g.fillStyle = "#e8eeff";
+          g.font = `600 ${tw < 260 ? 18 : 21}px Figtree`;
+          g.textAlign = "center";
+          g.fillText(page[i].name, x + tw / 2, y + th - 24, tw - 20);
+          g.textAlign = "left";
+        }
+        return c.toDataURL("image/png");
+      };
+      const overviews = [];
+      for (let p = 0; p < pages; p++) overviews.push(await sheet(items.slice(p * PER_PAGE, (p + 1) * PER_PAGE), p + 1));
+      return { items, overviews };
     },
     `${base}/custom_components/floorplan_3d/frontend/floorplan-3d-3d.js`,
     pack,
   );
   const save = (file, url) => writeFileSync(file, Buffer.from(url.split(",")[1], "base64"));
-  save(join(dir, "overview.png"), result.overview);
+  result.overviews.forEach((url, i) => save(join(dir, i ? `overview-${i + 1}.png` : "overview.png"), url));
   for (const it of result.items) save(join(dir, "items", `${it.id}.png`), it.url);
   console.log(`${basename(source)}: ${result.items.length} items -> ${dir}`);
   await page.close();
