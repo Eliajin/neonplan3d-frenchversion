@@ -70,6 +70,15 @@ class Builder {
     }
   }
 
+  /** Box with bevelled top and bottom edges (cushions, mattresses, arm rests). */
+  pad(x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, side: number, top = side, r = 0.03, edges: Color | null = null): void {
+    r = Math.min(r, (x1 - x0) / 2 - 0.005, (z1 - z0) / 2 - 0.005, (y1 - y0) / 2);
+    if (r < 0.008) return this.box(x0, x1, y0, y1, z0, z1, side, top, edges);
+    this.loft([x0 + r, x1 - r, z0 + r, z1 - r], [x0, x1, z0, z1], y0, y0 + r, side);
+    if (y1 - y0 - 2 * r > 0.005) this.box(x0, x1, y0 + r, y1 - r, z0, z1, side, side, edges);
+    this.loft([x0, x1, z0, z1], [x0 + r, x1 - r, z0 + r, z1 - r], y1 - r, y1, side, top);
+  }
+
   /** A cylinder lying along x or z (wheels, rollers); `edges` draws both rims. */
   lyingCyl(axis: "x" | "z", cx: number, cz: number, y0: number, y1: number, len: number, dia: number, side: number, cap = side, n = 12, edges: Color | null = null): void {
     const r = Math.min(dia, y1 - y0) / 2;
@@ -131,10 +140,17 @@ function ccw(poly: Vec2[]): Vec2[] {
 }
 
 /** Four legs inside a w × d footprint. */
-function legs(b: Builder, w: number, d: number, h: number, t: number, inset: number, color = C.metal): void {
+function legs(b: Builder, w: number, d: number, h: number, t: number, inset: number, color = C.metal, taper = false): void {
   const x = w / 2 - inset - t;
   const z = d / 2 - inset - t;
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.box(sx * x - t / 2, sx * x + t / 2, 0, h, sz * z - t / 2, sz * z + t / 2, color);
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const cx = sx * x;
+      const cz = sz * z;
+      if (taper) b.loft([cx - t * 0.3, cx + t * 0.3, cz - t * 0.3, cz + t * 0.3], [cx - t / 2, cx + t / 2, cz - t / 2, cz + t / 2], 0, h, color);
+      else b.box(cx - t / 2, cx + t / 2, 0, h, cz - t / 2, cz + t / 2, color);
+    }
+  }
 }
 
 /** Door or drawer fronts: division lines on the front face (+z) and small glowing handles. */
@@ -163,19 +179,20 @@ function sofa(b: Builder, w: number, d: number, h: number, seats: number): void 
   const arm = Math.min(0.2, w * 0.12);
   const seatH = h * 0.5;
   const back = Math.min(0.24, d * 0.28);
-  legs(b, w, d, 0.06, 0.05, 0.04);
-  b.box(x0, x1, 0.06, seatH - 0.08, z0, z1, C.fabric, C.fabricTop, EDGE_FURN);
-  b.box(x0, x1, 0.06, h, z0, z0 + back, C.fabric, C.fabricTop, EDGE_FURN);
-  b.box(x0, x0 + arm, 0.06, h * 0.72, z0, z1, C.fabric, C.fabricTop, EDGE_FURN);
-  b.box(x1 - arm, x1, 0.06, h * 0.72, z0, z1, C.fabric, C.fabricTop, EDGE_FURN);
-  // seat cushions with a small gap, and back cushions
+  legs(b, w, d, 0.07, 0.05, 0.05, C.wood, true);
+  b.pad(x0, x1, 0.07, seatH - 0.08, z0 + 0.02, z1, C.fabric, C.fabricTop, 0.04, EDGE_FURN);
+  // the back leans a little: its top is thinner than its base
+  b.loft([x0, x1, z0, z0 + back], [x0 + 0.01, x1 - 0.01, z0, z0 + back * 0.5], seatH - 0.08, h, C.fabric, C.fabricTop, EDGE_FURN);
+  b.pad(x0, x0 + arm, seatH - 0.08, h * 0.72, z0 + 0.02, z1 - 0.02, C.fabric, C.fabricTop, 0.04, EDGE_FURN);
+  b.pad(x1 - arm, x1, seatH - 0.08, h * 0.72, z0 + 0.02, z1 - 0.02, C.fabric, C.fabricTop, 0.04, EDGE_FURN);
+  // seat cushions with a small gap, and back cushions leaning against the back
   const inner = x1 - arm - (x0 + arm);
   const cw = inner / seats;
   for (let i = 0; i < seats; i++) {
-    const cx0 = x0 + arm + cw * i + 0.01;
-    const cx1 = cx0 + cw - 0.02;
-    b.box(cx0, cx1, seatH - 0.08, seatH + 0.03, z0 + back, z1 - 0.02, C.cushion, C.cushion, EDGE_FAINT);
-    b.box(cx0, cx1, seatH + 0.03, h * 0.93, z0 + back, z0 + back + 0.14, C.cushion, C.cushion, EDGE_FAINT);
+    const cx0 = x0 + arm + cw * i + 0.02;
+    const cx1 = cx0 + cw - 0.04;
+    b.pad(cx0, cx1, seatH - 0.08, seatH + 0.05, z0 + back + 0.02, z1 - 0.06, C.cushion, C.cushion, 0.04);
+    b.loft([cx0 + 0.01, cx1 - 0.01, z0 + back * 0.55, z0 + back + 0.14], [cx0 + 0.03, cx1 - 0.03, z0 + back * 0.4, z0 + back * 0.4 + 0.06], seatH + 0.03, h * 0.93, C.cushion);
   }
 }
 
@@ -185,32 +202,39 @@ function bed(b: Builder, w: number, d: number, h: number): void {
   const x0 = -w / 2;
   const x1 = w / 2;
   const frame = Math.min(0.32, h * 0.36);
-  legs(b, w, d, 0.08, 0.06, 0.03, C.wood);
+  legs(b, w, d, 0.08, 0.06, 0.03, C.wood, true);
   b.box(x0, x1, 0.08, frame, z0 + 0.06, z1, C.wood, C.woodTop, EDGE_FURN);
-  b.box(x0 + 0.03, x1 - 0.03, frame, frame + 0.2, z0 + 0.08, z1 - 0.03, C.white, C.whiteTop, EDGE_FAINT);
-  b.box(x0, x1, 0.08, h, z0, z0 + 0.07, C.wood, C.woodTop, EDGE_FURN);
-  // blanket over the lower two thirds, pillows at the head
+  b.pad(x0 + 0.03, x1 - 0.03, frame, frame + 0.2, z0 + 0.08, z1 - 0.03, C.white, C.whiteTop, 0.03);
+  b.box(x0, x1, 0.08, h - 0.05, z0, z0 + 0.07, C.wood, C.woodTop, EDGE_FURN);
+  b.box(x0, x1, h - 0.05, h, z0, z0 + 0.09, C.wood, C.woodTop, EDGE_FAINT);
+  // duvet over the lower two thirds with a folded-back edge, puffy pillows at the head
   const top = frame + 0.2;
-  b.box(x0 + 0.01, x1 - 0.01, top - 0.12, top + 0.05, z0 + (d - 0.1) * 0.36, z1 - 0.01, C.cushion, C.fabricTop, EDGE_FAINT);
+  const fold = z0 + (d - 0.1) * 0.36;
+  b.pad(x0 + 0.01, x1 - 0.01, top - 0.1, top + 0.05, fold, z1 - 0.01, C.cushion, C.fabricTop, 0.025, EDGE_FAINT);
+  b.lyingCyl("x", 0, fold + 0.05, top - 0.02, top + 0.09, w - 0.02, 0.1, C.cushion, C.fabricTop, 8);
   const pillows = w > 1.2 ? 2 : 1;
   const pw = (w - 0.2) / pillows;
   for (let i = 0; i < pillows; i++) {
     const px = x0 + 0.1 + pw * i;
-    b.box(px + 0.03, px + pw - 0.03, top, top + 0.11, z0 + 0.12, z0 + 0.12 + Math.min(0.42, d * 0.2), C.whiteTop, C.whiteTop, EDGE_FAINT);
+    const pz = z0 + 0.12;
+    const pd = Math.min(0.42, d * 0.2);
+    const k = 0.1;
+    b.loft([px + 0.03 + k, px + pw - 0.03 - k, pz + k * 0.5, pz + pd - k * 0.5], [px + 0.03, px + pw - 0.03, pz, pz + pd], top, top + 0.06, C.whiteTop);
+    b.loft([px + 0.03, px + pw - 0.03, pz, pz + pd], [px + 0.03 + k, px + pw - 0.03 - k, pz + k * 0.5, pz + pd - k * 0.5], top + 0.06, top + 0.12, C.whiteTop, C.whiteTop, EDGE_FAINT);
   }
 }
 
 function chair(b: Builder, w: number, d: number, h: number): void {
   const seat = Math.min(0.46, h * 0.52);
-  legs(b, w, d, seat - 0.04, 0.035, 0.02);
+  legs(b, w, d, seat - 0.04, 0.035, 0.02, C.wood, true);
   b.box(-w / 2, w / 2, seat - 0.04, seat, -d / 2, d / 2, C.wood, C.woodTop, EDGE_FURN);
-  b.box(-w / 2 + 0.02, w / 2 - 0.02, seat, seat + 0.03, -d / 2 + 0.03, d / 2 - 0.03, C.cushion, C.cushion);
-  b.box(-w / 2, w / 2, seat, h, -d / 2, -d / 2 + 0.04, C.wood, C.woodTop, EDGE_FURN);
+  b.pad(-w / 2 + 0.02, w / 2 - 0.02, seat, seat + 0.04, -d / 2 + 0.05, d / 2 - 0.03, C.cushion, C.cushion, 0.015);
+  b.loft([-w / 2, w / 2, -d / 2 + 0.02, -d / 2 + 0.07], [-w / 2 + 0.02, w / 2 - 0.02, -d / 2, -d / 2 + 0.03], seat, h, C.wood, C.woodTop, EDGE_FURN);
 }
 
 function table(b: Builder, w: number, d: number, h: number): void {
-  legs(b, w, d, h - 0.04, 0.05, 0.05, C.wood);
-  b.box(-w / 2, w / 2, h - 0.04, h, -d / 2, d / 2, C.wood, C.woodTop, EDGE_FURN);
+  legs(b, w, d, h - 0.04, 0.06, 0.05, C.wood, true);
+  b.box(-w / 2, w / 2, h - 0.04, h, -d / 2, d / 2, C.wood, C.woodTop, EDGE_GLOW);
   b.box(-w / 2 + 0.08, w / 2 - 0.08, h - 0.1, h - 0.04, -d / 2 + 0.08, d / 2 - 0.08, C.body);
 }
 

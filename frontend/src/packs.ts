@@ -96,8 +96,21 @@ export function isPackType(type: string): boolean {
 }
 
 /** The pack item of a furniture type (undefined for built-in types and removed packs). */
+/** Packs that were merged into another one: furniture placed from them keeps working. */
+const PACK_ALIASES: Record<string, string> = {
+  "mastershort.living_basics": "mastershort.living",
+  "mastershort.kitchen_basics": "mastershort.kitchen",
+  "mastershort.bedroom_basics": "mastershort.bedroom",
+  "mastershort.bath_basics": "mastershort.bath",
+};
+
 export function packItem(type: string): PackItem | undefined {
-  return isPackType(type) ? items.get(type) : undefined;
+  if (!isPackType(type)) return undefined;
+  const hit = items.get(type);
+  if (hit) return hit;
+  const [, pack, ...rest] = type.split(":");
+  const alias = PACK_ALIASES[pack];
+  return alias ? items.get(`pack:${alias}:${rest.join(":")}`) : undefined;
 }
 
 /** Default size of any furniture type. */
