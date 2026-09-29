@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { appColor, areaEntities, autoPlace, entityName, furnitureEntities, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, primaryEntities, roomPanelEntities } from "./devices.ts";
+import { appColor, areaEntities, autoPlace, entityName, furnitureEntities, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, primaryEntities, roomPanelEntities, windowPosition } from "./devices.ts";
 import type { Floor, Opening, Room } from "./model.ts";
 import { centroid, newFloor, pointInPolygon } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -240,4 +240,27 @@ test("the room panel shows what the plan shows in the room, plus picked entities
   // the rest of the area is offered, not shown
   assert.ok(more.includes("sensor.temp"));
   assert.ok(!more.includes("light.decke"));
+});
+
+test("window handles with three states, HomematicIP window_state and plain contacts", () => {
+  const st = (state: string, attributes: Record<string, unknown> = {}) => ({ entity_id: "x", state, attributes });
+  assert.equal(windowPosition(st("on")), "open");
+  assert.equal(windowPosition(st("off")), "closed");
+  assert.equal(windowPosition(st("tilted")), "tilted");
+  assert.equal(windowPosition(st("gekippt")), "tilted");
+  assert.equal(windowPosition(st("Geschlossen")), "closed");
+  assert.equal(windowPosition(st("on", { window_state: "TILTED" })), "tilted");
+  assert.equal(windowPosition(st("unavailable")), null);
+  assert.equal(windowPosition(st("42")), null);
+
+  const hass = hassWith();
+  hass.states["sensor.griff"] = { entity_id: "sensor.griff", state: "tilted", attributes: {} };
+  const e = { cover: null, contact: "sensor.griff", tilt: null };
+  assert.deepEqual(openingState(hass, e, "window"), { open: 0, open2: 0, tilt: 1, cover: null });
+  hass.states["sensor.griff"] = { entity_id: "sensor.griff", state: "open", attributes: {} };
+  assert.equal(openingState(hass, e, "window").open, 1);
+  // a sensor that only knows "tilted or not" goes into the tilt field
+  hass.states["binary_sensor.kipp"] = { entity_id: "binary_sensor.kipp", state: "on", attributes: {} };
+  hass.states["binary_sensor.auf"] = { entity_id: "binary_sensor.auf", state: "on", attributes: {} };
+  assert.deepEqual(openingState(hass, { cover: null, contact: "binary_sensor.auf", tilt: "binary_sensor.kipp" }, "window"), { open: 0, open2: 0, tilt: 1, cover: null });
 });

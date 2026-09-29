@@ -313,6 +313,28 @@ export function openingEntities(hass: HomeAssistant, floors: readonly Floor[]): 
   return out;
 }
 
+const POSITION_WORDS: [RegExp, "open" | "tilted" | "closed"][] = [
+  [/^(tilted|tilt|gekippt|kipp)/i, "tilted"],
+  [/^(open|opened|offen|geöffnet|on)$/i, "open"],
+  [/^(closed|close|geschlossen|zu|off)$/i, "closed"],
+];
+
+/**
+ * Position of a window or door from its contact: plain contacts (on = open), handle sensors with
+ * three states ("open" / "tilted" / "closed", also in German) and contacts that tell it in a
+ * window_state attribute (HomematicIP). Null when the sensor gives no answer.
+ */
+export function windowPosition(st: HassEntity | undefined): "open" | "tilted" | "closed" | null {
+  if (!st || isUnavailable(st)) return null;
+  const attr = st.attributes.window_state;
+  for (const value of [typeof attr === "string" ? attr : null, st.state]) {
+    if (!value) continue;
+    const hit = POSITION_WORDS.find(([re]) => re.test(value.trim()));
+    if (hit) return hit[1];
+  }
+  return null;
+}
+
 /** Door leaves without a contact sensor stand half open, so the doorway stays readable. */
 export const DOOR_DEFAULT_OPEN = 0.5;
 
@@ -327,11 +349,16 @@ export function openingState(
 ): { open: number; open2: number; tilt: number; cover: number | null } {
   const on = (id: string | null | undefined) => !!id && hass.states[id]?.state === "on";
   const known = (id: string | null | undefined) => !!id && !!hass.states[id] && !isUnavailable(hass.states[id]);
+  const pos = (id: string | null | undefined) => (id ? windowPosition(hass.states[id]) : null);
   // the second leaf of a double door or window stays closed without a sensor
-  const open2 = on(e.contact2) ? 1 : 0;
-  if (type === "door") return { open: known(e.contact) ? (on(e.contact) ? 1 : 0) : DOOR_DEFAULT_OPEN, open2, tilt: 0, cover: null };
-  const tilted = on(e.tilt);
-  const open = on(e.contact) && !tilted ? 1 : 0;
+  const open2 = pos(e.contact2) === "open" ? 1 : 0;
+  if (type === "door") {
+    const p = pos(e.contact);
+    return { open: p === null ? DOOR_DEFAULT_OPEN : p === "closed" ? 0 : 1, open2, tilt: 0, cover: null };
+  }
+  // a separate tilt sensor, or a handle sensor that reports "tilted" itself
+  const tilted = on(e.tilt) || pos(e.tilt) === "tilted" || pos(e.contact) === "tilted";
+  const open = pos(e.contact) === "open" && !tilted ? 1 : 0;
   let cover: number | null = null;
   const c = e.cover ? hass.states[e.cover] : undefined;
   if (c && !isUnavailable(c)) {

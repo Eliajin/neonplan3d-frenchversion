@@ -3,7 +3,7 @@
 import { css, html, LitElement, nothing, svg, type PropertyValues, type TemplateResult } from "lit";
 import { fetchImage, listHistory, restoreSnapshot, storeImage, takeSnapshot, type Snapshot } from "../api.ts";
 import { download, exportFile, parseExport } from "../transfer.ts";
-import { areaEntities, autoPlace, defaultHeight, entityName, furnitureEntities, groupByDevice, isPlaceable, kindOf, openingEntities } from "../devices.ts";
+import { areaEntities, autoPlace, defaultHeight, entityName, furnitureEntities, groupByDevice, isPlaceable, kindOf, openingEntities, windowPosition } from "../devices.ts";
 import { furnitureSymbol } from "./furniture2d.ts";
 import { closeGaps, suggestedThickness } from "../geometry/gaps.ts";
 import { snapToWall } from "../geometry/snap.ts";
@@ -2150,7 +2150,12 @@ export class Fp3dEditor extends LitElement {
     };
     const dc = (id: string) => this.hass?.states[id]?.attributes.device_class as string | undefined;
     const covers = this.entityOptions((id) => id.startsWith("cover."));
-    const contacts = this.entityOptions((id) => id.startsWith("binary_sensor.") && ["door", "window", "opening", "garage_door"].includes(dc(id) ?? ""));
+    // plain contacts, and handle sensors with three states (open / tilted / closed)
+    const contacts = this.entityOptions(
+      (id) =>
+        (id.startsWith("binary_sensor.") && ["door", "window", "opening", "garage_door"].includes(dc(id) ?? "")) ||
+        (id.startsWith("sensor.") && windowPosition(this.hass?.states[id]) !== null),
+    );
     const preset = openingPreset(o);
     const door = o.type === "door";
     return html`<section>
