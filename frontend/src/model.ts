@@ -48,6 +48,8 @@ export interface Opening {
   tilt2?: string | null;
   /** A sensor reporting the blind's position while it moves (covers that only report at the end). */
   position?: string | null;
+  /** The position sensor counts the other way round (0 = open). */
+  position_inverted?: boolean;
   cover: EntityRef;
   contact: EntityRef;
   tilt: EntityRef;

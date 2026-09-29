@@ -311,6 +311,7 @@ export interface OpeningEntities {
   tilt2?: string | null;
   /** A sensor with the blind's position while it moves (0–100 % or 0–1, open = high). */
   position?: string | null;
+  positionInverted?: boolean;
 }
 
 /** Pairs openings with entities in order; with `shared`, a single entity serves all openings. */
@@ -358,6 +359,7 @@ export function openingEntities(hass: HomeAssistant, floors: readonly Floor[]): 
           contact2: o.leaves === 2 && o.contact2 && o.contact2 !== "none" ? o.contact2 : null,
           tilt2: o.leaves === 2 && o.tilt2 && o.tilt2 !== "none" ? o.tilt2 : null,
           position: o.position && o.position !== "none" ? o.position : null,
+          positionInverted: !!o.position_inverted,
         });
       }
     }
@@ -415,7 +417,7 @@ export function openingState(
   let cover: number | null = null;
   const c = e.cover ? hass.states[e.cover] : undefined;
   const live = livePosition(hass, e.position);
-  if (live !== null) cover = 1 - live;
+  if (live !== null) cover = e.positionInverted ? live : 1 - live;
   else if (c && !isUnavailable(c)) {
     const pos = c.attributes.current_position;
     if (typeof pos === "number") cover = 1 - Math.min(100, Math.max(0, pos)) / 100;

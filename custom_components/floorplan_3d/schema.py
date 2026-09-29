@@ -59,6 +59,8 @@ OPENING_SCHEMA = vol.Schema(
         vol.Optional("tilt2", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # a sensor with the blind's position while it moves (covers that only report at the end)
         vol.Optional("position", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        # the position sensor counts the other way round (0 = open)
+        vol.Optional("position_inverted", default=False): bool,
         vol.Optional("cover", default=None): _ENTITY_REF,
         vol.Optional("contact", default=None): _ENTITY_REF,
         vol.Optional("tilt", default=None): _ENTITY_REF,

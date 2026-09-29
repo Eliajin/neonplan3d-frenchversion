@@ -2231,7 +2231,18 @@ export class Fp3dEditor extends LitElement {
         >`}
         ${window || garage ? this.entitySelect(this.t("cover_entity"), o.cover, autoPick("cover"), covers, (v) => this.updateOpening({ cover: v })) : nothing}
         ${(window || garage) && o.cover !== "none"
-          ? this.entitySelect(this.t("cover_position_entity"), o.position ?? null, undefined, positions, (v) => this.updateOpening({ position: v === "none" ? null : v }))
+          ? html`${this.entitySelect(this.t("cover_position_entity"), o.position ?? null, undefined, positions, (v) => this.updateOpening({ position: v === "none" ? null : v }))}
+              ${o.position
+                ? html`<label class="fp3d-check fp3d-wide"
+                    ><input
+                      type="checkbox"
+                      ?disabled=${!admin}
+                      .checked=${!!o.position_inverted}
+                      @change=${(ev: Event) => this.updateOpening({ position_inverted: (ev.target as HTMLInputElement).checked })}
+                    />
+                    ${this.t("cover_position_invert")}</label
+                  >`
+                : nothing}`
           : nothing}
         ${window
           ? html`${o.leaves === 2 ? html`<h4 class="fp3d-lib-head fp3d-wide">${this.t("leaf_main")}</h4>` : nothing}
