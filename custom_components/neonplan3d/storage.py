@@ -61,18 +61,18 @@ async def async_migrate_legacy_stores(hass: HomeAssistant) -> None:
     copied to the new keys once, before the stores load; existing new stores are left alone."""
     copied = []
     for key in _STORE_KEYS:
-        if await Store(hass, STORAGE_VERSION, key).async_load() is not None:
+        if await Store[dict[str, Any]](hass, STORAGE_VERSION, key).async_load() is not None:
             continue
         old_key = key.replace(f"{DOMAIN}.", f"{LEGACY_DOMAIN}.", 1)
         old_store = (
             _BuildingStore(hass, STORAGE_VERSION, old_key, minor_version=STORAGE_MINOR_VERSION)
             if key == STORAGE_KEY_BUILDING
-            else Store(hass, STORAGE_VERSION, old_key)
+            else Store[dict[str, Any]](hass, STORAGE_VERSION, old_key)
         )
         data = await old_store.async_load()
         if data is None:
             continue
-        await Store(hass, STORAGE_VERSION, key, minor_version=STORAGE_MINOR_VERSION).async_save(data)
+        await Store[dict[str, Any]](hass, STORAGE_VERSION, key, minor_version=STORAGE_MINOR_VERSION).async_save(data)
         copied.append(key)
     if copied:
         _LOGGER.info("Took over the data of %s: %s", LEGACY_DOMAIN, ", ".join(copied))
