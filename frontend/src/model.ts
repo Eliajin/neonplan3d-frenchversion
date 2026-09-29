@@ -315,6 +315,7 @@ export const FURNITURE_TYPES = [
   "tall_cabinet",
   "coat_rack",
   "stairs",
+  "robot_vacuum",
 ] as const;
 
 /** Furniture library sections (the editor lists them in this order). */
@@ -325,7 +326,7 @@ export const FURNITURE_GROUPS: Record<string, FurnitureType[]> = {
   kitchen: ["kitchen", "kitchen_wall", "kitchen_tall", "island", "sink", "stove", "dishwasher", "fridge"],
   sleeping: ["bed", "bunk_bed", "nightstand", "wardrobe", "dresser"],
   bath: ["bathtub", "shower", "wc", "washbasin", "washer", "dryer"],
-  work: ["desk", "office_chair", "tall_cabinet", "coat_rack", "radiator", "stairs"],
+  work: ["desk", "office_chair", "tall_cabinet", "coat_rack", "radiator", "stairs", "robot_vacuum"],
 };
 
 /** Furniture that can show a linked entity (TV state, power, …). */
@@ -406,6 +407,7 @@ export function surfaceHeight(floor: Floor, x: number, z: number): number {
 export const ELECTRIC_FURNITURE = new Set<string>([
   ...LAMP_TYPES,
   "radiator",
+  "robot_vacuum",
   "tv_board",
   "tv_wall",
   "desk",
@@ -454,6 +456,7 @@ export const FURNITURE_SIZE: Record<FurnitureType, [number, number, number]> = {
   lamp_bollard: [0.16, 0.16, 0.8],
   lamp_garden: [0.12, 0.12, 0.3],
   radiator: [1.0, 0.1, 0.6],
+  robot_vacuum: [0.36, 0.5, 0.1],
   lamp_pendant: [0.4, 0.4, 0.8],
   lamp_floor: [0.4, 0.4, 1.7],
   lamp_table: [0.28, 0.28, 0.45],

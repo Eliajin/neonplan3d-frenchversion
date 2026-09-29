@@ -32,7 +32,7 @@ import { isLamp, LAMP_MODEL, outdoorGround, pointInPolygon, surfaceHeight, type 
 import { floorCounts, floorInfoText, personsInRooms } from "../presence.ts";
 import { tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
-import type { DeviceMarker, FloorplanViewer, Quality, ScreenState, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
+import type { DeviceMarker, FloorplanViewer, RobotInfo, Quality, ScreenState, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
 
 /** Which HTML markers are shown: none, only what has no 3D object or shows a value, or all. */
 export type MarkerMode = "none" | "important" | "all";
@@ -287,6 +287,7 @@ export class Fp3dView3d extends LitElement {
     );
     v.setPickTargets(furniture.targets, this.openingTargets());
     v.setScreens(furniture.screens);
+    v.setRobots(this.robotInfos(hass, b));
     const types = new Map(b.floors.flatMap((f) => f.openings.map((o) => [o.id, o.type] as const)));
     const openingStates = new Map([...this.openingLinks!].map(([id, e]) => [id, openingState(hass, e, types.get(id))]));
     v.setOpeningStates(openingStates);
@@ -399,6 +400,27 @@ export class Fp3dView3d extends LitElement {
       }
     }
     return { markers, consumers, screens, targets };
+  }
+
+  /** Robot vacuums (docks with a vacuum entity): where they rest and what they do. */
+  private robotInfos(hass: HomeAssistant, b: Building): RobotInfo[] {
+    const out: RobotInfo[] = [];
+    for (const floor of b.floors) {
+      for (const f of floor.furniture) {
+        if (f.type !== "robot_vacuum") continue;
+        const entity = this.furnitureLinks.get(f.id)?.entity ?? null;
+        const state = entity ? hass.states[entity]?.state : undefined;
+        const mode: RobotInfo["mode"] =
+          state === "cleaning" ? "cleaning" : state === "returning" ? "returning" : state === "error" ? "error" : state === "docked" || !state ? "docked" : "idle";
+        // the robot rests in front of its dock, facing away from it
+        const a = (f.rotation * Math.PI) / 180;
+        const off = f.d * 0.14;
+        const rest: [number, number] = [f.x - Math.sin(a) * off, f.z + Math.cos(a) * off];
+        const room = floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon(rest, r.points));
+        out.push({ id: f.id, floorId: floor.id, rest, restHeading: -a, mode, room: room?.points ?? null });
+      }
+    }
+    return out;
   }
 
   /** A lamp: its 3D model glows with the linked light and is tapped directly. */

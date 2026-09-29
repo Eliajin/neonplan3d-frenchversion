@@ -391,6 +391,7 @@ export function primaryEntities(hass: HomeAssistant, ids: readonly string[]): st
 
 /** Name patterns of the entities that belong to electric furniture. */
 const FURNITURE_NAMES: Record<string, RegExp> = {
+  robot_vacuum: /(saug|vacuum|robo|roomba|roborock|dreame|ecovacs|deebot)/i,
   tv_board: /\b(tv|fernseh|television|fire ?tv|apple ?tv|chromecast|shield)/i,
   tv_wall: /\b(tv|fernseh|television|fire ?tv|apple ?tv|chromecast|shield)/i,
   desk: /\b(pc|computer|rechner|desktop|monitor|workstation)/i,
@@ -461,6 +462,10 @@ export function furnitureEntities(hass: HomeAssistant, floors: readonly Floor[])
         if (lamp) {
           const lights = free.filter((id) => kindOf(id) === "light");
           entity = lights.find((id) => pattern.test(name(id))) ?? lights[0] ?? null;
+        } else if (f.type === "robot_vacuum") {
+          // vacuums are no device kind of their own: look them up in the room's area directly
+          const area = room?.area_id ?? null;
+          entity = Object.keys(hass.entities ?? {}).find((id) => id.startsWith("vacuum.") && !used.has(id) && entityAreaId(hass, id) === area) ?? null;
         } else if (f.type === "radiator") {
           const climates = free.filter((id) => kindOf(id) === "climate");
           entity = climates.find((id) => pattern.test(name(id))) ?? climates[0] ?? null;

@@ -124,6 +124,9 @@ export function furnitureSymbol(type: string, w: number, d: number): Part[] | ty
     case "lamp_bollard":
     case "lamp_garden":
       return [circle(0, 0, Math.min(w, d) * 0.5, "fp3d-sym-fill"), circle(0, 0, Math.min(w, d) * 1.6)];
+    case "robot_vacuum":
+      // dock at the back, the robot resting in front of it
+      return [rect(-w * 0.45, -d / 2, w * 0.45, -d / 2 + d * 0.3, "fp3d-sym-fill"), circle(0, d * 0.14, Math.min(w, d) * 0.47)];
     case "radiator": {
       // fins along the front
       const out: Part[] = [];

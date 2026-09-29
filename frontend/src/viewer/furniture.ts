@@ -729,6 +729,11 @@ export function pushFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuff
     case "tv_wall":
       tvWall(b, w, d, h);
       return;
+    case "robot_vacuum":
+      // only the dock: the robot itself is drawn (and moved) by the viewer
+      b.box(-w * 0.45, w * 0.45, 0, h, -d / 2, -d / 2 + d * 0.3, C.white, C.whiteTop, EDGE_FURN);
+      b.box(-w * 0.2, w * 0.2, h * 0.5, h * 0.62, -d / 2 + d * 0.3, -d / 2 + d * 0.31, C.accent);
+      return;
     case "radiator":
       radiator(b, w, d, h);
       return; // on the wall, no shadow on the floor

@@ -52,6 +52,12 @@ export type { Theme } from "./theme.ts";
 import { GeoBuffer, LineBuffer, pushPrism } from "./geo.ts";
 import { buildLightSurface, lightColors, roomIndexAt, type LightKind, type LightSource, type LightSurface } from "./lighting.ts";
 import { buildOpeningParts, CLOSED, type OpeningState } from "./openings.ts";
+import { circlePath, cleaningPath, stepRobot, type RobotInfo, type RobotMotion } from "./robot.ts";
+
+export type { RobotInfo } from "./robot.ts";
+
+/** Colour of a robot's light by what it does. */
+const ROBOT_LED: Record<RobotInfo["mode"], number> = { cleaning: 0x37e0ff, returning: 0xffb547, docked: 0x41c46b, idle: 0x5b7cff, error: 0xff3b4f };
 
 export type { OpeningState } from "./openings.ts";
 
@@ -353,6 +359,13 @@ export class FloorplanViewer {
   /** Roof over the top floor (house view only), its opacity and the camera distance of the house view. */
   private roof: { group: Group; floorId: string; solid: MeshBasicMaterial; lines: LineBasicMaterial } | null = null;
   private roofO = 0;
+  /** Robot vacuums: their info from Home Assistant, how they move, and their meshes. */
+  private robots = new Map<string, { info: RobotInfo; motion: RobotMotion; group: Group; led: MeshBasicMaterial }>();
+  private robotGeo: BufferGeometry | null = null;
+  private robotMat: MeshBasicMaterial | null = null;
+  private robotLedGeo: BufferGeometry | null = null;
+  private robotLast = 0;
+  private robotTimer: ReturnType<typeof setTimeout> | undefined;
   /** The device a running swipe acts on. */
   private swipe: { entity: string; x: number; y: number } | null = null;
   /** Furnishing in 3D: items can be dragged; the selected one shows a wireframe box. */
@@ -2017,6 +2030,82 @@ export class FloorplanViewer {
     return out;
   }
 
+  /** Robot vacuums and their states; robots that clean drive lanes through their room. */
+  setRobots(list: RobotInfo[]): void {
+    const seen = new Set<string>();
+    for (const info of list) {
+      seen.add(info.id);
+      let r = this.robots.get(info.id);
+      if (!r) {
+        r = this.makeRobot(info);
+        this.robots.set(info.id, r);
+      }
+      const was = r.info.mode;
+      r.info = info;
+      if (info.mode === "cleaning" && (was !== "cleaning" || !r.motion.path.length)) {
+        // start the lanes at the point nearest to where the robot is
+        const path = info.room ? cleaningPath(info.room) : circlePath(info.rest);
+        const path2 = path.length ? path : circlePath(info.rest);
+        let best = 0;
+        path2.forEach((p, i) => {
+          if (Math.hypot(p[0] - r!.motion.pos[0], p[1] - r!.motion.pos[1]) < Math.hypot(path2[best][0] - r!.motion.pos[0], path2[best][1] - r!.motion.pos[1])) best = i;
+        });
+        r.motion.path = path2;
+        r.motion.next = best;
+      }
+      r.led.color.setHex(ROBOT_LED[info.mode]);
+    }
+    for (const [id, r] of this.robots) {
+      if (seen.has(id)) continue;
+      r.group.removeFromParent();
+      r.led.dispose();
+      this.robots.delete(id);
+    }
+    this.robotLast = 0;
+    this.invalidate();
+  }
+
+  private makeRobot(info: RobotInfo): { info: RobotInfo; motion: RobotMotion; group: Group; led: MeshBasicMaterial } {
+    if (!this.robotGeo) {
+      const buf = new GeoBuffer();
+      const disc = (r: number, y0: number, y1: number, side: number, top: number) => {
+        const poly: [number, number][] = [];
+        for (let i = 0; i < 20; i++) poly.push([Math.cos((i / 20) * Math.PI * 2) * r, Math.sin((i / 20) * Math.PI * 2) * r]);
+        pushPrism(buf, poly, y0, y1, side, top, { aoFrom: 0, bottom: false });
+      };
+      disc(0.17, 0.012, 0.08, 0x243049, 0x34425f);
+      disc(0.055, 0.08, 0.1, 0x3a4a6a, 0x4d5f86);
+      this.robotGeo = buf.geometry();
+      this.robotMat = new MeshBasicMaterial({ vertexColors: true });
+      const led = new GeoBuffer();
+      pushPrism(led, [[-0.05, 0.1], [0.05, 0.1], [0.05, 0.14], [-0.05, 0.14]], 0.08, 0.085, 0xffffff, 0xffffff, { aoFrom: 0, bottom: false });
+      this.robotLedGeo = led.geometry();
+    }
+    const group = new Group();
+    const ledMat = new MeshBasicMaterial({ color: ROBOT_LED[info.mode] });
+    group.add(new Mesh(this.robotGeo, this.robotMat!), new Mesh(this.robotLedGeo!, ledMat));
+    return { info, motion: { pos: [...info.rest] as [number, number], heading: info.restHeading, path: [], next: 0 }, group, led: ledMat };
+  }
+
+  /** Move the robots; true while one of them drives. */
+  private stepRobots(now: number): boolean {
+    if (!this.robots.size) return false;
+    const dt = this.robotLast ? Math.min(0.2, (now - this.robotLast) / 1000) : 0;
+    this.robotLast = now;
+    let active = false;
+    for (const r of this.robots.values()) {
+      const fv = this.floors.find((f) => f.floor.id === r.info.floorId);
+      if (!fv) continue;
+      if (r.group.parent !== fv.group) fv.group.add(r.group);
+      if (dt > 0) active = stepRobot(r.motion, r.info, dt) || active;
+      else active ||= r.info.mode === "cleaning" || r.info.mode === "returning";
+      r.group.position.set(r.motion.pos[0], 0, r.motion.pos[1]);
+      r.group.rotation.y = r.motion.heading;
+    }
+    if (!active) this.robotLast = 0;
+    return active;
+  }
+
   /** Fly to a point of a floor (search) and let the device there flash. */
   focus(floorId: string, x: number, z: number, y: number, entityId: string | null): void {
     const fv = this.floors.find((f) => f.floor.id === floorId);
@@ -2045,6 +2134,7 @@ export class FloorplanViewer {
       for (const fv of this.floors) this.buildLamps(fv);
     }
     const roofMoving = this.placeRoof(dt);
+    const robotsMoving = this.stepRobots(now);
     const moving = cameraMoving || floorsMoving || openingsMoving || flashing || roofMoving;
     this.lastFrame = moving ? now : 0;
     this.flowTime.value = this.flowSeconds();
@@ -2066,6 +2156,13 @@ export class FloorplanViewer {
         }
         this.invalidate();
       }, EFFECT_MS);
+    }
+    if (!moving && robotsMoving && !this.robotTimer) {
+      // a driving robot: about 30 frames per second, 15 on the tablet level
+      this.robotTimer = setTimeout(() => {
+        this.robotTimer = undefined;
+        this.invalidate();
+      }, this.lowQuality ? 66 : 33);
     }
     if (!moving && this.flowActive && !this.flowTimer) {
       // only the energy flow moves: about 30 frames per second are enough
