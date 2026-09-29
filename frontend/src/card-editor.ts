@@ -3,7 +3,7 @@
 
 import { css, html, LitElement, nothing } from "lit";
 import { fetchBuilding } from "./api.ts";
-import type { CardConfig } from "./card.ts";
+import { CARD_CONTROLS, type CardConfig, type CardControl } from "./card.ts";
 import { translate, type I18nKey } from "./i18n.ts";
 import type { HomeAssistant } from "./types.ts";
 
@@ -22,7 +22,7 @@ const DEFAULTS: Partial<CardConfig> = {
   fill: false,
   controls: false,
   fullscreen_button: false,
-  floor_thumbs: true,
+  room_names: true,
 };
 
 type Choice = [value: string, label: I18nKey];
@@ -86,12 +86,59 @@ export class Floorplan3dCardEditor extends LitElement {
     </label>`;
   }
 
-  private toggle(key: "explode" | "energy" | "room_panel" | "stats" | "controls" | "fullscreen_button" | "floor_thumbs", label: I18nKey, hint?: I18nKey) {
+  private toggle(key: "explode" | "energy" | "room_panel" | "stats" | "fullscreen_button" | "room_names", label: I18nKey, hint?: I18nKey) {
     const on = this.value[key];
     return html`<label class="toggle">
       <input type="checkbox" .checked=${on} @change=${(e: Event) => this.set(key, (e.target as HTMLInputElement).checked)} />
       <span>${this.t(label)}${hint ? html`<small>${this.t(hint)}</small>` : nothing}</span>
     </label>`;
+  }
+
+  /** Floor pictures: on by default without a start floor, off with one (but can be switched on). */
+  private renderThumbsToggle() {
+    const auto = !this._config.floor;
+    const on = this._config.floor_thumbs ?? auto;
+    return html`<label class="toggle">
+      <input
+        type="checkbox"
+        .checked=${on}
+        @change=${(e: Event) => {
+          const checked = (e.target as HTMLInputElement).checked;
+          const next: CardConfig = { ...this._config };
+          if (checked === auto) delete next.floor_thumbs;
+          else next.floor_thumbs = checked;
+          this._config = next;
+          this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: next }, bubbles: true, composed: true }));
+        }}
+      />
+      <span>${this.t("card_floor_thumbs")}<small>${this.t(this._config.floor ? "card_floor_thumbs_hint_start" : "card_floor_thumbs_hint")}</small></span>
+    </label>`;
+  }
+
+  /** Switches in the card: on/off, and which of them. */
+  private renderControls() {
+    const c = this._config.controls;
+    const on = !!c && (c === true || c.length > 0);
+    const list: CardControl[] = c === true ? [...CARD_CONTROLS] : Array.isArray(c) ? c : [];
+    const setList = (next: CardControl[]) => this.set("controls", next.length === CARD_CONTROLS.length ? true : next.length ? next : undefined);
+    return html`<label class="toggle">
+        <input type="checkbox" .checked=${on} @change=${(e: Event) => this.set("controls", (e.target as HTMLInputElement).checked ? true : undefined)} />
+        <span>${this.t("card_controls")}<small>${this.t("card_controls_hint")}</small></span>
+      </label>
+      ${on
+        ? html`<div class="sub">
+            ${CARD_CONTROLS.map(
+              (x) => html`<label class="chip">
+                <input
+                  type="checkbox"
+                  .checked=${list.includes(x)}
+                  @change=${(e: Event) => setList((e.target as HTMLInputElement).checked ? CARD_CONTROLS.filter((y) => y === x || list.includes(y)) : list.filter((y) => y !== x))}
+                />
+                ${this.t(`card_control_${x}` as I18nKey)}
+              </label>`,
+            )}
+          </div>`
+        : nothing}`;
   }
 
   protected render() {
@@ -152,8 +199,8 @@ export class Floorplan3dCardEditor extends LitElement {
           </select>
         </label>
       </div>
-      ${this.toggle("controls", "card_controls", "card_controls_hint")}
-      ${v.floor ? nothing : this.toggle("floor_thumbs", "card_floor_thumbs", "card_floor_thumbs_hint")}
+      ${this.renderControls()}
+      ${this.renderThumbsToggle()} ${this.toggle("room_names", "card_room_names")}
       ${this.toggle("energy", "card_energy")} ${this.toggle("room_panel", "card_room_panel", "card_room_panel_hint")}
       ${this.toggle("fullscreen_button", "card_fullscreen_button", "card_fullscreen_button_hint")}
       ${this.toggle("explode", "card_explode")} ${this.toggle("stats", "card_stats", "card_stats_hint")}
@@ -219,6 +266,25 @@ export class Floorplan3dCardEditor extends LitElement {
       width: 18px;
       height: 18px;
       margin: 1px 0 0;
+      accent-color: var(--primary-color);
+    }
+    .sub {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 14px;
+      margin: -2px 0 6px 28px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .chip input {
+      width: 16px;
+      height: 16px;
+      margin: 0;
       accent-color: var(--primary-color);
     }
     .toggle small,

@@ -66,6 +66,7 @@ export class Fp3dView3d extends LitElement {
     _find: { state: true },
     _thumbs: { state: true },
     floorThumbs: { attribute: false },
+    roomLabels: { attribute: false },
   };
 
   declare hass: HomeAssistant;
@@ -99,6 +100,8 @@ export class Fp3dView3d extends LitElement {
   private declare _menu: { entity: string; x: number; y: number } | null;
   /** Floor switcher with small pictures of the floors (panel and card; off with a fixed floor). */
   declare floorThumbs: boolean;
+  /** Room names in 3D (cards can switch them off). */
+  declare roomLabels: boolean;
   private declare _thumbs: { floorId: string; url: string }[];
   private thumbTimer: ReturnType<typeof setTimeout> | undefined;
   /** What the floor pictures show of the devices (lamps, blinds): they are drawn again when it changes. */
@@ -151,6 +154,7 @@ export class Fp3dView3d extends LitElement {
     this._find = null;
     this._thumbs = [];
     this.floorThumbs = true;
+    this.roomLabels = true;
     try {
       this._flows = localStorage.getItem("floorplan_3d.flows") === "1";
     } catch {
@@ -750,7 +754,7 @@ export class Fp3dView3d extends LitElement {
     const mix = (a: number[], b: number[]) => `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * sky)).join(",")})`;
     const stage = STAGE[this.theme] ?? STAGE.neon;
     const style = `--fp3d-sky:${mix(stage.night[0], stage.day[0])};--fp3d-ground:${mix(stage.night[1], stage.day[1])}`;
-    return html`<div class="fp3d-stage" style=${style}>
+    return html`<div class="fp3d-stage ${this.roomLabels ? "" : "fp3d-no-room-names"}" style=${style}>
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.renderEnergy()} ${this.renderLegend()}
       ${this.renderThumbs()} ${this.renderFind()} ${this.renderSwipe()} ${this.renderMenu()}
       ${this.showStats && this._stats
@@ -906,6 +910,9 @@ export class Fp3dView3d extends LitElement {
       }
       .fp3d-person[hidden] {
         display: none;
+      }
+      .fp3d-no-room-names .fp3d-pin {
+        display: none !important;
       }
       .fp3d-thumbs {
         position: absolute;

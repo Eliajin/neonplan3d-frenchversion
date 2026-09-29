@@ -158,7 +158,7 @@
         editorBox.style.cssText = "background:#1c1c1c;border-radius:12px;padding:20px";
         const editor = await CardClass.getConfigElement();
         const card = document.createElement("floorplan-3d-card");
-        let config = { type: "custom:floorplan-3d-card", quality: "low", floor: "eg", flows: false, controls: true, fullscreen_button: true };
+        let config = { type: "custom:floorplan-3d-card", quality: "low", floor: "eg", flows: false, controls: ["walls", "temperature"], fullscreen_button: true, floor_thumbs: true };
         card.setConfig(config);
         editor.setConfig(config);
         editor.addEventListener("config-changed", (e) => {

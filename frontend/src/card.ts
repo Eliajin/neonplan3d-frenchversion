@@ -33,15 +33,20 @@ export interface CardConfig {
   room_panel?: boolean;
   /** Fill the screen below the dashboard header instead of a fixed height. */
   fill?: boolean;
-  /** Switches in the card: walls, floors apart, heatmap (default false). */
-  controls?: boolean;
+  /** Switches in the card: all (true) or a list of walls, floors, temperature, humidity, co2. */
+  controls?: boolean | CardControl[];
+  /** Room names in 3D (default true). */
+  room_names?: boolean;
   /** A button for full screen (hides the dashboard around the card). */
   fullscreen_button?: boolean;
-  /** Small pictures of the floors to switch between them (default true; not with a fixed floor). */
+  /** Small pictures of the floors to switch between them (default: on without a start floor). */
   floor_thumbs?: boolean;
 }
 
 type HeatMode = NonNullable<CardConfig["heatmap"]>;
+
+export const CARD_CONTROLS = ["walls", "floors", "temperature", "humidity", "co2"] as const;
+export type CardControl = (typeof CARD_CONTROLS)[number];
 
 export class Floorplan3dCard extends LitElement {
   static properties = {
@@ -58,8 +63,8 @@ export class Floorplan3dCard extends LitElement {
   declare hass: HomeAssistant;
   private declare _config: CardConfig;
   private declare _roomId: string | null;
-  /** Floor chosen by tapping its label in the house view (when no floor is configured). */
-  private declare _floorId: string | null;
+  /** Floor chosen in the card (null: the house; undefined: none chosen, the configured floor applies). */
+  private declare _floorId: string | null | undefined;
   /** Choices made with the card's own switches (null: as configured). */
   private declare _walls: WallMode | null;
   private declare _heat: HeatMode | null;
@@ -71,7 +76,7 @@ export class Floorplan3dCard extends LitElement {
   constructor() {
     super();
     this._roomId = null;
-    this._floorId = null;
+    this._floorId = undefined;
     this._walls = null;
     this._heat = null;
     this._explode = null;
@@ -108,6 +113,7 @@ export class Floorplan3dCard extends LitElement {
   setConfig(config: CardConfig): void {
     if (config.height !== undefined && !(config.height > 100)) throw new Error("height must be a number of pixels above 100");
     this._config = config;
+    this._floorId = undefined;
     this._walls = null;
     this._heat = null;
     this._explode = null;
@@ -126,18 +132,33 @@ export class Floorplan3dCard extends LitElement {
   }
 
   /** One level up: room -> floor -> house. */
+  /** Floors can be switched (no fixed floor, or floor pictures to switch with). */
+  private get canSwitch(): boolean {
+    return !this._config?.floor || this.thumbs;
+  }
+
+  private get thumbs(): boolean {
+    return this._config?.floor_thumbs ?? !this._config?.floor;
+  }
+
+  /** One level up: room -> floor -> house. */
   private back(): void {
     if (this._roomId) this._roomId = null;
-    else if (!this._config?.floor) this._floorId = null;
+    else if (this.canSwitch) this._floorId = null;
   }
 
   protected render() {
     const b = this.data.building;
     const height = this._config?.height ?? 420;
-    const floorId =
-      this._config?.floor ?? (b && b.floors.length === 1 ? b.floors[0].id : b?.floors.some((f) => f.id === this._floorId) ? this._floorId : null);
-    const canGoBack = !!this._roomId || (!this._config?.floor && !!this._floorId && (b?.floors.length ?? 0) > 1);
     const c = this._config;
+    // the configured floor is where the card starts; with floor pictures the user can switch
+    const chosen = this._floorId === undefined ? (c?.floor ?? null) : this._floorId;
+    const floorId = b && b.floors.length === 1 ? b.floors[0].id : b?.floors.some((f) => f.id === chosen) ? chosen : null;
+    // the floor pictures have a house button of their own; a room with its panel has a close button
+    const canGoBack =
+      (!!this._roomId && c?.room_panel === false) || (!this.thumbs && this.canSwitch && !this._roomId && !!floorId && (b?.floors.length ?? 0) > 1);
+    const shows = (x: CardControl) => c?.controls === true || (Array.isArray(c?.controls) && c.controls.includes(x));
+    const heats = (["temperature", "humidity", "co2"] as const).filter((m) => shows(m));
     const walls = this._walls ?? c?.walls ?? "auto";
     const heat = this._heat ?? c?.heatmap ?? "none";
     const explode = this._explode ?? c?.explode ?? true;
@@ -162,10 +183,11 @@ export class Floorplan3dCard extends LitElement {
               .theme=${this._config?.theme ?? "neon"}
               .showEnergy=${this._config?.energy ?? true}
               .flows=${this._config?.flows ?? null}
-              .floorThumbs=${!this._config?.floor && this._config?.floor_thumbs !== false}
+              .floorThumbs=${this.thumbs}
+              .roomLabels=${c?.room_names !== false}
               @room-tap=${(e: CustomEvent<{ floorId: string; roomId: string | null }>) => {
                 // in the house view (or on another floor) a tap first opens the whole floor
-                if (!this._config?.floor && (b?.floors.length ?? 0) > 1 && e.detail.floorId && floorId !== e.detail.floorId) {
+                if (this.canSwitch && (b?.floors.length ?? 0) > 1 && e.detail.floorId && floorId !== e.detail.floorId) {
                   this._floorId = e.detail.floorId;
                   this._roomId = null;
                   return;
@@ -192,24 +214,28 @@ export class Floorplan3dCard extends LitElement {
         ${canGoBack ? html`<button class="fp3d-card-back" @click=${() => this.back()}>${translate(this.hass, "back")}</button>` : nothing}
         ${c?.controls && b && !(this._roomId && c.room_panel !== false)
           ? html`<div class="fp3d-card-controls">
-              <div class="fp3d-seg">
-                <button aria-pressed=${walls === "auto"} @click=${() => (this._walls = "auto")}>${t("walls_auto")}</button>
-                <button aria-pressed=${walls === "cut"} @click=${() => (this._walls = "cut")}>${t("walls_cut")}</button>
-              </div>
-              ${b.floors.length > 1 && !floorId
+              ${shows("walls")
+                ? html`<div class="fp3d-seg">
+                    <button aria-pressed=${walls === "auto"} @click=${() => (this._walls = "auto")}>${t("walls_auto")}</button>
+                    <button aria-pressed=${walls === "cut"} @click=${() => (this._walls = "cut")}>${t("walls_cut")}</button>
+                  </div>`
+                : nothing}
+              ${shows("floors") && b.floors.length > 1 && !floorId
                 ? html`<div class="fp3d-seg">
                     <button aria-pressed=${explode} @click=${() => (this._explode = true)}>${t("floors_apart")}</button>
                     <button aria-pressed=${!explode} @click=${() => (this._explode = false)}>${t("floors_stacked")}</button>
                   </div>`
                 : nothing}
-              <div class="fp3d-seg" role="group" aria-label=${t("heatmap")}>
-                ${(["none", "temperature", "humidity", "co2"] as HeatMode[]).map(
-                  (m) =>
-                    html`<button aria-pressed=${heat === m} @click=${() => (this._heat = m)}>
-                      ${t(m === "none" ? "heat_off" : (`heat_short_${m}` as Parameters<typeof translate>[1]))}
-                    </button>`,
-                )}
-              </div>
+              ${heats.length
+                ? html`<div class="fp3d-seg" role="group" aria-label=${t("heatmap")}>
+                    ${(["none", ...heats] as HeatMode[]).map(
+                      (m) =>
+                        html`<button aria-pressed=${heat === m} @click=${() => (this._heat = m)}>
+                          ${t(m === "none" ? "heat_off" : (`heat_short_${m}` as Parameters<typeof translate>[1]))}
+                        </button>`,
+                    )}
+                  </div>`
+                : nothing}
             </div>`
           : nothing}
         ${c?.fullscreen_button && !(this._roomId && c.room_panel !== false)
@@ -285,7 +311,7 @@ export class Floorplan3dCard extends LitElement {
       .fp3d-card-back {
         position: absolute;
         left: 10px;
-        top: 10px;
+        bottom: 60px;
         font: 500 13px var(--fp3d-font);
         color: var(--fp3d-text);
         background: var(--fp3d-chrome);
