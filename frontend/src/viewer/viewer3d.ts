@@ -18,6 +18,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   MultiplyBlending,
+  OrthographicCamera,
   PerspectiveCamera,
   Points,
   PointsMaterial,
@@ -33,6 +34,7 @@ import {
   Vector2,
   Vector3,
   WebGLRenderer,
+  WebGLRenderTarget,
   type BufferGeometry,
   type Material,
 } from "three";
@@ -1916,6 +1918,103 @@ export class FloorplanViewer {
     if (this.options.onDeviceSwipe?.(hit.entity, "start", 0, x, y) !== true) return false;
     this.swipe = { entity: hit.entity, x, y };
     return true;
+  }
+
+  /**
+   * Small pictures of every floor with rooms (for the floor switcher): each floor alone, walls cut,
+   * seen from above at the usual angle, as PNG data URLs. Rendered once into an offscreen target of
+   * the same renderer, so nothing is uploaded twice; the view is restored afterwards.
+   */
+  floorThumbnails(width = 200, height = 150): { floorId: string; url: string }[] {
+    const floors = this.floors.filter((fv) => fv.floor.rooms.some((r) => r.points.length >= 3));
+    if (!floors.length) return [];
+    const scale = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.round(width * scale);
+    const h = Math.round(height * scale);
+    const target = new WebGLRenderTarget(w, h);
+    target.texture.colorSpace = SRGBColorSpace;
+    const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 400);
+    const saved = this.floors.map((fv) => ({ fv, visible: fv.group.visible, y: fv.y, o: fv.o, standing: fv.mask.standing.value, glass: fv.mask.glass.value }));
+    const roofVisible = this.roof?.group.visible ?? false;
+    const ghostVisible = this.ghost?.visible ?? false;
+    const clear = this.renderer.getClearAlpha();
+    const pixels = new Uint8Array(w * h * 4);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d")!;
+    const out: { floorId: string; url: string }[] = [];
+    try {
+      if (this.roof) this.roof.group.visible = false;
+      if (this.ghost) this.ghost.visible = false;
+      this.renderer.setClearAlpha(0);
+      for (const fv of floors) {
+        for (const other of this.floors) other.group.visible = other === fv;
+        fv.y = 0;
+        fv.o = 1;
+        this.applyFloor(fv);
+        fv.group.visible = true;
+        fv.mask.standing.value = 0;
+        fv.mask.glass.value = 0;
+        // fit the floor's rooms (with the cut walls) into the picture
+        const pts = fv.floor.rooms.flatMap((r) => r.points);
+        const y0 = fv.floor.elevation;
+        const box = new Box3(
+          new Vector3(Math.min(...pts.map((p) => p[0])) - 0.3, y0, Math.min(...pts.map((p) => p[1])) - 0.3),
+          new Vector3(Math.max(...pts.map((p) => p[0])) + 0.3, y0 + Math.min(fv.floor.cut_height, fv.floor.height), Math.max(...pts.map((p) => p[1])) + 0.3),
+        );
+        const center = box.getCenter(new Vector3());
+        const theta = -0.6;
+        const phi = 0.8;
+        const dir = new Vector3(Math.sin(phi) * Math.sin(theta), Math.cos(phi), Math.sin(phi) * Math.cos(theta));
+        camera.position.copy(center).addScaledVector(dir, 100);
+        camera.lookAt(center);
+        camera.updateMatrixWorld();
+        let rx = 0.5;
+        let ry = 0.5;
+        for (const x of [box.min.x, box.max.x])
+          for (const y of [box.min.y, box.max.y])
+            for (const z of [box.min.z, box.max.z]) {
+              const p = new Vector3(x, y, z).applyMatrix4(camera.matrixWorldInverse);
+              rx = Math.max(rx, Math.abs(p.x));
+              ry = Math.max(ry, Math.abs(p.y));
+            }
+        // keep the picture's aspect ratio
+        const aspect = w / h;
+        if (rx / ry > aspect) ry = rx / aspect;
+        else rx = ry * aspect;
+        camera.left = -rx * 1.05;
+        camera.right = rx * 1.05;
+        camera.top = ry * 1.05;
+        camera.bottom = -ry * 1.05;
+        camera.updateProjectionMatrix();
+        this.renderer.setRenderTarget(target);
+        this.renderer.clear();
+        this.renderer.render(this.scene, camera);
+        this.renderer.readRenderTargetPixels(target, 0, 0, w, h, pixels);
+        // the target's rows start at the bottom
+        const img = ctx.createImageData(w, h);
+        for (let row = 0; row < h; row++) img.data.set(pixels.subarray((h - 1 - row) * w * 4, (h - row) * w * 4), row * w * 4);
+        ctx.putImageData(img, 0, 0);
+        out.push({ floorId: fv.floor.id, url: canvas.toDataURL("image/png") });
+      }
+    } finally {
+      this.renderer.setRenderTarget(null);
+      this.renderer.setClearAlpha(clear);
+      for (const s of saved) {
+        s.fv.y = s.y;
+        s.fv.o = s.o;
+        s.fv.mask.standing.value = s.standing;
+        s.fv.mask.glass.value = s.glass;
+        this.applyFloor(s.fv);
+        s.fv.group.visible = s.visible;
+      }
+      if (this.roof) this.roof.group.visible = roofVisible;
+      if (this.ghost) this.ghost.visible = ghostVisible;
+      target.dispose();
+      this.invalidate();
+    }
+    return out;
   }
 
   /** Fly to a point of a floor (search) and let the device there flash. */

@@ -22,6 +22,7 @@ const DEFAULTS: Partial<CardConfig> = {
   fill: false,
   controls: false,
   fullscreen_button: false,
+  floor_thumbs: true,
 };
 
 type Choice = [value: string, label: I18nKey];
@@ -85,7 +86,7 @@ export class Floorplan3dCardEditor extends LitElement {
     </label>`;
   }
 
-  private toggle(key: "explode" | "energy" | "room_panel" | "stats" | "controls" | "fullscreen_button", label: I18nKey, hint?: I18nKey) {
+  private toggle(key: "explode" | "energy" | "room_panel" | "stats" | "controls" | "fullscreen_button" | "floor_thumbs", label: I18nKey, hint?: I18nKey) {
     const on = this.value[key];
     return html`<label class="toggle">
       <input type="checkbox" .checked=${on} @change=${(e: Event) => this.set(key, (e.target as HTMLInputElement).checked)} />
@@ -152,6 +153,7 @@ export class Floorplan3dCardEditor extends LitElement {
         </label>
       </div>
       ${this.toggle("controls", "card_controls", "card_controls_hint")}
+      ${v.floor ? nothing : this.toggle("floor_thumbs", "card_floor_thumbs", "card_floor_thumbs_hint")}
       ${this.toggle("energy", "card_energy")} ${this.toggle("room_panel", "card_room_panel", "card_room_panel_hint")}
       ${this.toggle("fullscreen_button", "card_fullscreen_button", "card_fullscreen_button_hint")}
       ${this.toggle("explode", "card_explode")} ${this.toggle("stats", "card_stats", "card_stats_hint")}

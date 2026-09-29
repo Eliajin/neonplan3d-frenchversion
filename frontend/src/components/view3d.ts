@@ -64,6 +64,8 @@ export class Fp3dView3d extends LitElement {
     _swipe: { state: true },
     _menu: { state: true },
     _find: { state: true },
+    _thumbs: { state: true },
+    floorThumbs: { attribute: false },
   };
 
   declare hass: HomeAssistant;
@@ -95,6 +97,10 @@ export class Fp3dView3d extends LitElement {
   private declare _swipe: { entity: string; kind: "light" | "cover"; start: number; value: number; x: number; y: number } | null;
   /** Quick menu at a device (long press). */
   private declare _menu: { entity: string; x: number; y: number } | null;
+  /** Floor switcher with small pictures of the floors (panel and card; off with a fixed floor). */
+  declare floorThumbs: boolean;
+  private declare _thumbs: { floorId: string; url: string }[];
+  private thumbTimer: ReturnType<typeof setTimeout> | undefined;
   /** Search ("where is …?"): null = closed. */
   private declare _find: string | null;
   private swipeSent = 0;
@@ -140,6 +146,8 @@ export class Fp3dView3d extends LitElement {
     this._swipe = null;
     this._menu = null;
     this._find = null;
+    this._thumbs = [];
+    this.floorThumbs = true;
     try {
       this._flows = localStorage.getItem("floorplan_3d.flows") === "1";
     } catch {
@@ -193,6 +201,7 @@ export class Fp3dView3d extends LitElement {
       this.viewer.setPacks([...getPacks()]);
       this.shownPacks = packsVersion();
       if (this.building) this.viewer.setBuilding(this.building);
+      this.scheduleThumbs();
       this.syncDevices(true);
       this.viewer.setFloor(this.floorId, false);
       if (this.roomId) this.viewer.selectRoom(this.roomId);
@@ -212,6 +221,7 @@ export class Fp3dView3d extends LitElement {
       v.setPacks([...getPacks()]);
     }
     if (changed.has("building") && this.building) v.setBuilding(this.building);
+    if (changed.has("building") || changed.has("theme") || changed.has("floorThumbs") || changed.has("packs")) this.scheduleThumbs();
     if (changed.has("building") || changed.has("hass") || changed.has("markerMode") || changed.has("heatMode") || changed.has("flows")) {
       this.syncDevices(changed.has("building") || changed.has("markerMode") || changed.has("heatMode") || changed.has("flows"));
     }
@@ -465,6 +475,44 @@ export class Fp3dView3d extends LitElement {
     return out;
   }
 
+  /** Pictures of the floors, drawn a moment after the plan or the look changed (once, not per frame). */
+  private scheduleThumbs(): void {
+    clearTimeout(this.thumbTimer);
+    const floors = this.building?.floors.filter((f) => f.rooms.length).length ?? 0;
+    if (!this.floorThumbs || floors < 2) {
+      this._thumbs = [];
+      return;
+    }
+    this.thumbTimer = setTimeout(() => {
+      if (this.viewer) this._thumbs = this.viewer.floorThumbnails(this.narrowThumbs ? 104 : 150, this.narrowThumbs ? 78 : 112);
+    }, 600);
+  }
+
+  private get narrowThumbs(): boolean {
+    return (this.renderRoot.querySelector(".fp3d-stage") as HTMLElement | null)?.clientWidth! < 700;
+  }
+
+  private renderThumbs() {
+    if (!this._thumbs.length || !this.building) return nothing;
+    const names = new Map(this.building.floors.map((f) => [f.id, f.name]));
+    // the highest floor on top
+    const order = [...this._thumbs].sort(
+      (a, b) => (this.building!.floors.find((f) => f.id === b.floorId)?.elevation ?? 0) - (this.building!.floors.find((f) => f.id === a.floorId)?.elevation ?? 0),
+    );
+    return html`<nav class="fp3d-thumbs ${this.narrowThumbs ? "fp3d-thumbs-small" : ""}" aria-label=${translate(this.hass, "floors")}>
+      <button class="fp3d-thumb fp3d-thumb-house" aria-pressed=${this.floorId === null} @click=${() => this.fire("floor-tap", { floorId: null })}>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 11l9-7 9 7M5 10v10h14V10" /></svg>
+        <span>${translate(this.hass, "all_floors")}</span>
+      </button>
+      ${order.map(
+        (t) => html`<button class="fp3d-thumb" aria-pressed=${this.floorId === t.floorId} @click=${() => this.fire("floor-tap", { floorId: t.floorId })}>
+          <img src=${t.url} alt="" />
+          <span>${names.get(t.floorId) ?? ""}</span>
+        </button>`,
+      )}
+    </nav>`;
+  }
+
   /** Long press: the quick menu at the device, or the details for devices without one. */
   private onDeviceHold(entityId: string, x: number, y: number): void {
     const kind = kindOf(entityId);
@@ -667,7 +715,7 @@ export class Fp3dView3d extends LitElement {
     const style = `--fp3d-sky:${mix(stage.night[0], stage.day[0])};--fp3d-ground:${mix(stage.night[1], stage.day[1])}`;
     return html`<div class="fp3d-stage" style=${style}>
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.renderEnergy()} ${this.renderLegend()}
-      ${this.renderFind()} ${this.renderSwipe()} ${this.renderMenu()}
+      ${this.renderThumbs()} ${this.renderFind()} ${this.renderSwipe()} ${this.renderMenu()}
       ${this.showStats && this._stats
         ? html`<span class="fp3d-stats"
             ><b>${this._stats.fps ? translate(this.hass, "stats_fps", { fps: this._stats.fps, ms: this._stats.worstMs }) : translate(this.hass, "stats_idle")}</b> ·
@@ -821,6 +869,69 @@ export class Fp3dView3d extends LitElement {
       }
       .fp3d-person[hidden] {
         display: none;
+      }
+      .fp3d-thumbs {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: calc(100% - 140px);
+        overflow-y: auto;
+        scrollbar-width: none;
+        z-index: 2;
+      }
+      .fp3d-thumb {
+        position: relative;
+        display: grid;
+        padding: 0;
+        width: 150px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 14px;
+        background: color-mix(in srgb, var(--fp3d-chrome) 70%, transparent);
+        color: var(--fp3d-text);
+        cursor: pointer;
+        overflow: hidden;
+        font: inherit;
+        box-shadow: var(--fp3d-shadow);
+        opacity: 0.72;
+        transition: opacity 0.15s, border-color 0.15s;
+      }
+      .fp3d-thumb:hover,
+      .fp3d-thumb[aria-pressed="true"] {
+        opacity: 1;
+      }
+      .fp3d-thumb[aria-pressed="true"] {
+        border-color: var(--fp3d-accent);
+        box-shadow: var(--fp3d-shadow), 0 0 0 1px var(--fp3d-accent), 0 0 18px rgba(55, 224, 255, 0.25);
+      }
+      .fp3d-thumb img {
+        display: block;
+        width: 100%;
+        aspect-ratio: 4 / 3;
+      }
+      .fp3d-thumb span {
+        position: absolute;
+        left: 8px;
+        bottom: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+      }
+      .fp3d-thumb-house {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+      }
+      .fp3d-thumb-house span {
+        position: static;
+        text-shadow: none;
+      }
+      .fp3d-thumbs-small .fp3d-thumb {
+        width: 104px;
       }
       .fp3d-find-btn {
         position: absolute;

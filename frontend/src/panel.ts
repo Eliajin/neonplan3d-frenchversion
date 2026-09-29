@@ -407,7 +407,7 @@ export class Floorplan3dPanel extends LitElement {
           .quality=${this._quality}
           ?showStats=${this._stats}
           @room-tap=${this.onRoomTap}
-          @floor-tap=${(e: CustomEvent<{ floorId: string }>) => {
+          @floor-tap=${(e: CustomEvent<{ floorId: string | null }>) => {
             this._floorId = e.detail.floorId;
             this._roomId = null;
           }}

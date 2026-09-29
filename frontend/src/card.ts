@@ -37,6 +37,8 @@ export interface CardConfig {
   controls?: boolean;
   /** A button for full screen (hides the dashboard around the card). */
   fullscreen_button?: boolean;
+  /** Small pictures of the floors to switch between them (default true; not with a fixed floor). */
+  floor_thumbs?: boolean;
 }
 
 type HeatMode = NonNullable<CardConfig["heatmap"]>;
@@ -160,12 +162,13 @@ export class Floorplan3dCard extends LitElement {
               .theme=${this._config?.theme ?? "neon"}
               .showEnergy=${this._config?.energy ?? true}
               .flows=${this._config?.flows ?? null}
+              .floorThumbs=${!this._config?.floor && this._config?.floor_thumbs !== false}
               @room-tap=${(e: CustomEvent<{ floorId: string; roomId: string | null }>) => {
                 if (!e.detail.roomId) return;
                 if (!floorId && !this._config?.floor) this._floorId = e.detail.floorId;
                 this._roomId = e.detail.roomId === this._roomId ? null : e.detail.roomId;
               }}
-              @floor-tap=${(e: CustomEvent<{ floorId: string }>) => {
+              @floor-tap=${(e: CustomEvent<{ floorId: string | null }>) => {
                 this._floorId = e.detail.floorId;
                 this._roomId = null;
               }}
