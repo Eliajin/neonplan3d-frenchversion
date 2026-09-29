@@ -21,9 +21,12 @@ export interface Draft {
   savedAt: number;
 }
 
+/** Unsaved edits of the earlier name (the browser may still hold them). */
+const LEGACY_DRAFT_KEY = "floorplan-3d.unsaved";
+
 function readDraft(): Draft | null {
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
+    const raw = localStorage.getItem(DRAFT_KEY) ?? localStorage.getItem(LEGACY_DRAFT_KEY);
     return raw ? (JSON.parse(raw) as Draft) : null;
   } catch {
     return null;
@@ -33,7 +36,10 @@ function readDraft(): Draft | null {
 function writeDraft(draft: Draft | null): void {
   try {
     if (draft) localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-    else localStorage.removeItem(DRAFT_KEY);
+    else {
+      localStorage.removeItem(DRAFT_KEY);
+      localStorage.removeItem(LEGACY_DRAFT_KEY);
+    }
   } catch {
     // storage full or unavailable: the edit stays until the page is closed
   }

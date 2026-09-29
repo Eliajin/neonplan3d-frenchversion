@@ -340,7 +340,8 @@ async def test_unused_images_are_dropped_on_load(hass: HomeAssistant, hass_stora
     assert data.get_image("old") is None
 
 
-async def test_remove_entry_deletes_all_stores(hass: HomeAssistant, hass_ws_client, hass_storage) -> None:
+async def test_remove_entry_keeps_the_stores(hass: HomeAssistant, hass_ws_client, hass_storage) -> None:
+    """Removing the integration must never delete the plan (re-adding it finds everything again)."""
     entry = await _setup(hass)
     client = await hass_ws_client(hass)
     await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": BUILDING})
@@ -353,9 +354,8 @@ async def test_remove_entry_deletes_all_stores(hass: HomeAssistant, hass_ws_clie
 
     assert await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done()
-    assert STORAGE_KEY_BUILDING not in hass_storage
-    assert STORAGE_KEY_IMAGES not in hass_storage
-    assert STORAGE_KEY_HISTORY not in hass_storage
+    assert STORAGE_KEY_BUILDING in hass_storage
+    assert STORAGE_KEY_IMAGES in hass_storage
     assert DOMAIN not in hass.data
 
 

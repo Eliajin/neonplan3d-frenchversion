@@ -21,7 +21,7 @@ from .const import (
     PANEL_URL_PATH,
     URL_BASE,
 )
-from .storage import FloorplanData, async_remove_stores
+from .storage import FloorplanData
 from .websocket import async_register_commands
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -77,5 +77,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Delete all stored data when the integration is removed."""
-    await async_remove_stores(hass)
+    """The plan, its pictures and packs stay in .storage when the integration is removed: they are the
+    user's work, and removing and re-adding the integration must never cost it."""

@@ -199,9 +199,3 @@ class FloorplanData:
 
     async def _save_images(self) -> None:
         await self._image_store.async_save({"images": self._images})
-
-
-async def async_remove_stores(hass: HomeAssistant) -> None:
-    """Delete every store of the integration."""
-    for store in _stores(hass):
-        await store.async_remove()
