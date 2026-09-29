@@ -1268,9 +1268,9 @@ export class FloorplanViewer {
       let changed = false;
       for (const [id, cur] of fv.openings) {
         const target = this.openingTargets.get(id) ?? CLOSED;
-        const next = { ...cur, open2: cur.open2 ?? 0 };
+        const next = { ...cur, open2: cur.open2 ?? 0, tilt2: cur.tilt2 ?? 0 };
         let busy = false;
-        for (const key of ["open", "open2", "tilt"] as const) {
+        for (const key of ["open", "open2", "tilt", "tilt2"] as const) {
           const to = target[key] ?? 0;
           const from = cur[key] ?? 0;
           const d = to - from;
@@ -1289,7 +1289,7 @@ export class FloorplanViewer {
             busy = true;
           }
         }
-        if (next.open !== cur.open || next.open2 !== (cur.open2 ?? 0) || next.tilt !== cur.tilt || next.cover !== cur.cover) {
+        if (next.open !== cur.open || next.open2 !== (cur.open2 ?? 0) || next.tilt !== cur.tilt || next.tilt2 !== (cur.tilt2 ?? 0) || next.cover !== cur.cover) {
           fv.openings.set(id, next);
           changed = true;
         }

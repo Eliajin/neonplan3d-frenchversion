@@ -260,8 +260,9 @@ export interface OpeningEntities {
   cover: string | null;
   contact: string | null;
   tilt: string | null;
-  /** Contact of the second leaf of a double door or window. */
+  /** Contact and tilt sensor of the second leaf of a double door or window. */
   contact2?: string | null;
+  tilt2?: string | null;
 }
 
 /** Pairs openings with entities in order; with `shared`, a single entity serves all openings. */
@@ -307,6 +308,7 @@ export function openingEntities(hass: HomeAssistant, floors: readonly Floor[]): 
           contact: o.sensor === "handle" && o.contact == null ? null : pick(o.contact, autoK.get(o.id)),
           tilt: o.tilt === "none" ? null : o.tilt,
           contact2: o.leaves === 2 && o.contact2 && o.contact2 !== "none" ? o.contact2 : null,
+          tilt2: o.leaves === 2 && o.tilt2 && o.tilt2 !== "none" ? o.tilt2 : null,
         });
       }
     }
@@ -347,15 +349,16 @@ export function openingState(
   hass: HomeAssistant,
   e: OpeningEntities,
   type: Opening["type"] = "window",
-): { open: number; open2: number; tilt: number; cover: number | null } {
+): { open: number; open2: number; tilt: number; tilt2: number; cover: number | null } {
   const on = (id: string | null | undefined) => !!id && hass.states[id]?.state === "on";
   const known = (id: string | null | undefined) => !!id && !!hass.states[id] && !isUnavailable(hass.states[id]);
   const pos = (id: string | null | undefined) => (id ? windowPosition(hass.states[id]) : null);
-  // the second leaf of a double door or window stays closed without a sensor
-  const open2 = pos(e.contact2) === "open" ? 1 : 0;
+  // the second leaf of a double door or window stays closed without a sensor; it tilts like the first
+  const tilted2 = on(e.tilt2) || pos(e.tilt2) === "tilted" || pos(e.contact2) === "tilted";
+  const open2 = pos(e.contact2) === "open" && !tilted2 ? 1 : 0;
   if (type === "door") {
     const p = pos(e.contact);
-    return { open: p === null ? DOOR_DEFAULT_OPEN : p === "closed" ? 0 : 1, open2, tilt: 0, cover: null };
+    return { open: p === null ? DOOR_DEFAULT_OPEN : p === "closed" ? 0 : 1, open2: pos(e.contact2) === "open" ? 1 : 0, tilt: 0, tilt2: 0, cover: null };
   }
   // a separate tilt sensor, or a handle sensor that reports "tilted" itself
   const tilted = on(e.tilt) || pos(e.tilt) === "tilted" || pos(e.contact) === "tilted";
@@ -370,9 +373,9 @@ export function openingState(
   if (type === "garage") {
     // a garage door without a cover shows its contact: open or closed
     if (cover === null) cover = known(e.contact) ? (on(e.contact) ? 0 : 1) : 1;
-    return { open: 0, open2: 0, tilt: 0, cover };
+    return { open: 0, open2: 0, tilt: 0, tilt2: 0, cover };
   }
-  return { open, open2, tilt: tilted ? 1 : 0, cover };
+  return { open, open2, tilt: tilted ? 1 : 0, tilt2: tilted2 ? 1 : 0, cover };
 }
 
 // ------------------------------------------------------------------ grouping by device

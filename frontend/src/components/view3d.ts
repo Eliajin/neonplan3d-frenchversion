@@ -262,7 +262,7 @@ export class Fp3dView3d extends LitElement {
       this.openingLinks = openingEntities(hass, b.floors);
       this.furnitureLinks = furnitureEntities(hass, b.floors);
       this.linkedRegistry = hass.entities;
-      const links = [...this.openingLinks.values()].flatMap((e) => [e.cover, e.contact, e.tilt, e.contact2 ?? null]);
+      const links = [...this.openingLinks.values()].flatMap((e) => [e.cover, e.contact, e.tilt, e.contact2 ?? null, e.tilt2 ?? null]);
       const placed = placedEntities(b);
       const power = placed.map((id) => powerSensorFor(hass, id));
       const e = b.energy;

@@ -14,11 +14,13 @@ export interface OpeningState {
   open2?: number;
   /** 0 = closed, 1 = tilted. */
   tilt: number;
+  /** Second leaf tilted. */
+  tilt2?: number;
   /** Closed fraction of the blind or garage door (0 = up, 1 = down); null = no blind. */
   cover: number | null;
 }
 
-export const CLOSED: OpeningState = { open: 0, open2: 0, tilt: 0, cover: null };
+export const CLOSED: OpeningState = { open: 0, open2: 0, tilt: 0, tilt2: 0, cover: null };
 
 const FRAME = 0x1f3052;
 const FRAME_TOP = 0x2a4270;
@@ -178,7 +180,7 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
         if (info.exterior) splitBox(frames, tf, -0.03, W + 0.03, -info.faceOut - 0.06, mid - fd, S - 0.04, S - 0.02, new Color(SILL), frameTop, cut, bucket);
       }
       // sashes: each rotates into the room around its hinge, or tilts around its bottom edge; a
-      // double window (or French door) has two sashes meeting in the middle, only the main one tilts
+      // double window (or French door) has two sashes meeting in the middle, each tilting on its own
       const sw = 0.055;
       const sy0 = S + (S > 0.05 ? fw : 0.03);
       const sy1 = T - fw;
@@ -188,7 +190,7 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
       const sashes: { atStart: boolean; x0: number; x1: number; open: number; tilt: number }[] = two
         ? [
             { atStart: info.hingeAtStart, x0: info.hingeAtStart ? fw : W / 2, x1: info.hingeAtStart ? W / 2 : W - fw, open: st.open, tilt: st.tilt },
-            { atStart: !info.hingeAtStart, x0: info.hingeAtStart ? W / 2 : fw, x1: info.hingeAtStart ? W - fw : W / 2, open: st.open2 ?? 0, tilt: 0 },
+            { atStart: !info.hingeAtStart, x0: info.hingeAtStart ? W / 2 : fw, x1: info.hingeAtStart ? W - fw : W / 2, open: st.open2 ?? 0, tilt: st.tilt2 ?? 0 },
           ]
         : [{ atStart: info.hingeAtStart, x0: fw, x1: W - fw, open: st.open, tilt: st.tilt }];
       for (const sash of sashes) {

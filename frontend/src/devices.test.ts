@@ -116,10 +116,10 @@ test("doors and windows get blinds and contacts of their room's area, or the one
   };
   const links = openingEntities(hass, [floor]);
   // the only blind of the area serves every window without its own choice; sensors go one per window
-  assert.deepEqual(links.get("w1"), { cover: "cover.rollo", contact: "binary_sensor.f1", tilt: null, contact2: null });
-  assert.deepEqual(links.get("w2"), { cover: "cover.rollo", contact: "binary_sensor.f2", tilt: null, contact2: null });
-  assert.deepEqual(links.get("w3"), { cover: null, contact: "binary_sensor.tuer", tilt: null, contact2: null });
-  assert.deepEqual(links.get("d"), { cover: null, contact: "binary_sensor.tuer", tilt: null, contact2: null });
+  assert.deepEqual(links.get("w1"), { cover: "cover.rollo", contact: "binary_sensor.f1", tilt: null, contact2: null, tilt2: null });
+  assert.deepEqual(links.get("w2"), { cover: "cover.rollo", contact: "binary_sensor.f2", tilt: null, contact2: null, tilt2: null });
+  assert.deepEqual(links.get("w3"), { cover: null, contact: "binary_sensor.tuer", tilt: null, contact2: null, tilt2: null });
+  assert.deepEqual(links.get("d"), { cover: null, contact: "binary_sensor.tuer", tilt: null, contact2: null, tilt2: null });
 });
 
 test("opening states: open, tilted and blind position", () => {
@@ -127,9 +127,9 @@ test("opening states: open, tilted and blind position", () => {
   hass.states["binary_sensor.k"] = { entity_id: "binary_sensor.k", state: "on", attributes: {} };
   hass.states["binary_sensor.t"] = { entity_id: "binary_sensor.t", state: "on", attributes: {} };
   hass.states["cover.p"] = { entity_id: "cover.p", state: "open", attributes: { current_position: 25 } };
-  assert.deepEqual(openingState(hass, { cover: null, contact: "binary_sensor.k", tilt: null }), { open: 1, open2: 0, tilt: 0, cover: null });
-  assert.deepEqual(openingState(hass, { cover: "cover.p", contact: "binary_sensor.k", tilt: "binary_sensor.t" }), { open: 0, open2: 0, tilt: 1, cover: 0.75 });
-  assert.deepEqual(openingState(hass, { cover: "cover.rollo", contact: null, tilt: null }), { open: 0, open2: 0, tilt: 0, cover: 0 });
+  assert.deepEqual(openingState(hass, { cover: null, contact: "binary_sensor.k", tilt: null }), { open: 1, open2: 0, tilt: 0, tilt2: 0, cover: null });
+  assert.deepEqual(openingState(hass, { cover: "cover.p", contact: "binary_sensor.k", tilt: "binary_sensor.t" }), { open: 0, open2: 0, tilt: 1, tilt2: 0, cover: 0.75 });
+  assert.deepEqual(openingState(hass, { cover: "cover.rollo", contact: null, tilt: null }), { open: 0, open2: 0, tilt: 0, tilt2: 0, cover: 0 });
 });
 
 test("garage doors use garage covers and contacts; door leaves follow their contact or stand half open", () => {
@@ -149,7 +149,7 @@ test("garage doors use garage covers and contacts; door leaves follow their cont
   assert.equal(links.get("g")!.cover, "cover.tor");
   assert.equal(links.get("w")!.cover, "cover.rollo");
   assert.equal(links.get("d")!.contact, "binary_sensor.tuer");
-  assert.deepEqual(openingState(hass, links.get("g")!, "garage"), { open: 0, open2: 0, tilt: 0, cover: 0 });
+  assert.deepEqual(openingState(hass, links.get("g")!, "garage"), { open: 0, open2: 0, tilt: 0, tilt2: 0, cover: 0 });
   hass.states["cover.tor"] = { entity_id: "cover.tor", state: "closing", attributes: { device_class: "garage" } };
   assert.equal(openingState(hass, links.get("g")!, "garage").cover, 0.5);
   assert.equal(openingState(hass, links.get("d")!, "door").open, 1);
@@ -221,8 +221,8 @@ test("double doors and French windows: the second leaf follows a contact of its 
   hass.states["binary_sensor.a"] = { entity_id: "binary_sensor.a", state: "off", attributes: { device_class: "door" } };
   hass.states["binary_sensor.b"] = { entity_id: "binary_sensor.b", state: "on", attributes: { device_class: "door" } };
   const e = { cover: null, contact: "binary_sensor.a", tilt: null, contact2: "binary_sensor.b" };
-  assert.deepEqual(openingState(hass, e, "window"), { open: 0, open2: 1, tilt: 0, cover: null });
-  assert.deepEqual(openingState(hass, e, "door"), { open: 0, open2: 1, tilt: 0, cover: null });
+  assert.deepEqual(openingState(hass, e, "window"), { open: 0, open2: 1, tilt: 0, tilt2: 0, cover: null });
+  assert.deepEqual(openingState(hass, e, "door"), { open: 0, open2: 1, tilt: 0, tilt2: 0, cover: null });
   // without a sensor the second leaf of a double door stays shut
   assert.equal(openingState(hass, { cover: null, contact: null, tilt: null }, "door").open2, 0);
 });
@@ -256,11 +256,23 @@ test("window handles with three states, HomematicIP window_state and plain conta
   const hass = hassWith();
   hass.states["sensor.griff"] = { entity_id: "sensor.griff", state: "tilted", attributes: {} };
   const e = { cover: null, contact: "sensor.griff", tilt: null };
-  assert.deepEqual(openingState(hass, e, "window"), { open: 0, open2: 0, tilt: 1, cover: null });
+  assert.deepEqual(openingState(hass, e, "window"), { open: 0, open2: 0, tilt: 1, tilt2: 0, cover: null });
   hass.states["sensor.griff"] = { entity_id: "sensor.griff", state: "open", attributes: {} };
   assert.equal(openingState(hass, e, "window").open, 1);
   // a sensor that only knows "tilted or not" goes into the tilt field
   hass.states["binary_sensor.kipp"] = { entity_id: "binary_sensor.kipp", state: "on", attributes: {} };
   hass.states["binary_sensor.auf"] = { entity_id: "binary_sensor.auf", state: "on", attributes: {} };
-  assert.deepEqual(openingState(hass, { cover: null, contact: "binary_sensor.auf", tilt: "binary_sensor.kipp" }, "window"), { open: 0, open2: 0, tilt: 1, cover: null });
+  assert.deepEqual(openingState(hass, { cover: null, contact: "binary_sensor.auf", tilt: "binary_sensor.kipp" }, "window"), { open: 0, open2: 0, tilt: 1, tilt2: 0, cover: null });
+});
+
+test("each leaf of a double window has its own kind of sensor", () => {
+  const hass = hassWith();
+  // left: a handle sensor that reports tilted; right: a plain contact that is open
+  hass.states["sensor.griff_links"] = { entity_id: "sensor.griff_links", state: "tilted", attributes: {} };
+  hass.states["binary_sensor.rechts"] = { entity_id: "binary_sensor.rechts", state: "on", attributes: {} };
+  const e = { cover: null, contact: "sensor.griff_links", tilt: null, contact2: "binary_sensor.rechts", tilt2: null };
+  assert.deepEqual(openingState(hass, e, "window"), { open: 0, open2: 1, tilt: 1, tilt2: 0, cover: null });
+  // the second leaf tilts with a handle sensor too
+  hass.states["sensor.griff_rechts"] = { entity_id: "sensor.griff_rechts", state: "gekippt", attributes: {} };
+  assert.equal(openingState(hass, { ...e, contact2: "sensor.griff_rechts" }, "window").tilt2, 1);
 });

@@ -85,6 +85,7 @@ const shots = [
   { name: "editor-room", query: "", width: 1280, height: 800, editor: true, select: "Wohnzimmer" },
   { name: "editor-devices", query: "", width: 1280, height: 800, editor: true, select: "Küche", scrollSide: true },
   { name: "editor-opening", query: "", width: 1280, height: 800, editor: true, editorState: { _openingId: "o2", _roomId: "wohnen" } },
+  { name: "editor-opening-leaves", query: "", width: 1280, height: 800, editor: true, editorState: { _openingId: "o2", _roomId: "wohnen" }, scrollSide: true },
   { name: "editor-furniture", query: "", width: 1280, height: 800, editor: true, editorState: { _furnitureId: "m2" } },
   { name: "editor-furniture-tool", query: "", width: 1280, height: 800, editor: true, editorState: { _tool: "furniture", _roomId: "wohnen" } },
   { name: "editor-energy", query: "", width: 1280, height: 1400, editor: true, openDetails: true, scrollSide: true },

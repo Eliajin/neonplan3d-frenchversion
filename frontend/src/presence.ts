@@ -96,7 +96,7 @@ export function floorCounts(hass: HomeAssistant, building: Building, links: Map<
       if (o.type === "garage") return (openingState(hass, l, "garage").cover ?? 1) < 0.95;
       if (o.type === "door") return on(l.contact) || on(l.contact2 ?? null);
       const s = openingState(hass, l, "window");
-      return s.open > 0.5 || s.tilt > 0.5 || s.open2 > 0.5;
+      return s.open > 0.5 || s.tilt > 0.5 || s.open2 > 0.5 || s.tilt2 > 0.5;
     }).length;
     out.set(floor.id, {
       rooms: floor.rooms.length,

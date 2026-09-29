@@ -43,6 +43,9 @@ export interface Opening {
   contact2: string | null;
   /** Windows: which sensors report the sash (null: a contact, plus a tilt sensor when one is set). */
   sensor?: "contact" | "handle" | "contact_tilt" | null;
+  /** The same for the second leaf of a double window, with its own tilt sensor. */
+  sensor2?: "contact" | "handle" | "contact_tilt" | null;
+  tilt2?: string | null;
   cover: EntityRef;
   contact: EntityRef;
   tilt: EntityRef;

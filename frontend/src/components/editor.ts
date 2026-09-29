@@ -2163,7 +2163,33 @@ export class Fp3dEditor extends LitElement {
       return id.startsWith("sensor.") && (windowPosition(st) !== null || /griff|handle|fenster|window|drehgriff/i.test(`${id} ${entityName(this.hass, id)}`));
     });
     const plainContacts = this.entityOptions((id) => id.startsWith("binary_sensor.") && ["door", "window", "opening", "garage_door"].includes(dc(id) ?? ""));
-    const sensorKind = o.sensor ?? (o.tilt && o.tilt !== "none" ? "contact_tilt" : "contact");
+    type Kind = NonNullable<Opening["sensor"]>;
+    const leafSensors = (leaf: 1 | 2) => {
+      const main = leaf === 1;
+      const tilt = main ? o.tilt : (o.tilt2 ?? null);
+      const contact = main ? o.contact : o.contact2;
+      const kind: Kind = (main ? o.sensor : o.sensor2) ?? (tilt && tilt !== "none" ? "contact_tilt" : "contact");
+      const setContact = (v: string | null) => this.updateOpening(main ? { contact: v } : { contact2: v === "none" ? null : v });
+      return html`<label class="fp3d-field fp3d-wide"
+          >${this.t("sensor_kind")}
+          <select
+            ?disabled=${!admin}
+            @change=${(e: Event) => {
+              const next = (e.target as HTMLSelectElement).value as Kind;
+              const clearTilt = next === "contact_tilt" ? {} : main ? { tilt: null } : { tilt2: null };
+              this.updateOpening({ ...(main ? { sensor: next } : { sensor2: next }), ...clearTilt });
+            }}
+          >
+            ${(["contact", "handle", "contact_tilt"] as const).map((k) => html`<option value=${k} ?selected=${k === kind}>${this.t(`sensor_kind_${k}`)}</option>`)}
+          </select></label
+        >
+        ${kind === "handle"
+          ? this.entitySelect(this.t("handle_entity"), contact, undefined, handles, (v) => setContact(v === "none" ? (main ? "none" : null) : v))
+          : this.entitySelect(this.t("contact_entity"), contact, main ? autoPick("contact") : undefined, plainContacts, setContact)}
+        ${kind === "contact_tilt"
+          ? this.entitySelect(this.t("tilt_entity"), tilt, undefined, contacts, (v) => this.updateOpening(main ? { tilt: v === "none" ? null : v } : { tilt2: v === "none" ? null : v }))
+          : nothing}`;
+    };
     const preset = openingPreset(o);
     const door = o.type === "door";
     return html`<section>
@@ -2203,28 +2229,12 @@ export class Fp3dEditor extends LitElement {
         >`}
         ${window || garage ? this.entitySelect(this.t("cover_entity"), o.cover, autoPick("cover"), covers, (v) => this.updateOpening({ cover: v })) : nothing}
         ${window
-          ? html`<label class="fp3d-field fp3d-wide"
-              >${this.t("sensor_kind")}
-              <select
-                ?disabled=${!admin}
-                @change=${(e: Event) => {
-                  const kind = (e.target as HTMLSelectElement).value as NonNullable<Opening["sensor"]>;
-                  this.updateOpening({ sensor: kind, ...(kind === "contact_tilt" ? {} : { tilt: null }) });
-                }}
-              >
-                ${(["contact", "handle", "contact_tilt"] as const).map((k) => html`<option value=${k} ?selected=${k === sensorKind}>${this.t(`sensor_kind_${k}`)}</option>`)}
-              </select></label
-            >`
-          : nothing}
-        ${window && sensorKind === "handle"
-          ? this.entitySelect(this.t(o.leaves === 2 ? "handle_main" : "handle_entity"), o.contact, undefined, handles, (v) => this.updateOpening({ contact: v === "none" ? "none" : v }))
-          : this.entitySelect(this.t(o.leaves === 2 ? "contact_main" : "contact_entity"), o.contact, autoPick("contact"), window ? plainContacts : contacts, (v) => this.updateOpening({ contact: v }))}
-        ${o.leaves === 2 && !garage
-          ? this.entitySelect(this.t("contact_second"), o.contact2, undefined, contacts, (v) => this.updateOpening({ contact2: v === "none" ? null : v }))
-          : nothing}
-        ${window && sensorKind === "contact_tilt"
-          ? this.entitySelect(this.t("tilt_entity"), o.tilt, undefined, contacts, (v) => this.updateOpening({ tilt: v === "none" ? null : v }))
-          : nothing}
+          ? html`${o.leaves === 2 ? html`<h4 class="fp3d-lib-head fp3d-wide">${this.t("leaf_main")}</h4>` : nothing}
+              ${leafSensors(1)} ${o.leaves === 2 ? html`<h4 class="fp3d-lib-head fp3d-wide">${this.t("leaf_second")}</h4>${leafSensors(2)}` : nothing}`
+          : html`${this.entitySelect(this.t(o.leaves === 2 ? "contact_main" : "contact_entity"), o.contact, autoPick("contact"), contacts, (v) => this.updateOpening({ contact: v }))}
+              ${o.leaves === 2 && !garage
+                ? this.entitySelect(this.t("contact_second"), o.contact2, undefined, contacts, (v) => this.updateOpening({ contact2: v === "none" ? null : v }))
+                : nothing}`}
       </div>
       <p class="fp3d-sub">${this.t(window ? "opening_hint" : garage ? "garage_hint" : "door_hint")}</p>
       ${admin
