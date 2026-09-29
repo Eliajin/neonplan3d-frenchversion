@@ -52,6 +52,8 @@ OPENING_SCHEMA = vol.Schema(
         # doors: swing into the room ("in") or to the other side ("out")
         vol.Optional("swing", default="in"): vol.In(["in", "out"]),
         vol.Optional("contact2", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        # windows: a plain contact, a handle sensor (open / tilted / closed), or a contact and a tilt sensor
+        vol.Optional("sensor", default=None): vol.Any(None, vol.In(["contact", "handle", "contact_tilt"])),
         vol.Optional("cover", default=None): _ENTITY_REF,
         vol.Optional("contact", default=None): _ENTITY_REF,
         vol.Optional("tilt", default=None): _ENTITY_REF,

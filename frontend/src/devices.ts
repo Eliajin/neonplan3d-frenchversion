@@ -303,7 +303,8 @@ export function openingEntities(hass: HomeAssistant, floors: readonly Floor[]): 
         const autoK = o.type === "window" ? autoWindow : o.type === "garage" ? autoGarageContact : autoDoor;
         out.set(o.id, {
           cover: pick(o.cover, autoC?.get(o.id)),
-          contact: pick(o.contact, autoK.get(o.id)),
+          // a window with a handle sensor gets no plain contact assigned automatically
+          contact: o.sensor === "handle" && o.contact == null ? null : pick(o.contact, autoK.get(o.id)),
           tilt: o.tilt === "none" ? null : o.tilt,
           contact2: o.leaves === 2 && o.contact2 && o.contact2 !== "none" ? o.contact2 : null,
         });
