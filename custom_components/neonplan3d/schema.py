@@ -78,7 +78,9 @@ OPENING_SCHEMA = vol.Schema(
 _SCREEN_PICTURE_SCHEMA = vol.Schema(
     {
         vol.Required("entity"): vol.All(str, vol.Length(max=255)),
-        vol.Required("state"): vol.All(str, vol.Length(max=64)),
+        # compare this attribute (e.g. app_name) instead of the state
+        vol.Optional("attribute", default=None): vol.Any(None, vol.All(str, vol.Length(max=64))),
+        vol.Required("state"): vol.All(str, vol.Length(max=128)),
         vol.Required("image"): vol.All(str, vol.Length(max=2048)),
     }
 )

@@ -60,6 +60,9 @@ export interface Opening {
 /** A picture rule of a screen: while `entity` is in `state`, the stored image (or a URL) is shown. */
 export interface ScreenPicture {
   entity: string;
+  /** Compare this attribute (e.g. app_name) instead of the state. */
+  attribute?: string | null;
+  /** The value to match: exact, or contained in the value's text ("youtube" in "com.google.android.youtube.tv"); "*" = any. */
   state: string;
   /** An image id of the image store, or an http(s) URL. */
   image: string;

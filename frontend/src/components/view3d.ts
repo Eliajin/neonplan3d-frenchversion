@@ -603,7 +603,13 @@ export class Fp3dView3d extends LitElement {
         if (!f.pictures?.length || !isMediaFurniture(f.type)) continue;
         const rule = f.pictures.find((r) => {
           const st = hass.states[r.entity];
-          return !!st && (r.state === "*" || st.state.toLowerCase() === r.state.trim().toLowerCase());
+          if (!st) return false;
+          const raw = r.attribute ? st.attributes[r.attribute] : st.state;
+          if (raw === undefined || raw === null) return false;
+          const value = String(raw).toLowerCase();
+          const want = r.state.trim().toLowerCase();
+          // exact, or the wanted text somewhere in the value ("youtube" matches "com.google.android.youtube.tv")
+          return r.state === "*" || value === want || (want.length >= 3 && value.includes(want));
         });
         if (!rule) continue;
         const picture = this.pictureUrl(rule.image);

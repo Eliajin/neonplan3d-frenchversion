@@ -2860,10 +2860,18 @@ export class Fp3dEditor extends LitElement {
     const rules = f.pictures ?? [];
     const set = (next: ScreenPicture[]) => this.updateFurniture({ pictures: next });
     const entities = this.entityOptions(() => true);
-    const states = (id: string) => {
-      const st = this.hass?.states[id];
-      const options = Array.isArray(st?.attributes.options) ? (st.attributes.options as string[]) : [];
-      return options.length ? options : st ? [st.state] : [];
+    // what a rule can look at: the state, or any attribute with a simple value (text, number, boolean)
+    const scalar = (v: unknown) => ["string", "number", "boolean"].includes(typeof v);
+    const attributes = (id: string) =>
+      Object.entries(this.hass?.states[id]?.attributes ?? {})
+        .filter(([k, v]) => scalar(v) && k !== "friendly_name" && k !== "icon")
+        .map(([k]) => k);
+    const values = (r: ScreenPicture) => {
+      const st = this.hass?.states[r.entity];
+      if (!st) return [];
+      if (r.attribute) return [String(st.attributes[r.attribute] ?? "")];
+      const options = Array.isArray(st.attributes.options) ? (st.attributes.options as string[]) : [];
+      return options.length ? options : [st.state];
     };
     return html`<div class="fp3d-wide">
       <div class="fp3d-sub">${this.t("screen_pictures")}</div>
@@ -2879,6 +2887,10 @@ export class Fp3dEditor extends LitElement {
               set(rules.map((x, j) => (j === i ? { ...x, entity: e.detail.value } : x)));
             }}
           ></fp3d-entity-picker>
+          <select ?disabled=${!admin} title=${this.t("picture_attribute")} @change=${(e: Event) => set(rules.map((x, j) => (j === i ? { ...x, attribute: (e.target as HTMLSelectElement).value || null } : x)))}>
+            <option value="" ?selected=${!r.attribute}>${this.t("picture_state_of")}</option>
+            ${attributes(r.entity).map((a) => html`<option value=${a} ?selected=${a === r.attribute}>${a}</option>`)}
+          </select>
           <input
             type="text"
             list="fp3d-picture-states-${i}"
@@ -2887,7 +2899,7 @@ export class Fp3dEditor extends LitElement {
             ?disabled=${!admin}
             @change=${(e: Event) => set(rules.map((x, j) => (j === i ? { ...x, state: (e.target as HTMLInputElement).value } : x)))}
           />
-          <datalist id="fp3d-picture-states-${i}"><option value="*"></option>${states(r.entity).map((s) => html`<option value=${s}></option>`)}</datalist>
+          <datalist id="fp3d-picture-states-${i}"><option value="*"></option>${values(r).map((s) => html`<option value=${s}></option>`)}</datalist>
           ${this._images[r.image] ? html`<img class="fp3d-picture-thumb" src=${this._images[r.image].url} alt="" />` : nothing}
           <label class="fp3d-btn fp3d-picture-pick">
             ${r.image ? this.t("picture_change") : this.t("picture_pick")}
@@ -3437,6 +3449,9 @@ export class Fp3dEditor extends LitElement {
         padding: 8px;
         border: 1px solid var(--fp3d-line);
         border-radius: 10px;
+      }
+      .fp3d-picture-rule select {
+        min-width: 0;
       }
       .fp3d-picture-rule fp3d-entity-picker,
       .fp3d-picture-rule input[type="url"] {
