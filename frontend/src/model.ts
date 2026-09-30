@@ -86,6 +86,8 @@ export interface Furniture {
   mount_y?: number | null;
   /** Screens: pictures shown while an entity is in a state (first match wins; "*" = any state). */
   pictures?: ScreenPicture[];
+  /** Screens: what shows around a rule picture – a dark screen (default) or a white one (for dark logos). */
+  screen_bg?: "black" | "white";
   /** Parking spots: the vehicle shown (a pack item type) while `entity` reports a car. */
   vehicle?: string | null;
   /** Parking spots: size factor of the vehicle (1 = the pack item's size). */

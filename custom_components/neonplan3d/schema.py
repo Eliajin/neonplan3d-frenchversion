@@ -110,6 +110,8 @@ FURNITURE_SCHEMA = vol.Schema(
         # wall-hung pack items: height of the bottom edge above the floor (None = the pack's default)
         vol.Optional("mount_y", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=10))),
         vol.Optional("pictures", default=[]): vol.All([_SCREEN_PICTURE_SCHEMA], vol.Length(max=20)),
+        # screens: the screen around a rule picture is dark (default) or white
+        vol.Optional("screen_bg", default="black"): vol.In(["black", "white"]),
         vol.Optional("vehicle", default=None): vol.Any(None, vol.All(str, vol.Length(max=96))),
         vol.Optional("scale", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0.2, max=2)),
         vol.Optional("type_entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),

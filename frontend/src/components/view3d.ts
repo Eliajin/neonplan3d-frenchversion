@@ -604,7 +604,8 @@ export class Fp3dView3d extends LitElement {
         const rule = f.pictures.find((r) => pictureRuleMatches(hass, r));
         if (!rule) continue;
         const picture = this.pictureUrl(rule.image);
-        if (picture) screens.set(f.id, { color: [0.08, 0.08, 0.1], level: 1, picture, plain: true });
+        const bg: [number, number, number] = f.screen_bg === "white" ? [0.92, 0.94, 1] : [0.08, 0.08, 0.1];
+        if (picture) screens.set(f.id, { color: bg, level: 1, picture, plain: true });
       }
     }
     return { markers, consumers, screens, targets };

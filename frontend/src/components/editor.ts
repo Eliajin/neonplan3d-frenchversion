@@ -479,8 +479,11 @@ export class Fp3dEditor extends LitElement {
     const bg = this.floor?.background;
     if (bg && !this._images[bg.image_id] && !this.loadingImages.has(bg.image_id)) void this.loadImage(bg.image_id);
     // thumbnails of the selected screen's stored pictures
-    for (const r of this.furnitureItem?.pictures ?? []) {
-      if (r.image && !/^https?:\/\//.test(r.image) && !this._images[r.image] && !this.loadingImages.has(r.image)) void this.loadImage(r.image);
+    if (this.furnitureItem?.pictures) {
+      // thumbnails of every stored picture in the plan (they can be reused on other screens)
+      for (const id of this.storedPictures()) {
+        if (!this._images[id] && !this.loadingImages.has(id)) void this.loadImage(id);
+      }
     }
   }
 
@@ -2854,6 +2857,17 @@ export class Fp3dEditor extends LitElement {
       ${open ? html`<div class="fp3d-library">${hits.map((it) => this.libraryButton(it.type, it.label))}</div>` : nothing}`;
   }
 
+  /** Ids of the stored pictures any screen of the plan uses (in order of first use). */
+  private storedPictures(): string[] {
+    const ids: string[] = [];
+    for (const floor of this._doc.floors) {
+      for (const m of floor.furniture) {
+        for (const r of m.pictures ?? []) if (r.image && !/^https?:\/\//.test(r.image) && !ids.includes(r.image)) ids.push(r.image);
+      }
+    }
+    return ids;
+  }
+
   /**
    * Pictures a screen shows by an entity's state: the rules are grouped by entity (and attribute), each
    * group lists its values with a picture; in order, the first matching rule wins.
@@ -2888,8 +2902,18 @@ export class Fp3dEditor extends LitElement {
     });
     const patchGroup = (g: (typeof groups)[number], change: Partial<ScreenPicture>) => set(rules.map((x, i) => (g.rows.includes(i) ? { ...x, ...change } : x)));
     const patchRow = (i: number, change: Partial<ScreenPicture>) => set(rules.map((x, j) => (j === i ? { ...x, ...change } : x)));
+    const stored = this.storedPictures();
     return html`<div class="fp3d-wide">
       <div class="fp3d-sub">${this.t("screen_pictures")}</div>
+      ${rules.length
+        ? html`<label class="fp3d-field fp3d-wide"
+            >${this.t("screen_bg")}
+            <select ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ screen_bg: (e.target as HTMLSelectElement).value as "black" | "white" })}>
+              <option value="black" ?selected=${(f.screen_bg ?? "black") === "black"}>${this.t("screen_bg_black")}</option>
+              <option value="white" ?selected=${f.screen_bg === "white"}>${this.t("screen_bg_white")}</option>
+            </select></label
+          >`
+        : nothing}
       ${groups.map(
         (g) => html`<div class="fp3d-picture-group">
           <fp3d-entity-picker
@@ -2934,6 +2958,13 @@ export class Fp3dEditor extends LitElement {
                 ${r.image ? this.t("picture_change") : this.t("picture_pick")}
                 <input type="file" accept="image/*" hidden ?disabled=${!admin} @change=${(e: Event) => void this.uploadPicture(e, f, i)} />
               </label>
+              ${stored.filter((id) => id !== r.image).length
+                ? html`<div class="fp3d-picture-reuse" title=${this.t("picture_reuse")}>
+                    ${stored
+                      .filter((id) => id !== r.image && this._images[id])
+                      .map((id) => html`<button class="fp3d-picture-reuse-btn" ?disabled=${!admin} @click=${() => patchRow(i, { image: id })}><img src=${this._images[id].url} alt="" /></button>`)}
+                  </div>`
+                : nothing}
               <input
                 type="url"
                 placeholder=${this.t("picture_url")}
@@ -3514,6 +3545,28 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-rule-hit {
         color: var(--fp3d-accent);
+      }
+      .fp3d-picture-reuse {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .fp3d-picture-reuse-btn {
+        padding: 2px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 6px;
+        background: var(--fp3d-chrome-solid);
+        cursor: pointer;
+      }
+      .fp3d-picture-reuse-btn img {
+        display: block;
+        height: 28px;
+        max-width: 60px;
+        object-fit: contain;
+      }
+      .fp3d-picture-reuse-btn:hover {
+        border-color: var(--fp3d-accent);
       }
       .fp3d-picture-thumb {
         max-height: 60px;
