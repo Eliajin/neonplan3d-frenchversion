@@ -863,6 +863,34 @@ function packModel(b: Builder, item: PackItem, w: number, d: number, h: number, 
   }
 }
 
+/**
+ * A security camera into the lamp buffer: on a wall a small body with a lens looking along +z (turned
+ * by `rotation`), on the ceiling a dome hanging at the ceiling height `y`.
+ */
+export function pushCameraModel(buf: GeoBuffer, model: "camera_wall" | "camera_ceiling", x: number, y: number, z: number, rotation: number): void {
+  const a = (rotation * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  const tf: Tf = (lx, lz) => [x + lx * c - lz * s, z + lx * s + lz * c];
+  const b = new Builder(buf, new LineBuffer(), tf);
+  const body = 0x1a2640;
+  const bodyTop = 0x243660;
+  const lens = 0x0b111f;
+  if (model === "camera_ceiling") {
+    // dome: a flat base and a half-dome below it
+    b.cyl(0, 0, 0.07, y - 0.03, y, body, bodyTop, 12);
+    b.loft([-0.05, 0.05, -0.05, 0.05], [-0.025, 0.025, -0.025, 0.025], y - 0.1, y - 0.03, lens, body);
+    b.cyl(0, 0, 0.012, y - 0.075, y - 0.06, C.accent, C.accent, 6);
+    return;
+  }
+  // wall camera: bracket at the wall (-z), body pointing into the room (+z), lens in front
+  b.box(-0.02, 0.02, y - 0.02, y + 0.02, -0.06, -0.03, body, bodyTop);
+  b.box(-0.01, 0.01, y - 0.01, y + 0.06, -0.05, -0.03, body, bodyTop);
+  b.loft([-0.035, 0.035, -0.03, 0.09], [-0.04, 0.04, -0.03, 0.09], y + 0.02, y + 0.09, body, bodyTop);
+  b.lyingCyl("z", 0, 0.1, y + 0.03, y + 0.08, 0.03, 0.05, lens, C.accent, 10);
+  b.box(-0.006, 0.006, y + 0.075, y + 0.085, 0.085, 0.09, 0xff3b4f, 0xff3b4f);
+}
+
 /** A pack lamp into the lamp buffer: glowing parts in the light's colour (`glow`), or dark when off. */
 export function pushPackLamp(buf: GeoBuffer, item: PackItem, f: Pick<Furniture, "x" | "z" | "rotation" | "w" | "d" | "h">, base: number, glow: number): void {
   const a = (f.rotation * Math.PI) / 180;

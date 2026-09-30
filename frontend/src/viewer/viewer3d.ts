@@ -46,7 +46,7 @@ import { centroid, pointInPolygon } from "../model.ts";
 import { buildFloorGeometry, SLAB, stairHoles, type FloorGeometry } from "./build.ts";
 import { OrbitControls } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
-import { pushPackLamp, screenRect } from "./furniture.ts";
+import { pushCameraModel, pushPackLamp, screenRect } from "./furniture.ts";
 import { mountBase, packItem, setPacks, type FurniturePack } from "../packs.ts";
 import { withVehicles } from "../parking.ts";
 import { buildRoof } from "./roof.ts";
@@ -140,6 +140,9 @@ export interface DeviceMarker {
   variant?: string | null;
   /** Formatted power, e.g. "85 W". */
   powerText?: string;
+  /** A camera drawn in 3D (wall or ceiling); its field of view lies on the floor, red while motion is seen. */
+  model?: "camera_wall" | "camera_ceiling";
+  motion?: boolean;
 }
 
 export type FloorStack = "dim" | "stacked" | "single";
@@ -1527,11 +1530,11 @@ export class FloorplanViewer {
       const k = left > FLASH_MS ? 0.5 + 0.5 * Math.sin(left / 140) : left / FLASH_MS;
       return Math.round(k * 10) / 10;
     };
-    const lamps = this.devices.filter((d) => d.floorId === fv.floor.id && d.lamp);
+    const lamps = this.devices.filter((d) => d.floorId === fv.floor.id && (d.lamp || d.model));
     const shapeSig =
       this.wallMode +
       (this.lowQuality ? "L" : this.highQuality ? "H" : "M") +
-      lamps.map((d) => `${d.id},${d.lamp},${d.variant},${d.x},${d.z},${d.rotation ?? 0},${d.size?.join("/")},${d.base ?? 0},${d.pack ?? ""}`).join(";");
+      lamps.map((d) => `${d.id},${d.lamp ?? d.model},${d.variant},${d.x},${d.z},${d.y},${d.rotation ?? 0},${d.size?.join("/")},${d.base ?? 0},${d.pack ?? ""}`).join(";");
     const glows = lamps.map((d) => this.glowOf(d));
     const colorSig = lamps.map((d, i) => `${flash(d.id)},${glows[i] ? `${glows[i]!.level.toFixed(3)},${glows[i]!.color.map((c) => c.toFixed(3)).join("/")}` : "off"}`).join(";");
     if (shapeSig !== fv.lampShapeSig || !fv.lampMesh.geometry.getAttribute("position")) {
@@ -1543,14 +1546,16 @@ export class FloorplanViewer {
       const ranges = new Map<string, { start: number; end: number }>();
       const H = fv.floor.height;
       for (const d of lamps) {
-        // hanging lamps would float above cut walls
-        if (!d.lamp || (HANGING.has(d.lamp) && this.wallMode === "cut")) continue;
+        // hanging lamps (and ceiling cameras) would float above cut walls
+        const hanging = d.lamp ? HANGING.has(d.lamp) : d.model === "camera_ceiling";
+        if ((!d.lamp && !d.model) || (hanging && this.wallMode === "cut")) continue;
         const start = buf.count;
         const packed = d.pack ? packItem(d.pack) : undefined;
         const [pw, pd, ph] = d.size ?? [0.3, 0.3, 0.3];
         // shades get the sentinel colour and are recoloured below
-        if (packed) pushPackLamp(buf, packed, { x: d.x, z: d.z, rotation: d.rotation ?? 0, w: pw, d: pd, h: ph }, d.base ?? 0, SHADE_SENTINEL);
-        else pushLampModel(buf, { ...d, lamp: d.lamp }, H, SHADE_SENTINEL);
+        if (d.model) pushCameraModel(buf, d.model, d.x, d.model === "camera_ceiling" ? H : d.y, d.z, d.rotation ?? 0);
+        else if (packed) pushPackLamp(buf, packed, { x: d.x, z: d.z, rotation: d.rotation ?? 0, w: pw, d: pd, h: ph }, d.base ?? 0, SHADE_SENTINEL);
+        else pushLampModel(buf, { ...d, lamp: d.lamp! }, H, SHADE_SENTINEL);
         ranges.set(d.id, { start, end: buf.count });
         if (d.pickable !== false) tris.push({ id: d.id, start, end: buf.count });
         if (d.furnitureId) furnTris.push({ id: d.furnitureId, start, end: buf.count });
@@ -1666,6 +1671,26 @@ export class FloorplanViewer {
     const hc: number[] = [];
     const cones = new GeoBuffer();
     for (const d of this.devices) {
+      if (d.model && d.floorId === fv.floor.id) {
+        if (d.model === "camera_ceiling" && this.wallMode === "cut") continue;
+        // the camera's field of view on the floor: a faint wedge, red while it sees motion
+        const a = ((d.rotation ?? 0) * Math.PI) / 180;
+        const dir: [number, number] = [-Math.sin(a), Math.cos(a)];
+        const reach = d.model === "camera_ceiling" ? 3 : 4.5;
+        const half = d.model === "camera_ceiling" ? Math.PI : 0.8;
+        const near = d.motion ? new Color(0.9, 0.12, 0.16) : new Color(0.04, 0.22, 0.28);
+        const far = new Color(0, 0, 0);
+        const n = 10;
+        const y = 0.015;
+        for (let i = 0; i < n; i++) {
+          const a0 = -half + (2 * half * i) / n;
+          const a1 = -half + (2 * half * (i + 1)) / n;
+          const p0 = [d.x + (dir[0] * Math.cos(a0) - dir[1] * Math.sin(a0)) * reach, y, d.z + (dir[1] * Math.cos(a0) + dir[0] * Math.sin(a0)) * reach];
+          const p1 = [d.x + (dir[0] * Math.cos(a1) - dir[1] * Math.sin(a1)) * reach, y, d.z + (dir[1] * Math.cos(a1) + dir[0] * Math.sin(a1)) * reach];
+          cones.tri([d.x, y, d.z], p1, p0, near, far, far);
+        }
+        continue;
+      }
       const glow = this.glowOf(d);
       if (d.floorId !== fv.floor.id || !d.lamp || !glow) continue;
       if (HANGING.has(d.lamp) && this.wallMode === "cut") continue;

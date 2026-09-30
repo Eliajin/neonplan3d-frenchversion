@@ -202,6 +202,8 @@ export function kelvinToRgb(k: number): [number, number, number] {
 
 /** Default mounting height of a device marker (metres above the floor). */
 export function defaultHeight(kind: DeviceKind, floorHeight: number, mount: LampMount | null = null): number {
+  // a wall camera hangs high on the wall, a ceiling camera under the ceiling
+  if (kind === "camera") return mount === "ceiling" ? Math.max(0.5, floorHeight - 0.05) : 2.2;
   if (kind === "light" && mount) {
     // markers sit just above floor and table lamps and next to wall lamps
     if (mount === "floor") return 1.95;
@@ -210,7 +212,6 @@ export function defaultHeight(kind: DeviceKind, floorHeight: number, mount: Lamp
   }
   switch (kind) {
     case "light":
-    case "camera":
       return Math.max(0.5, floorHeight - 0.25);
     case "cover":
       return Math.min(2, floorHeight - 0.3);

@@ -30,7 +30,7 @@ import { searchIndex, searchItems, type SearchItem } from "../search.ts";
 import { coverPositionable, lightAbilities } from "./quick-menu.ts";
 import "./quick-menu.ts";
 import { load3d } from "../load3d.ts";
-import { buildMarkers, openMoreInfo, placedEntities, stateText, toggleEntity } from "../markers.ts";
+import { buildMarkers, cameraMotionSensors, openMoreInfo, placedEntities, stateText, toggleEntity } from "../markers.ts";
 import { isLamp, LAMP_MODEL, outdoorGround, pointInPolygon, surfaceHeight, type Building, type Furniture } from "../model.ts";
 import { floorCounts, floorInfoText, personsInRooms } from "../presence.ts";
 import { controls, tokens } from "../styles.ts";
@@ -359,6 +359,7 @@ export class Fp3dView3d extends LitElement {
       this.findIndex = null;
       const links = [...this.openingLinks.values()].flatMap((e) => [e.cover, e.contact, e.tilt, e.contact2 ?? null, e.tilt2 ?? null, e.position ?? null]);
       const placed = placedEntities(b);
+      const cameraSensors = placed.filter((id) => kindOf(id) === "camera").flatMap((id) => cameraMotionSensors(hass, id));
       const power = placed.map((id) => powerSensorFor(hass, id));
       const e = b.energy;
       const presence = b.presence.flatMap((p) => [p.person, p.sensor]);
@@ -372,7 +373,7 @@ export class Fp3dView3d extends LitElement {
       this.alertSrc = this.alerts ? alertSources(hass, b) : null;
       const warn = this.alertSrc ? alertEntities(this.alertSrc) : [];
       const parking = parkingEntities(b.floors);
-      const all = [...placed, ...links, ...power, ...furniture, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights, ...heat, ...warn, ...parking, "sun.sun"];
+      const all = [...placed, ...cameraSensors, ...links, ...power, ...furniture, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights, ...heat, ...warn, ...parking, "sun.sun"];
       this.watched = [...new Set(all.filter((id): id is string => !!id))];
       force = true;
     }
@@ -717,7 +718,7 @@ export class Fp3dView3d extends LitElement {
     if (this.furnish && !m.fromFurniture) return true;
     if (this.markerMode === "none") return false;
     if (this.markerMode === "all") return true;
-    if (m.lamp) return false;
+    if (m.lamp || m.model) return false;
     const kind = kindOf(m.id);
     if (kind === "light") return false;
     if (m.fromFurniture) return (m.power ?? 0) >= 1 || (kind === "media" && m.active);
@@ -785,7 +786,7 @@ export class Fp3dView3d extends LitElement {
   /** Long press: the quick menu at the device, or the details for devices without one. */
   private onDeviceHold(entityId: string, x: number, y: number): void {
     const kind = kindOf(entityId);
-    if (kind === "light" || kind === "cover" || kind === "switch" || kind === "fan" || kind === "lock") this._menu = { entity: entityId, x, y };
+    if (kind === "light" || kind === "cover" || kind === "switch" || kind === "fan" || kind === "lock" || kind === "camera") this._menu = { entity: entityId, x, y };
     else openMoreInfo(this, entityId);
   }
 
@@ -932,8 +933,8 @@ export class Fp3dView3d extends LitElement {
 
   private onDeviceTap(entityId: string, x = 0, y = 0): void {
     const kind = kindOf(entityId);
-    // blinds have no single on/off: a tap opens their quick menu (up, positions, stop, down)
-    if (kind === "cover") {
+    // blinds have no single on/off: a tap opens their quick menu (up, positions, stop, down); a camera shows its picture
+    if (kind === "cover" || kind === "camera") {
       this._menu = { entity: entityId, x, y };
       return;
     }

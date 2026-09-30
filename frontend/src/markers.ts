@@ -78,6 +78,8 @@ export function buildMarkers(hass: HomeAssistant, building: Building): DeviceMar
         z: pl.z,
         y: pl.y ?? defaultHeight(kind, floor.height, pl.mount ?? null),
         lamp: kind === "light" ? (pl.mount ?? "ceiling") : null,
+        model: kind === "camera" ? (pl.mount === "ceiling" ? "camera_ceiling" : "camera_wall") : undefined,
+        motion: kind === "camera" ? cameraMotion(hass, pl.entity_id) : undefined,
         rotation: pl.rotation ?? 0,
         icon: iconSvg(kind),
         name: entityName(hass, pl.entity_id, areaName),
@@ -89,6 +91,21 @@ export function buildMarkers(hass: HomeAssistant, building: Building): DeviceMar
     }
   }
   return out;
+}
+
+/** Whether a camera's device reports motion or a person right now (its motion/occupancy sensors). */
+export function cameraMotion(hass: HomeAssistant, cameraId: string): boolean {
+  return cameraMotionSensors(hass, cameraId).some((id) => hass.states[id]?.state === "on");
+}
+
+/** The motion, occupancy and presence sensors of a camera's device. */
+export function cameraMotionSensors(hass: HomeAssistant, cameraId: string): string[] {
+  const device = hass.entities?.[cameraId]?.device_id;
+  if (!device) return [];
+  return Object.values(hass.entities ?? {})
+    .filter((e) => e.device_id === device && e.entity_id.startsWith("binary_sensor."))
+    .map((e) => e.entity_id)
+    .filter((id) => ["motion", "occupancy", "presence"].includes(String(hass.states[id]?.attributes.device_class)));
 }
 
 /** Entity ids placed anywhere in the building (to notice relevant state changes cheaply). */
