@@ -59,6 +59,7 @@ import { controls, tokens } from "../styles.ts";
 import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
 import { importPack, removePack } from "../api.ts";
 import { load3d } from "../load3d.ts";
+import type { WallMode } from "../viewer/viewer3d.ts";
 import { furnitureName } from "../furniture-names.ts";
 import { furnitureSize, isElectric, packItem, packItemName, packType, setPacks, type FurniturePack } from "../packs.ts";
 
@@ -101,6 +102,7 @@ export class Fp3dEditor extends LitElement {
     _doc: { state: true },
     _doc3d: { state: true },
     _split: { state: true },
+    _wall3d: { state: true },
     _floorId: { state: true },
     _roomId: { state: true },
     _vertex: { state: true },
@@ -144,6 +146,8 @@ export class Fp3dEditor extends LitElement {
   private doc3dTimer: ReturnType<typeof setTimeout> | undefined;
   /** The live 3D pane next to the plan (remembered per browser). */
   private declare _split: boolean;
+  /** Walls in the 3D pane: full height ("auto") or cut at the cut height (shows wall units and shelves). */
+  private declare _wall3d: WallMode;
   private declare _floorId: string | null;
   private declare _roomId: string | null;
   private declare _vertex: number | null;
@@ -213,6 +217,7 @@ export class Fp3dEditor extends LitElement {
       // no storage
     }
     this._split = split;
+    this._wall3d = "cut";
     this._doc3d = this._doc;
     this._preview = null;
     this._measureLen = 3;
@@ -312,12 +317,16 @@ export class Fp3dEditor extends LitElement {
 
   private render3d() {
     return html`<div class="fp3d-editor-3d">
+      <div class="fp3d-seg fp3d-3d-walls">
+        <button aria-pressed=${this._wall3d === "auto"} @click=${() => (this._wall3d = "auto")}>${this.t("walls_auto")}</button>
+        <button aria-pressed=${this._wall3d === "cut"} @click=${() => (this._wall3d = "cut")}>${this.t("walls_cut")}</button>
+      </div>
       <fp3d-view3d
         .hass=${this.hass}
         .building=${this._doc3d}
         .floorId=${this._floorId}
         .roomId=${null}
-        .wallMode=${"cut"}
+        .wallMode=${this._wall3d}
         .explode=${false}
         .markerMode=${"important"}
         .heatMode=${"none"}
@@ -3092,6 +3101,7 @@ export class Fp3dEditor extends LitElement {
         min-width: 0;
       }
       .fp3d-editor-3d {
+        position: relative;
         flex: 1 1 45%;
         min-width: 280px;
         min-height: 0;
@@ -3102,6 +3112,12 @@ export class Fp3dEditor extends LitElement {
       .fp3d-editor-3d fp3d-view3d {
         display: block;
         height: 100%;
+      }
+      .fp3d-3d-walls {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 3;
       }
       .fp3d-narrow .fp3d-stage-pair.fp3d-split {
         flex-direction: column;
