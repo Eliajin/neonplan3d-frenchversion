@@ -42,7 +42,7 @@ import {
 } from "three";
 import type { Building, Floor, Furniture, Room } from "../model.ts";
 import { recolorLamps, SHADE_SENTINEL, shadeFactors } from "./lamp-colors.ts";
-import { centroid } from "../model.ts";
+import { centroid, pointInPolygon } from "../model.ts";
 import { buildFloorGeometry, SLAB, stairHoles, type FloorGeometry } from "./build.ts";
 import { OrbitControls } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
@@ -1619,12 +1619,32 @@ export class FloorplanViewer {
         const k = 0.14 * day * Math.min(1, facing * 1.5);
         const near = new Color(1 * k, 0.82 * k, 0.55 * k);
         const far = near.clone().multiplyScalar(0.45);
-        const a = at(0, info.sill);
-        const b = at(info.width, info.sill);
-        const c = at(info.width, top);
-        const d = at(0, top);
-        buf.tri(a, b, c, near, near, far);
-        buf.tri(a, c, d, near, far, far);
+        // the patch stays inside the window's room: it is laid in small cells, and only cells whose
+        // centre lies in the room are drawn (so it never crosses walls or leaves the house)
+        const room = fv.floor.rooms.find((r) => r.id === info.opening.room_id);
+        if (!room || room.points.length < 3) continue;
+        const rows = Math.max(1, Math.ceil(Math.min(7, top * reach) / 0.25));
+        const cols = Math.max(1, Math.ceil(info.width / 0.3));
+        for (let i = 0; i < rows; i++) {
+          const y0 = info.sill + ((top - info.sill) * i) / rows;
+          const y1 = info.sill + ((top - info.sill) * (i + 1)) / rows;
+          const t0 = i / rows;
+          const t1 = (i + 1) / rows;
+          const c0 = near.clone().lerp(far, t0);
+          const c1 = near.clone().lerp(far, t1);
+          for (let j = 0; j < cols; j++) {
+            const s0 = (info.width * j) / cols;
+            const s1 = (info.width * (j + 1)) / cols;
+            const m = at((s0 + s1) / 2, (y0 + y1) / 2);
+            if (!pointInPolygon([m[0], m[2]], room.points)) continue;
+            const a = at(s0, y0);
+            const b = at(s1, y0);
+            const c = at(s1, y1);
+            const d = at(s0, y1);
+            buf.tri(a, b, c, c0, c0, c1);
+            buf.tri(a, c, d, c0, c1, c1);
+          }
+        }
       }
     }
     fv.sunMesh.geometry.dispose();
