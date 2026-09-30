@@ -1777,7 +1777,7 @@ export class FloorplanViewer {
       if (!r) continue;
       let pic = fv.screenPics.get(id);
       if (!pic) {
-        const mesh = new Mesh(new PlaneGeometry(1, 1), new MeshBasicMaterial({ color: 0xffffff }));
+        const mesh = new Mesh(new PlaneGeometry(1, 1), new MeshBasicMaterial({ color: 0xffffff, transparent: true }));
         mesh.visible = false;
         mesh.renderOrder = 5;
         pic = { url: st.picture!, mesh, texture: null };

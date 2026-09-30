@@ -87,6 +87,12 @@ const svgPicture = (body) => `data:image/svg+xml;base64,${btoa(body)}`;
 const COVER = svgPicture(
   '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#2b0a3d"/><stop offset="1" stop-color="#b3122e"/></linearGradient></defs><rect width="320" height="180" fill="url(#g)"/><circle cx="240" cy="70" r="38" fill="#ffb547" opacity="0.85"/><path d="M0 150 L90 95 L150 130 L230 80 L320 140 L320 180 L0 180 Z" fill="#12061c"/><text x="24" y="52" font-family="sans-serif" font-size="30" font-weight="700" fill="#fff">Serie</text></svg>',
 );
+// a stored picture for a screen rule (shown on the TV while Netflix runs)
+export const DEMO_PICTURES = {
+  pic_demo: svgPicture(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#101010"/><text x="160" y="105" text-anchor="middle" font-family="sans-serif" font-size="56" font-weight="900" fill="#e50914">LOGO</text></svg>',
+  ),
+};
 const CAMERA_STILL = svgPicture(
   '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#1b2230"/><rect x="0" y="120" width="320" height="60" fill="#2a3444"/><rect x="40" y="60" width="90" height="70" fill="#3b4a60"/><rect x="190" y="40" width="80" height="90" fill="#324055"/><text x="12" y="20" font-family="monospace" font-size="12" fill="#cfd8e6">KAMERA 1  12:04:31</text></svg>',
 );
@@ -309,7 +315,7 @@ DEMO_BUILDING.floors[0].furniture = [
   item("rug", 2.4, 2.3, 2.6, 1.7, 0.01),
   item("sofa", 2.4, 3.7, 2.3, 0.92, 0.82, 180),
   item("armchair", 0.75, 2.2, 0.85, 0.85, 0.8, 270),
-  item("tv_board", 2.4, 0.25, 1.8, 0.42, 0.5),
+  { ...item("tv_board", 2.4, 0.25, 1.8, 0.42, 0.5), pictures: [{ entity: "media_player.fernseher", attribute: "app_name", state: "netflix", image: "pic_demo" }] },
   item("plant", 5.55, 0.45, 0.5, 0.5, 1.2),
   item("shelf", 5.8, 2.6, 0.9, 0.35, 1.9, 90),
   item("fridge", 6.35, 0.36, 0.6, 0.66, 1.85),
@@ -372,6 +378,7 @@ DEMO_BUILDING.floors[1].furniture = [
   item("desk", 7.2, 0.36, 1.6, 0.7, 0.75),
   item("chair", 7.2, 1.1, 0.46, 0.5, 0.9, 180),
   item("shelf", 9.8, 2.1, 1.2, 0.35, 1.9, 90),
+  { ...item("pack:mastershort.living:media_wall", 5.9, 0.3, 3.0, 0.45, 2.2), pictures: [{ entity: "media_player.fernseher", attribute: "app_name", state: "netflix", image: "pic_demo" }] },
   item("sofa", 5.4, 3.6, 1.9, 0.85, 0.8, 180),
   item("bed", 5.0, 6.9, 1.4, 2.0, 0.85, 180),
   item("wardrobe", 3.72, 5.4, 1.4, 0.6, 2.1, 270),

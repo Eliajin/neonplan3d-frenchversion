@@ -3,7 +3,7 @@
 import { css, html, LitElement, nothing, svg, type PropertyValues, type TemplateResult } from "lit";
 import { fetchImage, listHistory, restoreSnapshot, storeImage, takeSnapshot, type Snapshot } from "../api.ts";
 import { download, exportFile, parseExport } from "../transfer.ts";
-import { areaEntities, autoPlace, defaultHeight, entityName, furnitureEntities, groupByDevice, isMediaFurniture, isPlaceable, kindOf, openingEntities, windowPosition } from "../devices.ts";
+import { areaEntities, autoPlace, defaultHeight, entityName, furnitureEntities, groupByDevice, isMediaFurniture, isPlaceable, kindOf, openingEntities, pictureRuleMatches, windowPosition } from "../devices.ts";
 import { furnitureSymbol } from "./furniture2d.ts";
 import { closeGaps, suggestedThickness } from "../geometry/gaps.ts";
 import { snapToWall } from "../geometry/snap.ts";
@@ -2910,6 +2910,9 @@ export class Fp3dEditor extends LitElement {
             @change=${(e: Event) => set(rules.map((x, j) => (j === i ? { ...x, state: (e.target as HTMLInputElement).value } : x)))}
           />
           <datalist id="fp3d-picture-states-${i}"><option value="*"></option>${values(r).map((s) => html`<option value=${s}></option>`)}</datalist>
+          <span class="fp3d-sub fp3d-rule-now ${this.hass && pictureRuleMatches(this.hass, r) ? "fp3d-rule-hit" : ""}">
+            ${this.hass && pictureRuleMatches(this.hass, r) ? this.t("picture_matches") : this.t("picture_no_match", { value: values(r)[0] ?? "–" })}
+          </span>
           ${this._images[r.image] ? html`<img class="fp3d-picture-thumb" src=${this._images[r.image].url} alt="" />` : nothing}
           <label class="fp3d-btn fp3d-picture-pick">
             ${r.image ? this.t("picture_change") : this.t("picture_pick")}
@@ -3467,6 +3470,12 @@ export class Fp3dEditor extends LitElement {
       .fp3d-picture-rule input[type="url"] {
         grid-column: 1 / -1;
         min-width: 0;
+      }
+      .fp3d-rule-now {
+        grid-column: 1 / -1;
+      }
+      .fp3d-rule-hit {
+        color: var(--fp3d-accent);
       }
       .fp3d-picture-thumb {
         grid-column: 1 / -1;

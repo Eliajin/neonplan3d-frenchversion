@@ -506,6 +506,17 @@ const FURNITURE_NAMES: Record<string, RegExp> = {
 };
 const MEDIA_FURNITURE = new Set(["tv_board", "tv_wall"]);
 
+/** Whether a screen picture rule matches now: the state or attribute equals the value, or contains it (3+ chars); "*" always. */
+export function pictureRuleMatches(hass: HomeAssistant, rule: { entity: string; attribute?: string | null; state: string }): boolean {
+  const st = hass.states[rule.entity];
+  if (!st) return false;
+  const raw = rule.attribute ? st.attributes[rule.attribute] : st.state;
+  if (raw === undefined || raw === null) return false;
+  const value = String(raw).toLowerCase();
+  const want = rule.state.trim().toLowerCase();
+  return rule.state.trim() === "*" || value === want || (want.length >= 3 && value.includes(want));
+}
+
 /** Furniture with a screen that shows a media player: the built-in TVs, or a pack item with a screen part. */
 export function isMediaFurniture(type: string): boolean {
   return MEDIA_FURNITURE.has(type) || !!packScreen(type);

@@ -16,12 +16,12 @@
     <neonplan3d-panel></neonplan3d-panel>
     <script type="module">
       // Mock of the Home Assistant frontend object with invented demo data.
-      import { DEMO_AREAS, DEMO_BUILDING, DEMO_FLOORS, DEMO_PACK, DEMO_ENTITIES, DEMO_STATES } from "./demo-data.js";
+      import { DEMO_AREAS, DEMO_BUILDING, DEMO_FLOORS, DEMO_PACK, DEMO_ENTITIES, DEMO_STATES, DEMO_PICTURES } from "./demo-data.js";
 
       const params = new URLSearchParams(location.search);
       let building = params.has("empty") ? { version: 1, floors: [], settings: { wall_exterior: 0.24, wall_interior: 0.12, grid: 0.05 } } : DEMO_BUILDING;
       let revision = 1;
-      const images = {};
+      const images = { ...DEMO_PICTURES };
       const listeners = new Set();
       // invented restore points
       const history = [{ id: "s0", revision: 0, saved_at: Date.now() / 1000 - 3600, building: structuredClone(building) }];

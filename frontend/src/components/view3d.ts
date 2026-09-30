@@ -14,7 +14,7 @@ import {
   openingState,
   TOGGLE_KINDS,
   type FurnitureLinks,
-  type OpeningEntities, isMediaFurniture,
+  type OpeningEntities, isMediaFurniture, pictureRuleMatches,
 } from "../devices.ts";
 import { alertColor, alertEntities, alertSources, alertText, findAlerts, type Alert, type AlertSources } from "../alerts.ts";
 import { iconPath, iconSvg } from "../icons.ts";
@@ -601,16 +601,7 @@ export class Fp3dView3d extends LitElement {
     for (const floor of b.floors) {
       for (const f of floor.furniture) {
         if (!f.pictures?.length || !isMediaFurniture(f.type)) continue;
-        const rule = f.pictures.find((r) => {
-          const st = hass.states[r.entity];
-          if (!st) return false;
-          const raw = r.attribute ? st.attributes[r.attribute] : st.state;
-          if (raw === undefined || raw === null) return false;
-          const value = String(raw).toLowerCase();
-          const want = r.state.trim().toLowerCase();
-          // exact, or the wanted text somewhere in the value ("youtube" matches "com.google.android.youtube.tv")
-          return r.state === "*" || value === want || (want.length >= 3 && value.includes(want));
-        });
+        const rule = f.pictures.find((r) => pictureRuleMatches(hass, r));
         if (!rule) continue;
         const picture = this.pictureUrl(rule.image);
         if (picture) screens.set(f.id, { color: [0.42, 0.42, 0.5], level: 1, picture });
