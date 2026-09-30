@@ -462,10 +462,12 @@ export class Fp3dEditor extends LitElement {
         @device-move=${this.onDeviceMoved3d}
         @floor-tap=${(e: CustomEvent<{ floorId: string | null }>) => {
           if (e.detail.floorId) this._floorId = e.detail.floorId;
+          this._sideOpen = false;
         }}
         @room-tap=${(e: CustomEvent<{ floorId: string; roomId: string | null }>) => {
           if (e.detail.floorId) this._floorId = e.detail.floorId;
           if (e.detail.roomId) this.selectFrom3d("room", e.detail.roomId);
+          else this._sideOpen = false;
         }}
       ></fp3d-view3d>
     </div>`;
@@ -2085,11 +2087,10 @@ export class Fp3dEditor extends LitElement {
     return this._tool === "furniture" || this._tool === "outdoor" || this._tool === "opening";
   }
 
-  /** Select from the 3D pane: the folded sidebar stays folded (the bar under the pane has the essentials). */
+  /** A tap in the 3D pane: select there, and fold the sidebar away (the bar under the pane has the essentials). */
   private selectFrom3d(kind: "room" | "furniture" | "device", id: string | null): void {
-    const open = this._sideOpen;
     this.selectItem(kind, id);
-    this._sideOpen = open;
+    this._sideOpen = false;
   }
 
   private setSidePinned(pinned: boolean): void {
