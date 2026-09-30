@@ -82,6 +82,7 @@ export function buildMarkers(hass: HomeAssistant, building: Building): DeviceMar
         motion: kind === "camera" ? cameraMotion(hass, pl.entity_id) : undefined,
         fov: pl.fov ?? undefined,
         reach: pl.reach ?? undefined,
+        tilt: pl.tilt ?? undefined,
         rotation: pl.rotation ?? 0,
         icon: iconSvg(kind),
         name: entityName(hass, pl.entity_id, areaName),

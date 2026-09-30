@@ -12,10 +12,11 @@ import type { HomeAssistant } from "./types.ts";
 import type { MarkerMode } from "./components/view3d.ts";
 import type { HeatMode } from "./heatmap.ts";
 import { THEMES, type Theme } from "./themes.ts";
-import { snapToWall } from "./geometry/snap.ts";
+import { keepInRoom, snapToWall } from "./geometry/snap.ts";
 import { furnitureName } from "./furniture-names.ts";
 import { defaultHeight, entityName, kindOf } from "./devices.ts";
-import type { LampMount } from "./model.ts";
+import { canLift, type LampMount } from "./model.ts";
+import { mountBase } from "./packs.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
 
 type Mode = "view" | "editor";
@@ -190,7 +191,11 @@ export class Floorplan3dPanel extends LitElement {
 
   private moveDevice(e: CustomEvent<{ id: string; x: number; z: number }>): void {
     const { id, x, z } = e.detail;
-    this.editDevice(id, (p) => Object.assign(p, { x, z }));
+    // a device stays in its room (no dragging through walls)
+    this.editDevice(id, (p, floor) => {
+      const [nx, nz] = keepInRoom(floor, p.x, p.z, x, z);
+      Object.assign(p, { x: nx, z: nz });
+    });
   }
 
   /** Cameras turn in finer steps than lamps (their wedge shows where they look). */
@@ -251,7 +256,8 @@ export class Floorplan3dPanel extends LitElement {
               <option value="ceiling" ?selected=${dome}>${this.t("camera_mount_ceiling")}</option>
             </select>
             ${numField(this.t("camera_fov_short"), p.fov ?? (dome ? 360 : 90), 5, 10, 360, (v) => this.editDevice(id, (d) => (d.fov = v)))}
-            ${numField(this.t("camera_reach_short"), p.reach ?? (dome ? 3 : 4.5), 0.5, 0.5, 50, (v) => this.editDevice(id, (d) => (d.reach = v)))}`
+            ${numField(this.t("camera_reach_short"), p.reach ?? (dome ? 3 : 4.5), 0.5, 0.5, 50, (v) => this.editDevice(id, (d) => (d.reach = v)))}
+            ${numField(this.t("camera_tilt_short"), p.tilt ?? (dome ? 65 : 20), 5, 0, 90, (v) => this.editDevice(id, (d) => (d.tilt = v)))}`
         : nothing}
       <label class="fp3d-size" title=${this.t("marker_height")}
         >${this.t("size_short_h")}
@@ -279,8 +285,10 @@ export class Floorplan3dPanel extends LitElement {
     const { id, x, z } = e.detail;
     const wall = this.data.building?.settings.wall_interior ?? 0.12;
     this.editFurniture(id, (f, floor) => {
-      Object.assign(f, { x, z });
-      // near a wall the item turns its back to it and sits flush, as in the editor
+      // the item stays in its room (no dragging through walls) …
+      const [nx, nz] = keepInRoom(floor, f.x, f.z, x, z);
+      Object.assign(f, { x: nx, z: nz });
+      // … and near a wall it turns its back to it and sits flush, as in the editor
       const snap = snapToWall(floor, f, wall);
       if (snap) Object.assign(f, snap);
     });
@@ -303,7 +311,24 @@ export class Floorplan3dPanel extends LitElement {
           if (Number.isFinite(v) && v > 0) this.editFurniture(id, (m) => (m[key] = Math.round(v * 1000) / 1000));
         }}
     /></label>`;
-    return html`${field("w", this.t("size_short_w"))}${field("d", this.t("size_short_d"))}${field("h", this.t("size_short_h"))}`;
+    const floor = this.data.building?.floors.find((fl) => fl.furniture.some((m) => m.id === id));
+    return html`${field("w", this.t("size_short_w"))}${field("d", this.t("size_short_d"))}${field("h", this.t("size_short_h"))}
+    ${floor && canLift(f)
+      ? html`<label class="fp3d-size" title=${this.t("mount_height")}
+            >↕
+            <input
+              type="number"
+              inputmode="decimal"
+              step="0.05"
+              min="0"
+              .value=${String(Math.round((f.mount_y ?? mountBase(floor, f)) * 100) / 100)}
+              @change=${(e: Event) => {
+                const v = parseFloat((e.target as HTMLInputElement).value.replace(",", "."));
+                if (Number.isFinite(v) && v >= 0) this.editFurniture(id, (m) => (m.mount_y = Math.round(v * 1000) / 1000));
+              }}
+          /></label>
+          ${f.mount_y != null ? html`<button class="fp3d-chip" @click=${() => this.editFurniture(id, (m) => (m.mount_y = null))}>${this.t("height_auto")}</button>` : nothing}`
+      : nothing}`;
   }
 
   private turnFurniture(delta: number): void {

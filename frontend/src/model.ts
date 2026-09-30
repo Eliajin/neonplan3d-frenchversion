@@ -82,7 +82,7 @@ export interface Furniture {
   entity?: EntityRef;
   /** Power sensor (null = automatic: the linked entity's device or a matching name). */
   power?: EntityRef;
-  /** Wall-hung pack items: height of the bottom edge above the floor (null = the pack's default). */
+  /** Height of the bottom edge above the floor (null = default: the floor, a pack item's mount, a surface below). */
   mount_y?: number | null;
   /** Screens: pictures shown while an entity is in a state (first match wins; "*" = any state). */
   pictures?: ScreenPicture[];
@@ -112,6 +112,8 @@ export interface Placement {
   /** Cameras: opening angle of the field of view (degrees) and how far it reaches (m); null = default. */
   fov?: number | null;
   reach?: number | null;
+  /** Cameras: how far it looks down (degrees below the horizon; null = 20° on a wall, 65° as a dome). */
+  tilt?: number | null;
 }
 
 export interface Background {
@@ -387,6 +389,12 @@ export const LAMP_TYPES = new Set<string>([
   "lamp_bollard",
   "lamp_garden",
 ]);
+
+/** Items that can be lifted off the floor (a wall cabinet, a shelf): everything but lamps hung from the ceiling and the ceiling-mounted pack items. */
+export function canLift(f: Pick<Furniture, "type">): boolean {
+  if (["lamp_ceiling", "lamp_downlight", "lamp_spot", "lamp_panel", "lamp_pendant", "led_strip", "stairs", "parking"].includes(f.type)) return false;
+  return packItem(f.type)?.mount !== "ceiling";
+}
 
 export function isLamp(type: string): boolean {
   return LAMP_TYPES.has(type) || !!packItem(type)?.light;

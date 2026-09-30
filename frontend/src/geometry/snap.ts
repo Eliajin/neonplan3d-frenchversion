@@ -10,6 +10,18 @@ export const WALL_SNAP = 0.25;
 
 const round = (v: number) => Math.round(v * 1000) / 1000;
 
+/**
+ * A point dragged from (x0, z0) to (x, z) stays in the room it started in: outside the room's polygon the
+ * move slides along the wall (only x or only z), or stops. Items that start outside every room move freely.
+ */
+export function keepInRoom(floor: Floor, x0: number, z0: number, x: number, z: number): [number, number] {
+  const room = floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon([x0, z0], r.points));
+  if (!room || pointInPolygon([x, z], room.points)) return [x, z];
+  if (pointInPolygon([x, z0], room.points)) return [x, z0];
+  if (pointInPolygon([x0, z], room.points)) return [x0, z];
+  return [x0, z0];
+}
+
 export function snapToWall(floor: Floor, f: Furniture, wallInterior: number, reach = WALL_SNAP): { x: number; z: number; rotation: number } | null {
   const room = floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon([f.x, f.z], r.points));
   if (!room) return null;

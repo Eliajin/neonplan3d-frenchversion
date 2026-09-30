@@ -146,6 +146,8 @@ export interface DeviceMarker {
   /** Camera: opening angle (degrees) and reach (m) of its field of view; default 90° / 4.5 m (dome: 360° / 3 m). */
   fov?: number;
   reach?: number;
+  /** Camera: degrees below the horizon it looks (for the look through it). */
+  tilt?: number;
 }
 
 export type FloorStack = "dim" | "stacked" | "single";
@@ -2253,11 +2255,7 @@ export class FloorplanViewer {
         ? f.type === "lamp_pendant"
           ? H - f.h - 0.1
           : H - h
-        : f.type === "radiator"
-          ? 0.12
-          : f.type === "kitchen_wall"
-            ? 1.45
-            : 0;
+        : (f.mount_y ?? 0) + (f.type === "radiator" ? 0.12 : f.type === "kitchen_wall" ? 1.45 : 0);
     const a = f.rotation * DEG;
     const c = Math.cos(a);
     const sn = Math.sin(a);
@@ -2525,8 +2523,8 @@ export class FloorplanViewer {
     if (!d || !fv) return false;
     const a = (d.rotation ?? 0) * DEG;
     const ceiling = d.model === "camera_ceiling";
-    // tilt below the horizon; the orbit's polar angle then is 90 degrees minus the tilt
-    const tilt = ceiling ? 1.15 : 0.35;
+    // tilt below the horizon; the orbit's polar angle then is 90 degrees minus the tilt (kept inside the orbit's limits)
+    const tilt = Math.min(1.45, Math.max(0.22, (d.tilt ?? (ceiling ? 65 : 20)) * DEG));
     const y = fv.floor.elevation + fv.ty + (ceiling ? fv.floor.height - 0.1 : d.y);
     const dir = new Vector3(-Math.sin(a) * Math.cos(tilt), -Math.sin(tilt), Math.cos(a) * Math.cos(tilt));
     this.controls.flyTo({ target: new Vector3(d.x, y, d.z).addScaledVector(dir, 3.15), radius: 3, phi: Math.PI / 2 - tilt, theta: Math.atan2(Math.sin(a), -Math.cos(a)) }, 900);

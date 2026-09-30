@@ -140,11 +140,12 @@ export function packItemName(item: PackItem, language: string): string {
 /** Height of the bottom of a pack item above the floor (0 for built-in furniture). */
 export function mountBase(floor: Floor, f: Pick<Furniture, "type" | "x" | "z" | "h"> & { mount_y?: number | null }): number {
   const item = packItem(f.type);
+  if (f.mount_y != null) return f.mount_y;
   switch (item?.mount) {
     case "surface":
       return surfaceHeight(floor, f.x, f.z);
     case "wall":
-      return f.mount_y ?? item.wall_y ?? 1;
+      return item.wall_y ?? 1;
     case "ceiling":
       return Math.max(0, floor.height - f.h);
     default:

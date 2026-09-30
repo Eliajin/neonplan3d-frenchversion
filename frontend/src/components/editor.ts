@@ -6,7 +6,7 @@ import { download, exportFile, parseExport } from "../transfer.ts";
 import { areaEntities, autoPlace, defaultHeight, entityName, furnitureEntities, groupByDevice, hasScreen, isMediaFurniture, isPlaceable, kindOf, openingEntities, pictureRuleMatches, windowPosition } from "../devices.ts";
 import { furnitureSymbol } from "./furniture2d.ts";
 import { closeGaps, suggestedThickness } from "../geometry/gaps.ts";
-import { snapToWall } from "../geometry/snap.ts";
+import { keepInRoom, snapToWall } from "../geometry/snap.ts";
 import { furnishRoom, PACKAGES, type PackageId } from "../packages.ts";
 import { generateWalls, locateOnWalls, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
@@ -18,6 +18,7 @@ import {
   FURNITURE_GROUPS,
   FURNITURE_SIZE,
   FURNITURE_TYPES,
+  canLift,
   isLamp,
   LAMP_MODEL,
   isAxisRect,
@@ -74,6 +75,7 @@ type Drag =
   | { kind: "opening"; id: string; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "furniture"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "rotate"; id: string; base: Building; moved: boolean }
+  | { kind: "aim"; entityId: string; base: Building; moved: boolean }
   | { kind: "resize"; id: string; corner: [1 | -1, 1 | -1]; base: Building; moved: boolean }
   | { kind: "room"; roomId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "rect"; start: Vec2; end: Vec2; outdoor?: boolean }
@@ -327,7 +329,9 @@ export class Fp3dEditor extends LitElement {
       for (const floor of doc.floors) {
         const f = floor.furniture.find((m) => m.id === id);
         if (!f) continue;
-        Object.assign(f, { x, z });
+        // the item stays in its room (no dragging through walls)
+        const [nx, nz] = keepInRoom(floor, f.x, f.z, x, z);
+        Object.assign(f, { x: nx, z: nz });
         const snap = snapToWall(floor, f, wall);
         if (snap) Object.assign(f, snap);
       }
@@ -339,7 +343,9 @@ export class Fp3dEditor extends LitElement {
     this.change((doc) => {
       for (const floor of doc.floors) {
         const p = floor.placements.find((d) => d.entity_id === id);
-        if (p) Object.assign(p, { x, z });
+        if (!p) continue;
+        const [nx, nz] = keepInRoom(floor, p.x, p.z, x, z);
+        Object.assign(p, { x: nx, z: nz });
       }
     });
   }
@@ -350,7 +356,7 @@ export class Fp3dEditor extends LitElement {
     const f = this.furnitureItem;
     const d = this.device;
     if (f) {
-      const wallItem = packItem(f.type)?.mount === "wall";
+      const wallItem = canLift(f);
       const num = (key: "w" | "d" | "h", label: string, min = 0.05) => html`<label class="fp3d-3d-size" title=${this.t(`size_${key}` as I18nKey)}
         >${label}
         <input
@@ -728,6 +734,11 @@ export class Fp3dEditor extends LitElement {
       this.drag = { kind: "rotate", id: rotateEl.getAttribute("data-rotate")!, base: this._doc, moved: false };
       return;
     }
+    const aimEl = target.closest("[data-aim]");
+    if (aimEl && this.isAdmin) {
+      this.drag = { kind: "aim", entityId: aimEl.getAttribute("data-aim")!, base: this._doc, moved: false };
+      return;
+    }
     const furnitureEl = target.closest("[data-furniture]");
     if (furnitureEl && !target.closest("[data-vertex], [data-mid]")) {
       const id = furnitureEl.getAttribute("data-furniture")!;
@@ -920,6 +931,18 @@ export class Fp3dEditor extends LitElement {
         this.change((_, floor) => Object.assign(floor.furniture.find((q) => q.id === drag.id)!, { rotation: a }), drag.base, false);
         break;
       }
+      case "aim": {
+        drag.moved = true;
+        const pl = drag.base.floors.find((x) => x.id === this._floorId)?.placements.find((x) => x.entity_id === drag.entityId);
+        if (!pl) return;
+        // the handle sits at the far edge of the wedge: it turns the camera and sets how far it reaches
+        let a = (Math.atan2(-(world[0] - pl.x), world[1] - pl.z) * 180) / Math.PI;
+        const step = e.altKey ? 1 : 5;
+        a = ((Math.round(a / step) * step) % 360 + 360) % 360;
+        const reach = Math.min(50, Math.max(0.5, Math.round(Math.hypot(world[0] - pl.x, world[1] - pl.z) * 10) / 10));
+        this.change((_, floor) => Object.assign(floor.placements.find((q) => q.entity_id === drag.entityId)!, { rotation: a, reach }), drag.base, false);
+        break;
+      }
       case "device": {
         if (!drag.moved && Math.hypot(local[0] - drag.startScreen[0], local[1] - drag.startScreen[1]) < 5) return;
         drag.moved = true;
@@ -970,6 +993,7 @@ export class Fp3dEditor extends LitElement {
       case "opening":
       case "furniture":
       case "rotate":
+      case "aim":
       case "resize":
       case "outdoor":
         if (drag.moved) this.pushHistory(drag.base);
@@ -1992,13 +2016,41 @@ export class Fp3dEditor extends LitElement {
       if (!kind) return nothing;
       const [x, y] = this.toScreen([pl.x, pl.z]);
       const on = this.hass?.states[pl.entity_id]?.state === "on";
-      const cls = `fp3d-device${on ? " fp3d-device-on" : ""}${pl.entity_id === this._deviceId ? " fp3d-device-sel" : ""}`;
-      return svg`<g data-device=${pl.entity_id} class=${cls} transform="translate(${x} ${y})">
+      const sel = pl.entity_id === this._deviceId;
+      const cls = `fp3d-device${on ? " fp3d-device-on" : ""}${sel ? " fp3d-device-sel" : ""}`;
+      return svg`${kind === "camera" ? this.renderCameraWedge(pl, sel) : nothing}<g data-device=${pl.entity_id} class=${cls} transform="translate(${x} ${y})">
         <title>${entityName(this.hass, pl.entity_id)}</title>
         <circle r="18" class="fp3d-hit" /><circle r="12" />
         <path d=${iconPath(kind)} transform="translate(-7.2 -7.2) scale(0.6)" />
       </g>`;
     })}</g>`;
+  }
+
+  /** A camera's field of view in the plan; when selected, a handle at its far edge turns it and sets its reach. */
+  private renderCameraWedge(pl: Placement, sel: boolean) {
+    const dome = pl.mount === "ceiling";
+    const fov = pl.fov ?? (dome ? 360 : 90);
+    const reach = pl.reach ?? (dome ? 3 : 4.5);
+    const a = ((pl.rotation ?? 0) * Math.PI) / 180;
+    const at = (t: number, r: number): [number, number] => this.toScreen([pl.x - Math.sin(a + t) * r, pl.z + Math.cos(a + t) * r]);
+    const [cx, cy] = this.toScreen([pl.x, pl.z]);
+    const half = ((Math.min(fov, 359.9) * Math.PI) / 180) / 2;
+    const [x0, y0] = at(-half, reach);
+    const [x1, y1] = at(half, reach);
+    const rp = reach * this._view.scale;
+    const path = fov >= 360 ? "" : `M${cx} ${cy}L${x0} ${y0}A${rp} ${rp} 0 ${half > Math.PI / 2 ? 1 : 0} 1 ${x1} ${y1}Z`;
+    const [hx, hy] = at(0, reach);
+    return svg`<g class="fp3d-wedge ${sel ? "fp3d-wedge-sel" : ""}">
+      ${fov >= 360 ? svg`<circle cx=${cx} cy=${cy} r=${rp} />` : svg`<path d=${path} />`}
+      ${sel && this.isAdmin
+        ? svg`<g class="fp3d-rotate" data-aim=${pl.entity_id}>
+            <line x1=${cx} y1=${cy} x2=${hx} y2=${hy} />
+            <circle cx=${hx} cy=${hy} r="16" class="fp3d-hit" />
+            <circle cx=${hx} cy=${hy} r="8" />
+            <path d="M${hx - 4} ${hy - 1}a4 4 0 1 1 2 3.5" />
+          </g>`
+        : nothing}
+    </g>`;
   }
 
   private renderHandles(room: Room) {
@@ -2633,8 +2685,9 @@ export class Fp3dEditor extends LitElement {
         ${this.num(this.t("depth"), f.d, (v) => this.updateFurniture({ d: Math.max(0.05, v) }), 0.01, 0.05)}
         ${this.num(this.t("height_m"), f.h, (v) => this.updateFurniture({ h: Math.max(0.005, v) }), 0.01, 0)}
         ${this.num(this.t("rotation"), f.rotation, (v) => this.updateFurniture({ rotation: ((v % 360) + 360) % 360 }), 1)}
-        ${packItem(f.type)?.mount === "wall" && this.floor
-          ? this.num(this.t("mount_height"), f.mount_y ?? mountBase(this.floor, f), (v) => this.updateFurniture({ mount_y: Math.max(0, v) }), 0.01, 0)
+        ${canLift(f) && this.floor
+          ? html`${this.num(this.t("mount_height"), f.mount_y ?? mountBase(this.floor, f), (v) => this.updateFurniture({ mount_y: Math.max(0, v) }), 0.01, 0)}
+              ${f.mount_y != null ? html`<button class="fp3d-btn fp3d-field-btn" ?disabled=${!admin} @click=${() => this.updateFurniture({ mount_y: null })}>${this.t("height_auto")}</button>` : nothing}`
           : nothing}
       </div>
       ${f.type === "stairs" ? html`<p class="fp3d-sub">${this.t("stairs_hint")}</p>` : nothing}
@@ -3195,7 +3248,9 @@ export class Fp3dEditor extends LitElement {
         ${this.num(this.t("rotation"), pl.rotation ?? 0, (v) => this.updateDevice({ rotation: ((v % 360) + 360) % 360 }), 1)}
         ${kind === "camera"
           ? html`${this.num(this.t("camera_fov"), pl.fov ?? (pl.mount === "ceiling" ? 360 : 90), (v) => this.updateDevice({ fov: Math.min(360, Math.max(10, v)) }), 5, 10)}
-            ${this.num(this.t("camera_reach"), pl.reach ?? (pl.mount === "ceiling" ? 3 : 4.5), (v) => this.updateDevice({ reach: Math.min(50, Math.max(0.5, v)) }), 0.5, 0.5)}`
+            ${this.num(this.t("camera_reach"), pl.reach ?? (pl.mount === "ceiling" ? 3 : 4.5), (v) => this.updateDevice({ reach: Math.min(50, Math.max(0.5, v)) }), 0.5, 0.5)}
+            ${this.num(this.t("camera_tilt"), pl.tilt ?? (pl.mount === "ceiling" ? 65 : 20), (v) => this.updateDevice({ tilt: Math.min(90, Math.max(0, v)) }), 5, 0)}
+            <p class="fp3d-sub fp3d-wide">${this.t("camera_aim_hint")}</p>`
           : nothing}
       </div>
       ${admin
@@ -4320,6 +4375,21 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-device {
         cursor: grab;
+      }
+      .fp3d-wedge path,
+      .fp3d-wedge circle:not(.fp3d-hit) {
+        fill: rgba(55, 224, 255, 0.12);
+        stroke: rgba(55, 224, 255, 0.45);
+        stroke-width: 1;
+        pointer-events: none;
+      }
+      .fp3d-wedge-sel path,
+      .fp3d-wedge-sel > circle {
+        fill: rgba(55, 224, 255, 0.2);
+        stroke: var(--fp3d-accent);
+      }
+      .fp3d-wedge .fp3d-rotate circle {
+        pointer-events: auto;
       }
       .fp3d-device circle:not(.fp3d-hit) {
         fill: #111a2e;

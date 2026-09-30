@@ -107,7 +107,7 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("power", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # parking spots: the vehicle shown (a pack item type) while the entity reports a car, its size
         # factor, and a sensor naming the kind of vehicle with a state -> vehicle mapping
-        # wall-hung pack items: height of the bottom edge above the floor (None = the pack's default)
+        # height of the bottom edge above the floor (None = default: the floor, a pack item's mount)
         vol.Optional("mount_y", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=10))),
         vol.Optional("pictures", default=[]): vol.All([_SCREEN_PICTURE_SCHEMA], vol.Length(max=20)),
         # screens: the screen around a rule picture is dark (default) or white
@@ -133,6 +133,7 @@ PLACEMENT_SCHEMA = vol.Schema(
         # cameras: opening angle (degrees) and reach (m) of the field of view; None = default
         vol.Optional("fov", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=10, max=360))),
         vol.Optional("reach", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.5, max=50))),
+        vol.Optional("tilt", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=90))),
     },
     extra=vol.ALLOW_EXTRA,
 )
