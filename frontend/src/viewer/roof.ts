@@ -4,7 +4,7 @@
 
 import { Color } from "three";
 import type { Building, Floor } from "../model.ts";
-import { GeoBuffer, LineBuffer, pushPrism, shade } from "./geo.ts";
+import { DEG, GeoBuffer, LineBuffer, pushPrism, shade } from "./geo.ts";
 
 const ROOF = 0x1a2338;
 const ROOF_TOP = 0x222d48;
@@ -56,7 +56,7 @@ export function buildRoof(b: Building): RoofGeometry | null {
   // gable: the ridge runs along the longer side
   const alongX = x1 - x0 >= z1 - z0;
   const half = (alongX ? z1 - z0 : x1 - x0) / 2;
-  const rise = half * Math.tan((roof.pitch * Math.PI) / 180);
+  const rise = half * Math.tan(roof.pitch * DEG);
   // coordinates: u along the ridge, v across (from -half to +half)
   const P = (u: number, v: number, y: number): number[] => (alongX ? [u, y, (z0 + z1) / 2 + v] : [(x0 + x1) / 2 + v, y, u]);
   const [u0, u1] = alongX ? [x0, x1] : [z0, z1];
@@ -79,7 +79,7 @@ export function buildRoof(b: Building): RoofGeometry | null {
   const inset = roof.overhang;
   const g = new Color(GABLE);
   const hw = half - inset;
-  const rw = hw * Math.tan((roof.pitch * Math.PI) / 180);
+  const rw = hw * Math.tan(roof.pitch * DEG);
   for (const u of [u0 + inset, u1 - inset]) {
     solid.tri(P(u, -hw, -THICK), P(u, hw, -THICK), P(u, 0, rw - THICK), g);
     solid.tri(P(u, hw, -THICK), P(u, -hw, -THICK), P(u, 0, rw - THICK), g);

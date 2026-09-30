@@ -7,7 +7,7 @@ import { Color } from "three";
 import type { Furniture, Vec2 } from "../model.ts";
 import { mountBase, packItem, packScreen, type PackItem } from "../packs.ts";
 import type { Floor } from "../model.ts";
-import { ALWAYS, EDGE_TOP, type GeoBuffer, LineBuffer, pushLoft, pushLyingCyl, pushPrism, shade } from "./geo.ts";
+import { ALWAYS, DEG, EDGE_TOP, type GeoBuffer, LineBuffer, pushLoft, pushLyingCyl, pushPrism, shade } from "./geo.ts";
 
 const C = {
   body: 0x172238,
@@ -671,7 +671,7 @@ function contactShadow(shadow: GeoBuffer, tf: Tf, w: number, d: number, strength
 }
 
 export function pushFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f: Furniture, base = 0): void {
-  const a = (f.rotation * Math.PI) / 180;
+  const a = f.rotation * DEG;
   const c = Math.cos(a);
   const s = Math.sin(a);
   const tf: Tf = (x, z) => [f.x + x * c - z * s, f.z + x * s + z * c];
@@ -868,7 +868,7 @@ function packModel(b: Builder, item: PackItem, w: number, d: number, h: number, 
  * by `rotation`), on the ceiling a dome hanging at the ceiling height `y`.
  */
 export function pushCameraModel(buf: GeoBuffer, model: "camera_wall" | "camera_ceiling", x: number, y: number, z: number, rotation: number): void {
-  const a = (rotation * Math.PI) / 180;
+  const a = rotation * DEG;
   const c = Math.cos(a);
   const s = Math.sin(a);
   const tf: Tf = (lx, lz) => [x + lx * c - lz * s, z + lx * s + lz * c];
@@ -893,7 +893,7 @@ export function pushCameraModel(buf: GeoBuffer, model: "camera_wall" | "camera_c
 
 /** A pack lamp into the lamp buffer: glowing parts in the light's colour (`glow`), or dark when off. */
 export function pushPackLamp(buf: GeoBuffer, item: PackItem, f: Pick<Furniture, "x" | "z" | "rotation" | "w" | "d" | "h">, base: number, glow: number): void {
-  const a = (f.rotation * Math.PI) / 180;
+  const a = f.rotation * DEG;
   const c = Math.cos(a);
   const s = Math.sin(a);
   const tf: Tf = (x, z) => [f.x + x * c - z * s, f.z + x * s + z * c];

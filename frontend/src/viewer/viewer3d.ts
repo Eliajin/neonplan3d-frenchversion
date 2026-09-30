@@ -44,7 +44,7 @@ import type { Building, Floor, Furniture, Room } from "../model.ts";
 import { recolorLamps, SHADE_SENTINEL, shadeFactors } from "./lamp-colors.ts";
 import { centroid, pointInPolygon } from "../model.ts";
 import { buildFloorGeometry, SLAB, stairHoles, type FloorGeometry } from "./build.ts";
-import { OrbitControls } from "./controls.ts";
+import { OrbitControls, type OrbitView } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
 import { pushCameraModel, pushPackLamp, screenRect } from "./furniture.ts";
 import { mountBase, packItem, setPacks, type FurniturePack } from "../packs.ts";
@@ -53,7 +53,7 @@ import { buildRoof } from "./roof.ts";
 import { lineBlending, themed, themeIndex, type Theme, type ThemeUniform } from "./theme.ts";
 
 export type { Theme } from "./theme.ts";
-import { GeoBuffer, LineBuffer, pushPrism } from "./geo.ts";
+import { DEG, GeoBuffer, LineBuffer, pushPrism } from "./geo.ts";
 import { buildLightSurface, lightColors, roomIndexAt, type LightKind, type LightSource, type LightSurface } from "./lighting.ts";
 import { buildOpeningParts, CLOSED, type OpeningState } from "./openings.ts";
 import { circlePath, cleaningPath, stepRobot, type RobotInfo, type RobotMotion } from "./robot.ts";
@@ -1023,7 +1023,7 @@ export class FloorplanViewer {
       const color = glow.color;
       if (d.lamp === "strip") {
         // a strip lights along its length: three sources spread over it
-        const a = ((d.rotation ?? 0) * Math.PI) / 180;
+        const a = (d.rotation ?? 0) * DEG;
         for (const t of [-1 / 3, 0, 1 / 3]) {
           out.push({ x: d.x + Math.cos(a) * w * t, y, z: d.z + Math.sin(a) * w * t, color, level: glow.level * 0.55, kind, room });
         }
@@ -1595,15 +1595,15 @@ export class FloorplanViewer {
    */
   private buildSun(fv: FloorView): void {
     const sun = this.sun;
-    const north = ((this.building?.settings.north ?? 0) * Math.PI) / 180;
+    const north = (this.building?.settings.north ?? 0) * DEG;
     const sig = sun ? `${sun.elevation.toFixed(1)},${sun.azimuth.toFixed(1)},${north},${[...fv.openings.values()].map((o) => (o.cover ?? 0).toFixed(2)).join(",")}` : "";
     if (sig === fv.sunSig) return;
     fv.sunSig = sig;
     const buf = new GeoBuffer();
     if (sun && sun.elevation > 2) {
       const day = Math.min(1, sun.elevation / 12);
-      const el = (sun.elevation * Math.PI) / 180;
-      const az = (sun.azimuth * Math.PI) / 180;
+      const el = sun.elevation * DEG;
+      const az = sun.azimuth * DEG;
       // horizontal direction towards the sun in plan coordinates (x right, z down, "up" = -z)
       const toSun: [number, number] = [Math.sin(north + az), -Math.cos(north + az)];
       const reach = 1 / Math.tan(el);
@@ -1674,7 +1674,7 @@ export class FloorplanViewer {
       if (d.model && d.floorId === fv.floor.id) {
         if (d.model === "camera_ceiling" && this.wallMode === "cut") continue;
         // the camera's field of view on the floor: a faint wedge, red while it sees motion
-        const a = ((d.rotation ?? 0) * Math.PI) / 180;
+        const a = (d.rotation ?? 0) * DEG;
         const dir: [number, number] = [-Math.sin(a), Math.cos(a)];
         const reach = d.model === "camera_ceiling" ? 3 : 4.5;
         const half = d.model === "camera_ceiling" ? Math.PI : 0.8;
@@ -1682,13 +1682,8 @@ export class FloorplanViewer {
         const far = new Color(0, 0, 0);
         const n = 10;
         const y = 0.015;
-        for (let i = 0; i < n; i++) {
-          const a0 = -half + (2 * half * i) / n;
-          const a1 = -half + (2 * half * (i + 1)) / n;
-          const p0 = [d.x + (dir[0] * Math.cos(a0) - dir[1] * Math.sin(a0)) * reach, y, d.z + (dir[1] * Math.cos(a0) + dir[0] * Math.sin(a0)) * reach];
-          const p1 = [d.x + (dir[0] * Math.cos(a1) - dir[1] * Math.sin(a1)) * reach, y, d.z + (dir[1] * Math.cos(a1) + dir[0] * Math.sin(a1)) * reach];
-          cones.tri([d.x, y, d.z], p1, p0, near, far, far);
-        }
+        const rim = (t: number) => [d.x + (dir[0] * Math.cos(t) - dir[1] * Math.sin(t)) * reach, y, d.z + (dir[1] * Math.cos(t) + dir[0] * Math.sin(t)) * reach];
+        for (let i = 0; i < n; i++) cones.tri([d.x, y, d.z], rim(-half + (2 * half * (i + 1)) / n), rim(-half + (2 * half * i) / n), near, far, far);
         continue;
       }
       const glow = this.glowOf(d);
@@ -1696,7 +1691,7 @@ export class FloorplanViewer {
       if (HANGING.has(d.lamp) && this.wallMode === "cut") continue;
       const [w, dd, h] = d.size ?? LAMP_SIZE[d.lamp];
       const base = d.base ?? 0;
-      const ang = ((d.rotation ?? 0) * Math.PI) / 180;
+      const ang = (d.rotation ?? 0) * DEG;
       const y = {
         ceiling: H - 0.07,
         downlight: H - 0.03,
@@ -1761,7 +1756,7 @@ export class FloorplanViewer {
       const r = screenRect(f, fv.floor);
       const st = this.screens.get(f.id)!;
       if (!r) continue;
-      const a = (f.rotation * Math.PI) / 180;
+      const a = f.rotation * DEG;
       const c = Math.cos(a);
       const s = Math.sin(a);
       const P = (x: number, y: number, z: number) => [f.x + x * c - z * s, y, f.z + x * s + z * c];
@@ -1846,7 +1841,7 @@ export class FloorplanViewer {
     // contain: the whole picture is visible, letterboxed by the dark screen around it
     const w = Math.min(sw, sh * aspect);
     const h = w / aspect;
-    const a = (f.rotation * Math.PI) / 180;
+    const a = f.rotation * DEG;
     const cx = (r.x0 + r.x1) / 2;
     const z = r.z + 0.008;
     mesh.scale.set(w, h, 1);
@@ -2027,7 +2022,7 @@ export class FloorplanViewer {
 
   /** Camera distance at which a box of this size fits the view (bounding sphere against the narrower field of view). */
   private distanceFor(size: Vector3): number {
-    const vfov = (this.camera.fov * Math.PI) / 180;
+    const vfov = this.camera.fov * DEG;
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * this.camera.aspect);
     return size.length() / 2 / Math.sin(Math.min(vfov, hfov) / 2);
   }
@@ -2235,7 +2230,7 @@ export class FloorplanViewer {
           : f.type === "kitchen_wall"
             ? 1.45
             : 0;
-    const a = (f.rotation * Math.PI) / 180;
+    const a = f.rotation * DEG;
     const c = Math.cos(a);
     const sn = Math.sin(a);
     const corner = (lx: number, lz: number, y: number) => [x + lx * c - lz * sn, y, z + lx * sn + lz * c];
@@ -2448,6 +2443,33 @@ export class FloorplanViewer {
     }
     if (!active) this.robotLast = 0;
     return active;
+  }
+
+  /** The current view (a copy), to come back to it later with flyTo. */
+  getView(): OrbitView {
+    return { ...this.controls.view, target: this.controls.view.target.clone() };
+  }
+
+  flyTo(view: OrbitView, duration = 900): void {
+    this.controls.flyTo(view, duration);
+  }
+
+  /**
+   * Look through a placed camera: the view moves to the camera's spot and along its direction (a wall
+   * camera looks a little down, a dome straight down). False when the camera is not drawn in 3D.
+   */
+  lookThrough(entityId: string): boolean {
+    const d = this.devices.find((m) => m.id === entityId && m.model);
+    const fv = d && this.floorMap.get(d.floorId);
+    if (!d || !fv) return false;
+    const a = (d.rotation ?? 0) * DEG;
+    const ceiling = d.model === "camera_ceiling";
+    // tilt below the horizon; the orbit's polar angle then is 90 degrees minus the tilt
+    const tilt = ceiling ? 1.15 : 0.35;
+    const y = fv.floor.elevation + fv.ty + (ceiling ? fv.floor.height - 0.1 : d.y);
+    const dir = new Vector3(-Math.sin(a) * Math.cos(tilt), -Math.sin(tilt), Math.cos(a) * Math.cos(tilt));
+    this.controls.flyTo({ target: new Vector3(d.x, y, d.z).addScaledVector(dir, 3.15), radius: 3, phi: Math.PI / 2 - tilt, theta: Math.atan2(Math.sin(a), -Math.cos(a)) }, 900);
+    return true;
   }
 
   /** Fly to a point of a floor (search) and let the device there flash. */
@@ -2958,7 +2980,7 @@ export function pushLampModel(
 ): void {
   const [w, dd, h] = d.size ?? LAMP_SIZE[d.lamp];
   const base = d.base ?? 0;
-  const ang = ((d.rotation ?? 0) * Math.PI) / 180;
+  const ang = (d.rotation ?? 0) * DEG;
   const ca = Math.cos(ang);
   const sa = Math.sin(ang);
   const L = (x: number, z: number): [number, number] => [d.x + x * ca - z * sa, d.z + x * sa + z * ca];

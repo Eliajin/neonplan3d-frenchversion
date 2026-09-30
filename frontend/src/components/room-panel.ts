@@ -399,10 +399,22 @@ export class Fp3dRoomPanel extends LitElement {
     const picture = st.attributes.entity_picture as string | undefined;
     // a changing query parameter makes the browser fetch a fresh snapshot (not for inline pictures)
     const src = picture && !isUnavailable(st) ? (picture.startsWith("data:") ? picture : `${picture}${picture.includes("?") ? "&" : "?"}fp3d=${this._tick}`) : null;
-    return html`<button class="fp3d-rp-camera" title=${this.t("camera_live")} @click=${() => openMoreInfo(this, st.entity_id)}>
-      ${src ? html`<img src=${src} alt=${this.name(st.entity_id)} loading="lazy" />` : html`<span class="fp3d-rp-note">${stateText(this.hass, st)}</span>`}
-      <span class="fp3d-rp-camera-name">${this.name(st.entity_id)}</span>
-    </button>`;
+    const placed = this.floor?.placements.some((p) => p.entity_id === st.entity_id);
+    return html`<div class="fp3d-rp-camera-wrap">
+      <button class="fp3d-rp-camera" title=${this.t("camera_live")} @click=${() => openMoreInfo(this, st.entity_id)}>
+        ${src ? html`<img src=${src} alt=${this.name(st.entity_id)} loading="lazy" />` : html`<span class="fp3d-rp-note">${stateText(this.hass, st)}</span>`}
+        <span class="fp3d-rp-camera-name">${this.name(st.entity_id)}</span>
+      </button>
+      ${placed
+        ? html`<button
+            class="fp3d-rp-look"
+            title=${this.t("through_camera")}
+            @click=${() => this.dispatchEvent(new CustomEvent("camera-look", { detail: { entity: st.entity_id }, bubbles: true, composed: true }))}
+          >
+            ${this.t("through_camera")}
+          </button>`
+        : nothing}
+    </div>`;
   }
 
   private sensorRow(st: HassEntity) {
@@ -646,6 +658,23 @@ export class Fp3dRoomPanel extends LitElement {
         height: 100%;
         object-fit: cover;
         display: block;
+      }
+      .fp3d-rp-camera-wrap {
+        position: relative;
+      }
+      .fp3d-rp-look {
+        position: absolute;
+        right: 8px;
+        bottom: 12px;
+        padding: 4px 10px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 999px;
+        background: rgba(7, 11, 20, 0.8);
+        color: var(--fp3d-accent);
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
       }
       .fp3d-rp-camera-name {
         position: absolute;

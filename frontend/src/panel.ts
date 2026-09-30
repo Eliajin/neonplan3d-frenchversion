@@ -286,10 +286,14 @@ export class Floorplan3dPanel extends LitElement {
     this._selFurniture = null;
   }
 
+  private view3d() {
+    return this.renderRoot.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void }) | null;
+  }
+
   private back(): void {
     if (this._roomId) this._roomId = null;
     else if (this._floorId && (this.data.building?.floors.length ?? 0) > 1) this._floorId = null;
-    else (this.renderRoot.querySelector("fp3d-view3d") as HTMLElement & { resetView(): void } | null)?.resetView();
+    else this.view3d()?.resetView();
   }
 
   private readonly onKey = (e: KeyboardEvent) => {
@@ -502,6 +506,7 @@ export class Floorplan3dPanel extends LitElement {
         ${this._roomId
           ? html`<fp3d-room-panel
               class="fp3d-room-panel"
+              @camera-look=${(e: CustomEvent<{ entity: string }>) => this.view3d()?.lookThrough(e.detail.entity)}
               .hass=${this.hass}
               .room=${b.floors.flatMap((f) => f.rooms).find((r) => r.id === this._roomId) ?? null}
               .floor=${b.floors.find((f) => f.rooms.some((r) => r.id === this._roomId)) ?? null}

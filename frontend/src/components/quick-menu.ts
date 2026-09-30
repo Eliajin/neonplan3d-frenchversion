@@ -68,8 +68,11 @@ export class Fp3dQuickMenu extends LitElement {
     const picture = st.attributes.entity_picture as string | undefined;
     const src = picture ? (picture.startsWith("data:") ? picture : `${picture}${picture.includes("?") ? "&" : "?"}fp3d=${this._tick}`) : null;
     return html`<button class="qm-camera" title=${this.t("camera_live")} @click=${() => this.details()}>
-      ${src ? html`<img src=${src} alt=${entityName(this.hass, this.entity)} />` : html`<span class="qm-note">${stateText(this.hass, st)}</span>`}
-    </button>`;
+        ${src ? html`<img src=${src} alt=${entityName(this.hass, this.entity)} />` : html`<span class="qm-note">${stateText(this.hass, st)}</span>`}
+      </button>
+      <button class="qm-details qm-look" @click=${() => this.dispatchEvent(new CustomEvent("camera-look", { detail: { entity: this.entity }, bubbles: true, composed: true }))}>
+        ${this.t("through_camera")}
+      </button>`;
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
@@ -352,6 +355,11 @@ export class Fp3dQuickMenu extends LitElement {
         width: 100%;
         margin: 4px 0 6px;
         accent-color: var(--fp3d-accent);
+      }
+      .qm-look {
+        display: block;
+        width: 100%;
+        margin-top: -4px;
       }
       .qm-details {
         border: 0;

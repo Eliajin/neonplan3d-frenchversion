@@ -70,11 +70,15 @@ export class Floorplan3dCard extends LitElement {
     if (s > 0) this.idleTimer = setTimeout(() => this.returnHome(), s * 1000);
   }
 
+  private view3d() {
+    return this.shadowRoot?.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void }) | null;
+  }
+
   /** Back to the start view (room closed, start floor, camera reset); the screensaver may start. */
   private returnHome(): void {
     this._roomId = null;
     this._floorId = undefined;
-    (this.shadowRoot?.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void }) | null)?.resetView();
+    this.view3d()?.resetView();
     if (this._config?.idle_orbit) this._orbit = true;
   }
 
@@ -221,6 +225,7 @@ export class Floorplan3dCard extends LitElement {
           : html`<p class="fp3d-card-msg">${this.data.error ?? (b ? translate(this.hass, "no_building") : translate(this.hass, "loading"))}</p>`}
         ${this._roomId && b && this._config?.room_panel !== false
           ? html`<fp3d-room-panel
+              @camera-look=${(e: CustomEvent<{ entity: string }>) => this.view3d()?.lookThrough(e.detail.entity)}
               class="fp3d-card-panel"
               .hass=${this.hass}
               .room=${b.floors.flatMap((f) => f.rooms).find((r) => r.id === this._roomId) ?? null}

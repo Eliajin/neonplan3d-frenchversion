@@ -34,6 +34,7 @@
 - **Living devices**: a radiator linked to a thermostat glows while it heats; washing machine, dryer and dishwasher glow while they run.
 - **Area link**: each room can be linked to a Home Assistant area.
 - **Devices**: the area's lights, switches, covers, thermostats, media players, sensors and cameras can be placed in the room automatically and moved by hand in the plan.
+- **Cameras in 3D**: a placed camera hangs on a wall (turned to its viewing direction) or under the ceiling as a dome; its field of view lies on the floor and turns red while its motion sensor sees something. A tap shows the snapshot, "Look through the camera" flies the view into the camera and blends its live picture over the 3D scene; any screen (TV, media wall, desk monitor) can show a camera's live picture by a picture rule.
   - Lists are grouped by device: the main entity first, further entities (LED indicators, effects, …) behind "+n more"; with a search field.
   - Lights are placed as lamps from the furniture library (ceiling, pendant, floor, table, wall light, LED strip), linked to a light automatically or by hand. Their 3D model glows in the light colour; table lamps stand on the furniture below, wall lights and strips snap to the wall. Lights placed as devices in earlier versions become lamps automatically.
   - More lamp types: downlight, surface spot, LED panel and floor uplight; "Place spots" puts a grid of lamps into a room at once, all following one light (spots on one dimmer). Several lamps can follow the same light.

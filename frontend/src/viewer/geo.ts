@@ -90,6 +90,9 @@ export class LineBuffer {
 }
 
 /** Colour scaled by k with channels clamped to 1 (Color.multiplyScalar alone can overflow). */
+/** Degrees to radians. */
+export const DEG = Math.PI / 180;
+
 export function shade(hex: number, k: number): Color {
   const c = new Color(hex).multiplyScalar(k);
   c.r = Math.min(1, c.r);

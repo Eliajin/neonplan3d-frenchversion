@@ -67,6 +67,8 @@ export class Fp3dView3d extends LitElement {
     _flows: { state: true },
     _swipe: { state: true },
     _menu: { state: true },
+    _through: { state: true },
+    _blend: { state: true },
     _find: { state: true },
     _thumbs: { state: true },
     floorThumbs: { attribute: false },
@@ -114,6 +116,10 @@ export class Fp3dView3d extends LitElement {
   private declare _swipe: { entity: string; kind: "light" | "cover"; start: number; value: number; x: number; y: number } | null;
   /** Quick menu at a device (long press). */
   private declare _menu: { entity: string; x: number; y: number } | null;
+  /** Looking through a camera: its live picture lies over the 3D view; `back` is the view to return to. */
+  private declare _through: { entity: string; back: ReturnType<FloorplanViewer["getView"]> } | null;
+  /** How strongly the camera picture covers the 3D view (0 = only 3D, 1 = only the picture). */
+  private declare _blend: number;
   /** Floor switcher with small pictures of the floors (panel and card; off with a fixed floor). */
   declare floorThumbs: boolean;
   /** Room names in 3D (cards can switch them off). */
@@ -179,6 +185,8 @@ export class Fp3dView3d extends LitElement {
   private cameraTick = 0;
   private cameraTimer: ReturnType<typeof setInterval> | undefined;
   private cameraScreens = 0;
+  /** The look through a camera itself opens this floor: that floor change must not end it. */
+  private throughFloor: string | null = null;
 
   constructor() {
     super();
@@ -203,6 +211,8 @@ export class Fp3dView3d extends LitElement {
     this._energy = null;
     this._swipe = null;
     this._menu = null;
+    this._through = null;
+    this._blend = 0.6;
     this._find = null;
     this._thumbs = [];
     this.floorThumbs = true;
@@ -315,6 +325,11 @@ export class Fp3dView3d extends LitElement {
   protected updated(changed: PropertyValues): void {
     const v = this.viewer;
     if (!v) return;
+    // a room or floor chosen elsewhere ends the look through a camera (the view is theirs now)
+    if (this._through && (changed.has("roomId") || changed.has("floorId"))) {
+      if (this.floorId === this.throughFloor) this.throughFloor = null;
+      else this._through = null;
+    }
     // packs arrive with the building (or after an import): the viewer rebuilds pack furniture
     if (this.shownPacks !== packsVersion()) {
       this.shownPacks = packsVersion();
@@ -616,7 +631,7 @@ export class Fp3dView3d extends LitElement {
         if (picture) screens.set(f.id, { color: bg, level: 1, picture, plain: true });
       }
     }
-    this.watchCameras(this.cameraScreens > 0);
+    this.watchCameras(this.cameraScreens > 0 || !!this._through);
     return { markers, consumers, screens, targets };
   }
 
@@ -627,6 +642,7 @@ export class Fp3dView3d extends LitElement {
         if (document.hidden) return;
         this.cameraTick++;
         this.syncDevices(true);
+        if (this._through) this.requestUpdate();
       }, this._low ? 10000 : 5000);
     } else if (!on && this.cameraTimer) {
       clearInterval(this.cameraTimer);
@@ -948,6 +964,58 @@ export class Fp3dView3d extends LitElement {
     </div>`;
   }
 
+  /** Look through a placed camera: the view flies into it and its live picture lies over the 3D view. */
+  lookThrough(entityId: string): void {
+    const v = this.viewer;
+    const b = this.building;
+    if (!v || !b) return;
+    const floorId = b.floors.find((f) => f.placements.some((p) => p.entity_id === entityId))?.id;
+    if (!floorId) return;
+    this._menu = null;
+    if (!this._through) this._through = { entity: entityId, back: v.getView() };
+    else this._through = { ...this._through, entity: entityId };
+    this.watchCameras(true);
+    // another floor first opens (its own flight must not win over ours)
+    const wait = this.floorId === floorId ? 0 : 300;
+    if (wait) {
+      this.throughFloor = floorId;
+      this.fire("floor-tap", { floorId });
+    }
+    setTimeout(() => {
+      if (this._through?.entity === entityId && !this.viewer?.lookThrough(entityId)) this._through = null;
+    }, wait);
+  }
+
+  private endThrough(): void {
+    const t = this._through;
+    if (!t) return;
+    this._through = null;
+    this.viewer?.flyTo(t.back);
+  }
+
+  private renderThrough() {
+    const t = this._through;
+    if (!t || !this.hass) return nothing;
+    const st = this.hass.states[t.entity];
+    const picture = st?.attributes.entity_picture as string | undefined;
+    const src = picture && !isUnavailable(st) ? (picture.startsWith("data:") ? picture : `${picture}${picture.includes("?") ? "&" : "?"}fp3d=${this.cameraTick}`) : null;
+    return html`<div class="fp3d-through" style="--fp3d-blend:${this._blend}">
+      ${src ? html`<img class="fp3d-through-img" src=${src} alt="" />` : nothing}
+      <div class="fp3d-through-bar">
+        <span class="fp3d-through-name">${entityName(this.hass, t.entity)}</span>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          .value=${String(Math.round(this._blend * 100))}
+          aria-label=${translate(this.hass, "through_blend")}
+          @input=${(e: Event) => (this._blend = Number((e.target as HTMLInputElement).value) / 100)}
+        />
+        <button class="fp3d-chip" @click=${() => this.endThrough()}>${translate(this.hass, "through_back")}</button>
+      </div>
+    </div>`;
+  }
+
   private renderMenu() {
     const m = this._menu;
     if (!m || !this.hass) return nothing;
@@ -957,7 +1025,14 @@ export class Fp3dView3d extends LitElement {
     const left = Math.max(8, Math.min(w - 240, m.x - 116));
     const top = Math.max(8, Math.min(h - 360, m.y - 170));
     return html`<div class="fp3d-menu-backdrop" @click=${() => (this._menu = null)}></div>
-      <fp3d-quick-menu style="left:${left}px;top:${top}px" ?low=${this._low} .hass=${this.hass} .entity=${m.entity} @close=${() => (this._menu = null)}></fp3d-quick-menu>`;
+      <fp3d-quick-menu
+        style="left:${left}px;top:${top}px"
+        ?low=${this._low}
+        .hass=${this.hass}
+        .entity=${m.entity}
+        @close=${() => (this._menu = null)}
+        @camera-look=${(e: CustomEvent<{ entity: string }>) => this.lookThrough(e.detail.entity)}
+      ></fp3d-quick-menu>`;
   }
 
   private onDeviceTap(entityId: string, x = 0, y = 0): void {
@@ -972,6 +1047,7 @@ export class Fp3dView3d extends LitElement {
   }
 
   resetView(): void {
+    this._through = null;
     this.viewer?.resetView();
   }
 
@@ -1036,11 +1112,11 @@ export class Fp3dView3d extends LitElement {
     const stage = STAGE[this.theme] ?? STAGE.neon;
     const style = `--fp3d-sky:${mix(stage.night[0], stage.day[0])};--fp3d-ground:${mix(stage.night[1], stage.day[1])}`;
     return html`<div
-      class="fp3d-stage ${this.roomLabels ? "" : "fp3d-no-room-names"} ${this._low ? "fp3d-low" : ""} ${this.panelOpen ? "fp3d-panel-open" : ""} ${this._alerts.length ? "fp3d-has-alerts" : ""}"
+      class="fp3d-stage ${this.roomLabels ? "" : "fp3d-no-room-names"} ${this._low ? "fp3d-low" : ""} ${this.panelOpen ? "fp3d-panel-open" : ""} ${this._alerts.length ? "fp3d-has-alerts" : ""} ${this._through ? "fp3d-through-on" : ""}"
       style=${style}
     >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.renderEnergy()} ${this.renderLegend()}
-      ${this.renderAlerts()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderSwipe()} ${this.renderMenu()}
+      ${this.renderAlerts()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderSwipe()} ${this.renderThrough()} ${this.renderMenu()}
       ${this.showStats && this._stats
         ? html`<span class="fp3d-stats"
             ><b>${this._stats.fps ? translate(this.hass, "stats_fps", { fps: this._stats.fps, ms: this._stats.worstMs }) : translate(this.hass, "stats_idle")}</b>
@@ -1499,6 +1575,47 @@ export class Fp3dView3d extends LitElement {
         position: absolute;
         inset: 0;
         z-index: 5;
+      }
+      .fp3d-through {
+        position: absolute;
+        inset: 0;
+        z-index: 4;
+        pointer-events: none;
+      }
+      .fp3d-through-img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: var(--fp3d-blend);
+      }
+      .fp3d-through-bar {
+        position: absolute;
+        left: 50%;
+        bottom: calc(var(--fp3d-bottom-inset, 0px) + 14px);
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        max-width: calc(100% - 32px);
+        padding: 8px 10px 8px 16px;
+        border-radius: 999px;
+        background: var(--fp3d-chrome);
+        backdrop-filter: blur(12px);
+        border: 1px solid var(--fp3d-line);
+        pointer-events: auto;
+      }
+      .fp3d-through-name {
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .fp3d-through-bar input[type="range"] {
+        width: 140px;
+        accent-color: var(--fp3d-accent);
+      }
+      .fp3d-through-on :is(.fp3d-pin, .fp3d-dev, .fp3d-energy, .fp3d-legend, .fp3d-thumbs, .fp3d-scenes, .fp3d-find-btn, .fp3d-stats) {
+        display: none;
       }
       fp3d-quick-menu {
         position: absolute;
