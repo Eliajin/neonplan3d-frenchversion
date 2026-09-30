@@ -317,7 +317,8 @@ export const FRIDGE_DOOR = 0.06;
 
 /**
  * The two doors of a smart fridge, each swung open by a fraction (0 closed … 1 wide open) around its
- * outer hinge: the left one carries the water dispenser, the right one the screen.
+ * outer hinge: the left one carries the water dispenser, the right one the screen. An open door turns
+ * red – it should not stay open for long.
  */
 export function pushFridgeDoors(buf: GeoBuffer, f: Pick<Furniture, "x" | "z" | "rotation" | "w" | "d" | "h">, base: number, left: number, right: number): void {
   const a = f.rotation * DEG;
@@ -326,13 +327,15 @@ export function pushFridgeDoors(buf: GeoBuffer, f: Pick<Furniture, "x" | "z" | "
   const tf = (lx: number, lz: number): [number, number] => [f.x + lx * c - lz * s, f.z + lx * s + lz * c];
   const y0 = base + 0.05;
   const y1 = base + f.h - 0.02;
-  const front = new Color(0x1f2d4c);
-  const side = new Color(C.body);
+  const red = new Color(0.75, 0.1, 0.14);
   const dark = new Color(C.dark);
   const accent = new Color(C.accent);
   const dw = f.w / 2 - 0.006;
   // a door: u runs from the hinge along the door (positive to the right), v through its thickness (0 = front face)
   const door = (hx: number, sign: 1 | -1, angle: number) => {
+    const open = angle / opening;
+    const front = new Color(0x1f2d4c).lerp(red, open);
+    const side = new Color(C.body).lerp(red, open * 0.8);
     const ca = Math.cos(angle);
     const sa = Math.sin(angle);
     const at = (u: number, v: number): [number, number] => tf(hx + sign * (u * ca - v * sa), f.d / 2 + u * sa + v * ca);
