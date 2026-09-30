@@ -189,6 +189,11 @@ export class Floorplan3dPanel extends LitElement {
     this.editDevice(id, (p) => Object.assign(p, { x, z }));
   }
 
+  /** Cameras turn in finer steps than lamps (their wedge shows where they look). */
+  private turnStep(): number {
+    return kindOf(this._selDevice ?? "") === "camera" ? 15 : 45;
+  }
+
   private turnDevice(delta: number): void {
     if (!this._selDevice) return;
     this.editDevice(this._selDevice, (p) => (p.rotation = ((((p.rotation ?? 0) + delta) % 360) + 360) % 360));
@@ -212,11 +217,37 @@ export class Floorplan3dPanel extends LitElement {
     if (!floor || !p) return nothing;
     const kind = kindOf(id);
     const light = kind === "light";
-    const auto = kind ? defaultHeight(kind, floor.height, light ? (p.mount ?? "ceiling") : null) : 1;
+    const camera = kind === "camera";
+    const dome = p.mount === "ceiling";
+    const auto = kind ? defaultHeight(kind, floor.height, light || camera ? (p.mount ?? (camera ? "wall" : "ceiling")) : null) : 1;
+    const numField = (label: string, value: number, step: number, min: number, max: number, set: (v: number) => void) =>
+      html`<label class="fp3d-size" title=${label}
+        >${label}
+        <input
+          type="number"
+          inputmode="decimal"
+          step=${step}
+          min=${min}
+          max=${max}
+          .value=${String(Math.round(value * 100) / 100)}
+          @change=${(e: Event) => {
+            const v = parseFloat((e.target as HTMLInputElement).value.replace(",", "."));
+            if (Number.isFinite(v)) set(Math.min(max, Math.max(min, v)));
+          }}
+        />
+      </label>`;
     return html`${light
         ? html`<select class="fp3d-size-select" title=${this.t("lamp_mount")} @change=${(e: Event) => this.editDevice(id, (d) => Object.assign(d, { mount: (e.target as HTMLSelectElement).value as LampMount, y: null }))}>
             ${(["ceiling", "floor", "table", "wall"] as const).map((m) => html`<option value=${m} ?selected=${m === (p.mount ?? "ceiling")}>${this.t(`lamp_${m}`)}</option>`)}
           </select>`
+        : nothing}
+      ${camera
+        ? html`<select class="fp3d-size-select" title=${this.t("camera_mount")} @change=${(e: Event) => this.editDevice(id, (d) => Object.assign(d, { mount: (e.target as HTMLSelectElement).value as LampMount, y: null }))}>
+              <option value="wall" ?selected=${!dome}>${this.t("camera_mount_wall")}</option>
+              <option value="ceiling" ?selected=${dome}>${this.t("camera_mount_ceiling")}</option>
+            </select>
+            ${numField(this.t("camera_fov_short"), p.fov ?? (dome ? 360 : 90), 5, 10, 360, (v) => this.editDevice(id, (d) => (d.fov = v)))}
+            ${numField(this.t("camera_reach_short"), p.reach ?? (dome ? 3 : 4.5), 0.5, 0.5, 50, (v) => this.editDevice(id, (d) => (d.reach = v)))}`
         : nothing}
       <label class="fp3d-size" title=${this.t("marker_height")}
         >${this.t("size_short_h")}
@@ -592,8 +623,8 @@ export class Floorplan3dPanel extends LitElement {
                 : this._selDevice
                   ? html`<span>${entityName(this.hass, this._selDevice)}</span>
                       ${this.renderDeviceFields(this._selDevice)}
-                      <button class="fp3d-chip" @click=${() => this.turnDevice(-45)}>↺ 45°</button>
-                      <button class="fp3d-chip" @click=${() => this.turnDevice(45)}>↻ 45°</button>
+                      <button class="fp3d-chip" @click=${() => this.turnDevice(-this.turnStep())}>↺ ${this.turnStep()}°</button>
+                      <button class="fp3d-chip" @click=${() => this.turnDevice(this.turnStep())}>↻ ${this.turnStep()}°</button>
                       <button class="fp3d-chip fp3d-danger-chip" @click=${() => this.deleteDevice()}>${this.t("delete")}</button>`
                   : html`<span>${this.t("furnish_hint")}</span>`}
               <button class="fp3d-chip fp3d-chip-on" @click=${() => ((this._furnish = false), (this._selFurniture = null), (this._selDevice = null))}>${this.t("done")}</button>

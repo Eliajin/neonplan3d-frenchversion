@@ -3193,6 +3193,10 @@ export class Fp3dEditor extends LitElement {
         ${this.num(this.t("x"), pl.x, (v) => this.updateDevice({ x: v }))} ${this.num(this.t("z"), pl.z, (v) => this.updateDevice({ z: v }))}
         ${this.num(this.t("marker_height"), pl.y ?? auto, (v) => this.updateDevice({ y: Math.max(0, v) }), 0.05, 0)}
         ${this.num(this.t("rotation"), pl.rotation ?? 0, (v) => this.updateDevice({ rotation: ((v % 360) + 360) % 360 }), 1)}
+        ${kind === "camera"
+          ? html`${this.num(this.t("camera_fov"), pl.fov ?? (pl.mount === "ceiling" ? 360 : 90), (v) => this.updateDevice({ fov: Math.min(360, Math.max(10, v)) }), 5, 10)}
+            ${this.num(this.t("camera_reach"), pl.reach ?? (pl.mount === "ceiling" ? 3 : 4.5), (v) => this.updateDevice({ reach: Math.min(50, Math.max(0.5, v)) }), 0.5, 0.5)}`
+          : nothing}
       </div>
       ${admin
         ? html`<div class="fp3d-actions">

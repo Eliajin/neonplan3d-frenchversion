@@ -143,6 +143,9 @@ export interface DeviceMarker {
   /** A camera drawn in 3D (wall or ceiling); its field of view lies on the floor, red while motion is seen. */
   model?: "camera_wall" | "camera_ceiling";
   motion?: boolean;
+  /** Camera: opening angle (degrees) and reach (m) of its field of view; default 90° / 4.5 m (dome: 360° / 3 m). */
+  fov?: number;
+  reach?: number;
 }
 
 export type FloorStack = "dim" | "stacked" | "single";
@@ -285,6 +288,8 @@ interface FloorView {
   coneMesh: Mesh;
   /** Triangle ranges of lamps (entity ids), furniture walls mesh and openings, for tapping. */
   lampTris: { id: string; start: number; end: number }[];
+  /** Triangle range of every camera's field-of-view wedge, by device id (a tap on it hits the camera). */
+  coneTris: { id: string; start: number; end: number }[];
   /** The same lamp ranges, keyed by furniture id (for moving lamps). */
   lampFurnTris: { id: string; start: number; end: number }[];
   frameTris: { id: string; start: number; end: number }[];
@@ -1248,6 +1253,7 @@ export class FloorplanViewer {
         haloMesh,
         coneMesh,
         lampTris: [],
+        coneTris: [],
         lampFurnTris: [],
         frameTris: [],
         blindTris: [],
@@ -1670,20 +1676,24 @@ export class FloorplanViewer {
     const hp: number[] = [];
     const hc: number[] = [];
     const cones = new GeoBuffer();
+    const coneTris: FloorView["coneTris"] = [];
     for (const d of this.devices) {
       if (d.model && d.floorId === fv.floor.id) {
         if (d.model === "camera_ceiling" && this.wallMode === "cut") continue;
         // the camera's field of view on the floor: a faint wedge, red while it sees motion
         const a = (d.rotation ?? 0) * DEG;
         const dir: [number, number] = [-Math.sin(a), Math.cos(a)];
-        const reach = d.model === "camera_ceiling" ? 3 : 4.5;
-        const half = d.model === "camera_ceiling" ? Math.PI : 0.8;
+        const dome = d.model === "camera_ceiling";
+        const reach = d.reach ?? (dome ? 3 : 4.5);
+        const half = ((d.fov ?? (dome ? 360 : 90)) * DEG) / 2;
         const near = d.motion ? new Color(0.9, 0.12, 0.16) : new Color(0.04, 0.22, 0.28);
         const far = new Color(0, 0, 0);
-        const n = 10;
+        const n = Math.max(4, Math.round(half / 0.15));
         const y = 0.015;
         const rim = (t: number) => [d.x + (dir[0] * Math.cos(t) - dir[1] * Math.sin(t)) * reach, y, d.z + (dir[1] * Math.cos(t) + dir[0] * Math.sin(t)) * reach];
+        const start = cones.count;
         for (let i = 0; i < n; i++) cones.tri([d.x, y, d.z], rim(-half + (2 * half * (i + 1)) / n), rim(-half + (2 * half * i) / n), near, far, far);
+        coneTris.push({ id: d.id, start, end: cones.count });
         continue;
       }
       const glow = this.glowOf(d);
@@ -1742,6 +1752,7 @@ export class FloorplanViewer {
     fv.coneMesh.geometry.dispose();
     fv.coneMesh.geometry = cones.geometry();
     fv.coneMesh.visible = cones.count > 0;
+    fv.coneTris = coneTris;
   }
 
   /** Lit screens of a floor: a bright panel in the app colour and a faint glow around it. */
@@ -2031,20 +2042,26 @@ export class FloorplanViewer {
    * What lies under a screen point: a lamp, a linked piece of furniture or opening (their entity), or
    * a room. Walls are looked through (the ones in front are glass), furniture without an entity too.
    */
-  private pick(x: number, y: number): { entity: string } | { floorId: string; roomId: string | null } | null {
+  /** A ray from the camera through a screen point of the stage. */
+  private rayAt(x: number, y: number): Raycaster {
     const rect = this.renderer.domElement.getBoundingClientRect();
-    const ndc = new Vector2((x / rect.width) * 2 - 1, -(y / rect.height) * 2 + 1);
     const ray = new Raycaster();
-    ray.setFromCamera(ndc, this.camera);
+    ray.setFromCamera(new Vector2((x / rect.width) * 2 - 1, -(y / rect.height) * 2 + 1), this.camera);
+    return ray;
+  }
+
+  private pick(x: number, y: number): { entity: string } | { floorId: string; roomId: string | null } | null {
+    const ray = this.rayAt(x, y);
     const floors = this.activeFloors();
-    const meshes = floors.flatMap((f) => [f.lampMesh, f.framesMesh, f.blindsMesh, f.wallMesh, f.floorMesh].filter((m) => m.visible));
+    const meshes = floors.flatMap((f) => [f.lampMesh, f.coneMesh, f.framesMesh, f.blindsMesh, f.wallMesh, f.floorMesh].filter((m) => m.visible));
     const inRange = (list: { id: string; start: number; end: number }[], tri: number) => list.find((r) => tri >= r.start && tri < r.end)?.id;
     for (const hit of ray.intersectObjects(meshes, false)) {
       if (hit.faceIndex == null) continue;
       const tri = hit.faceIndex;
       const fv = floors.find((f) => f.group === hit.object.parent)!;
-      if (hit.object === fv.lampMesh) {
-        const id = inRange(fv.lampTris, tri);
+      if (hit.object === fv.lampMesh || hit.object === fv.coneMesh) {
+        // a camera's wedge on the floor is a far bigger target than the camera itself
+        const id = inRange(hit.object === fv.lampMesh ? fv.lampTris : fv.coneTris, tri);
         if (id) return { entity: id };
       } else if (hit.object === fv.framesMesh || hit.object === fv.blindsMesh) {
         const id = inRange(hit.object === fv.framesMesh ? fv.frameTris : fv.blindTris, tri);
@@ -2079,9 +2096,7 @@ export class FloorplanViewer {
 
   /** Furniture item (or lamp) under a screen point, with the floor it is on. */
   private furnitureAt(x: number, y: number): { fv: FloorView; id: string } | null {
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    const ray = new Raycaster();
-    ray.setFromCamera(new Vector2((x / rect.width) * 2 - 1, -(y / rect.height) * 2 + 1), this.camera);
+    const ray = this.rayAt(x, y);
     const floors = this.activeFloors();
     const meshes = floors.flatMap((f) => [f.lampMesh, f.wallMesh].filter((m) => m.visible));
     for (const hit of ray.intersectObjects(meshes, false)) {
@@ -2096,9 +2111,7 @@ export class FloorplanViewer {
 
   /** Point on a floor's plane under a screen point. */
   private floorPoint(fv: FloorView, x: number, y: number): [number, number] | null {
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    const ray = new Raycaster();
-    ray.setFromCamera(new Vector2((x / rect.width) * 2 - 1, -(y / rect.height) * 2 + 1), this.camera);
+    const ray = this.rayAt(x, y);
     const h = fv.floor.elevation + fv.y;
     const dir = ray.ray.direction;
     if (Math.abs(dir.y) < 1e-4) return null;

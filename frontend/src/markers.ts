@@ -80,6 +80,8 @@ export function buildMarkers(hass: HomeAssistant, building: Building): DeviceMar
         lamp: kind === "light" ? (pl.mount ?? "ceiling") : null,
         model: kind === "camera" ? (pl.mount === "ceiling" ? "camera_ceiling" : "camera_wall") : undefined,
         motion: kind === "camera" ? cameraMotion(hass, pl.entity_id) : undefined,
+        fov: pl.fov ?? undefined,
+        reach: pl.reach ?? undefined,
         rotation: pl.rotation ?? 0,
         icon: iconSvg(kind),
         name: entityName(hass, pl.entity_id, areaName),

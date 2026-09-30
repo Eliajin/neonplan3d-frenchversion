@@ -109,6 +109,9 @@ export interface Placement {
   mount?: LampMount | null;
   /** Turn around the vertical axis (degrees): wall lamps, spots, displays face that way. */
   rotation?: number;
+  /** Cameras: opening angle of the field of view (degrees) and how far it reaches (m); null = default. */
+  fov?: number | null;
+  reach?: number | null;
 }
 
 export interface Background {

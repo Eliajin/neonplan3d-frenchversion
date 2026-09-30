@@ -131,6 +131,8 @@ const shots = [
   { name: "editor-package", query: "", width: 1280, height: 900, editor: true, editorScript: "const f = e._doc.floors[1]; e._floorId = f.id; e.applyPackage(f.rooms.find((r) => r.id === 'gast'), 'bedroom'); e.applyPackage(f.rooms.find((r) => r.id === 'kind'), 'kids');" },
   { name: "view-package", query: "", width: 1280, height: 800, editor: true, editorScript: "const f = e._doc.floors[1]; e.applyPackage(f.rooms.find((r) => r.id === 'gast'), 'bedroom');", then3d: "Obergeschoss" },
   { name: "view-furnish", query: "", width: 1280, height: 800, click: "Erdgeschoss", furnishDrag: { id: "m2", dx: -160, dy: 60 } },
+  // a tap on the camera's wedge (1.2 m in front of it) selects the camera in the furnish bar
+  { name: "view-furnish-camera", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Wohnzimmer", furnishTap: { x: 1.05, z: 1.05 } },
   { name: "save-failed", query: "?savefail", width: 1280, height: 800, editor: true, editRoomName: "Wohnen", reload: true },
   { name: "tablet", query: "", width: 800, height: 1280, click: "Obergeschoss" },
   { name: "tablet-portrait-house", query: "", width: 800, height: 1280 },
@@ -256,6 +258,19 @@ for (const shot of shots.filter((s) => !only || only.includes(s.name))) {
     for (let i = 1; i <= 10; i++) await page.mouse.move(at[0] + (shot.furnishDrag.dx * i) / 10, at[1] + (shot.furnishDrag.dy * i) / 10);
     await page.mouse.up();
     await new Promise((r) => setTimeout(r, 1500));
+  }
+  if (shot.furnishTap) {
+    await clickText("Einrichten");
+    const at = await page.evaluate((pt) => {
+      const view = document.querySelector("neonplan3d-panel").shadowRoot.querySelector("fp3d-view3d");
+      const v = view.viewer;
+      const fv = v.floors[0];
+      const p = v.camera.position.clone().set(pt.x, fv.floor.elevation + fv.y + 0.02, pt.z).project(v.camera);
+      const r = view.shadowRoot.querySelector("canvas").getBoundingClientRect();
+      return [r.left + ((p.x + 1) / 2) * r.width, r.top + ((1 - p.y) / 2) * r.height];
+    }, shot.furnishTap);
+    await page.mouse.click(at[0], at[1]);
+    await new Promise((r) => setTimeout(r, 1200));
   }
   if (shot.editorState) {
     await page.evaluate((state) => {

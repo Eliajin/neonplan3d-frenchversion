@@ -130,6 +130,9 @@ PLACEMENT_SCHEMA = vol.Schema(
         vol.Optional("mount", default=None): vol.Any(None, vol.In(["ceiling", "floor", "table", "wall"])),
         # turn around the vertical axis (degrees)
         vol.Optional("rotation", default=0.0): vol.Coerce(float),
+        # cameras: opening angle (degrees) and reach (m) of the field of view; None = default
+        vol.Optional("fov", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=10, max=360))),
+        vol.Optional("reach", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.5, max=50))),
     },
     extra=vol.ALLOW_EXTRA,
 )
