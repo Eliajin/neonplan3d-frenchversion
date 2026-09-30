@@ -2887,7 +2887,17 @@ export class Fp3dEditor extends LitElement {
               set(rules.map((x, j) => (j === i ? { ...x, entity: e.detail.value } : x)));
             }}
           ></fp3d-entity-picker>
-          <select ?disabled=${!admin} title=${this.t("picture_attribute")} @change=${(e: Event) => set(rules.map((x, j) => (j === i ? { ...x, attribute: (e.target as HTMLSelectElement).value || null } : x)))}>
+          <select
+            ?disabled=${!admin}
+            title=${this.t("picture_attribute")}
+            @change=${(e: Event) => {
+              // switching what is compared pre-fills the value with what the entity reports right now
+              const attribute = (e.target as HTMLSelectElement).value || null;
+              const st = this.hass?.states[r.entity];
+              const now = st ? String((attribute ? st.attributes[attribute] : st.state) ?? "") : r.state;
+              set(rules.map((x, j) => (j === i ? { ...x, attribute, state: now } : x)));
+            }}
+          >
             <option value="" ?selected=${!r.attribute}>${this.t("picture_state_of")}</option>
             ${attributes(r.entity).map((a) => html`<option value=${a} ?selected=${a === r.attribute}>${a}</option>`)}
           </select>
