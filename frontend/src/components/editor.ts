@@ -1663,6 +1663,8 @@ export class Fp3dEditor extends LitElement {
                     this._tool = tool;
                     this._draft = [];
                     this._cursor = null;
+                    // a tool needs the sidebar (library, presets): open it beside the 3D pane
+                    this._sideOpen = tool !== "select";
                   }}
                 >
                   ${this.t(`tool_${tool}` as I18nKey)}
@@ -2082,11 +2084,6 @@ export class Fp3dEditor extends LitElement {
     /></label>`;
   }
 
-  /** Something is selected or being placed: the sidebar has a form or the library to show. */
-  private get sideHasWork(): boolean {
-    return this._tool === "furniture" || this._tool === "outdoor" || this._tool === "opening";
-  }
-
   /** A tap in the 3D pane: select there, and fold the sidebar away (the bar under the pane has the essentials). */
   private selectFrom3d(kind: "room" | "furniture" | "device", id: string | null): void {
     this.selectItem(kind, id);
@@ -2107,15 +2104,15 @@ export class Fp3dEditor extends LitElement {
   private renderAside(floor: Floor | undefined) {
     const folding = this._split && !this._sidePinned && !this.narrow;
     if (!folding) return html`<aside class="fp3d-side">${this.renderPinRow()}${this.renderSide(floor)}</aside>`;
-    const open = this.sideHasWork || this._sideOpen;
+    const open = this._sideOpen;
     if (!open) {
       return html`<aside class="fp3d-side fp3d-side-strip">
         <button class="fp3d-strip-btn" title=${this.t("side_open")} @click=${() => (this._sideOpen = true)}>☰</button>
         ${this._furnitureId || this._deviceId || this._openingId
           ? html`<button class="fp3d-strip-btn fp3d-strip-hot" title=${this.t("side_details")} @click=${() => (this._sideOpen = true)}>⚙</button>`
           : nothing}
-        <button class="fp3d-strip-btn" title=${this.t("tool_furniture")} @click=${() => ((this._tool = "furniture"), (this._draft = []))}>🛋</button>
-        <button class="fp3d-strip-btn" title=${this.t("tool_opening")} @click=${() => ((this._tool = "opening"), (this._draft = []))}>🚪</button>
+        <button class="fp3d-strip-btn" title=${this.t("tool_furniture")} @click=${() => ((this._tool = "furniture"), (this._draft = []), (this._sideOpen = true))}>🛋</button>
+        <button class="fp3d-strip-btn" title=${this.t("tool_opening")} @click=${() => ((this._tool = "opening"), (this._draft = []), (this._sideOpen = true))}>🚪</button>
       </aside>`;
     }
     // open over the 3D pane, so the pane keeps its size

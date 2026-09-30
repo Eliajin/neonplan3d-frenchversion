@@ -243,7 +243,7 @@ var Ie=globalThis,Fe=Ie.ShadowRoot&&(Ie.ShadyCSS===void 0||Ie.ShadyCSS.nativeSha
               ${["select","rect","polygon","measure","opening","furniture","outdoor"].map(n=>_`<button
                   aria-pressed=${this._tool===n}
                   ?disabled=${!e||!this.isAdmin&&n!=="select"}
-                  @click=${()=>{this._tool=n,this._draft=[],this._cursor=null}}
+                  @click=${()=>{this._tool=n,this._draft=[],this._cursor=null,this._sideOpen=n!=="select"}}
                 >
                   ${this.t(`tool_${n}`)}
                 </button>`)}
@@ -360,15 +360,15 @@ var Ie=globalThis,Fe=Ie.ShadowRoot&&(Ie.ShadyCSS===void 0||Ie.ShadyCSS.nativeSha
         .value=${String(S(t))}
         ?disabled=${!this.isAdmin}
         @change=${r=>{let a=parseFloat(r.target.value.replace(",","."));Number.isFinite(a)&&n(a)}}
-    /></label>`}get sideHasWork(){return this._tool==="furniture"||this._tool==="outdoor"||this._tool==="opening"}selectFrom3d(e,t){this.selectItem(e,t),this._sideOpen=!1}setSidePinned(e){this._sidePinned=e,this._sideOpen=!1;try{localStorage.setItem("neonplan3d.sidePinned",e?"1":"0")}catch{}}renderAside(e){return this._split&&!this._sidePinned&&!this.narrow?this.sideHasWork||this._sideOpen?_`<aside class="fp3d-side fp3d-side-strip"></aside>
+    /></label>`}selectFrom3d(e,t){this.selectItem(e,t),this._sideOpen=!1}setSidePinned(e){this._sidePinned=e,this._sideOpen=!1;try{localStorage.setItem("neonplan3d.sidePinned",e?"1":"0")}catch{}}renderAside(e){return this._split&&!this._sidePinned&&!this.narrow?this._sideOpen?_`<aside class="fp3d-side fp3d-side-strip"></aside>
       <aside class="fp3d-side fp3d-side-overlay">
         ${this.renderPinRow(!0)}
         ${this.renderSide(e)}
       </aside>`:_`<aside class="fp3d-side fp3d-side-strip">
         <button class="fp3d-strip-btn" title=${this.t("side_open")} @click=${()=>this._sideOpen=!0}>☰</button>
         ${this._furnitureId||this._deviceId||this._openingId?_`<button class="fp3d-strip-btn fp3d-strip-hot" title=${this.t("side_details")} @click=${()=>this._sideOpen=!0}>⚙</button>`:b}
-        <button class="fp3d-strip-btn" title=${this.t("tool_furniture")} @click=${()=>(this._tool="furniture",this._draft=[])}>🛋</button>
-        <button class="fp3d-strip-btn" title=${this.t("tool_opening")} @click=${()=>(this._tool="opening",this._draft=[])}>🚪</button>
+        <button class="fp3d-strip-btn" title=${this.t("tool_furniture")} @click=${()=>(this._tool="furniture",this._draft=[],this._sideOpen=!0)}>🛋</button>
+        <button class="fp3d-strip-btn" title=${this.t("tool_opening")} @click=${()=>(this._tool="opening",this._draft=[],this._sideOpen=!0)}>🚪</button>
       </aside>`:_`<aside class="fp3d-side">${this.renderPinRow()}${this.renderSide(e)}</aside>`}renderPinRow(e=!1){return!this._split||this.narrow?b:_`<div class="fp3d-pin-row">
       ${e?_`<button class="fp3d-btn" @click=${()=>this._sideOpen=!1}>${this.t("side_close")}</button>`:b}
       <button class="fp3d-btn" aria-pressed=${this._sidePinned} title=${this.t("side_pin_hint")} @click=${()=>this.setSidePinned(!this._sidePinned)}>
