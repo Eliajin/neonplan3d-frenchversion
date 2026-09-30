@@ -110,6 +110,8 @@ export class Fp3dEditor extends LitElement {
     _furnitureId: { state: true },
     _deviceId: { state: true },
     _deviceQuery: { state: true },
+    _furnQuery: { state: true },
+    _libOpen: { state: true },
     _expanded: { state: true },
     _notice: { state: true },
     _history: { state: true },
@@ -155,6 +157,9 @@ export class Fp3dEditor extends LitElement {
   private declare _furnitureId: string | null;
   private declare _deviceId: string | null;
   private declare _deviceQuery: string;
+  /** Furniture library: the search text, and which sections are open (built-in groups and packs). */
+  private declare _furnQuery: string;
+  private declare _libOpen: Set<string>;
   /** Devices whose further entities are unfolded in the device list. */
   private declare _expanded: Set<string>;
   /** Short confirmation shown after an action (e.g. closed gaps). */
@@ -202,6 +207,14 @@ export class Fp3dEditor extends LitElement {
     this._furnitureId = null;
     this._deviceId = null;
     this._deviceQuery = "";
+    this._furnQuery = "";
+    this._libOpen = new Set(["group:lights", "group:living"]);
+    try {
+      const saved = localStorage.getItem("neonplan3d.library");
+      if (saved) this._libOpen = new Set(JSON.parse(saved) as string[]);
+    } catch {
+      // no storage: the defaults stand
+    }
     this._expanded = new Set();
     this._notice = null;
     this._history = null;
@@ -2657,22 +2670,58 @@ export class Fp3dEditor extends LitElement {
       <p class="fp3d-sub">${this.t("parking_hint")}</p>`;
   }
 
+  private toggleLibrary(key: string): void {
+    const next = new Set(this._libOpen);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    this._libOpen = next;
+    try {
+      localStorage.setItem("neonplan3d.library", JSON.stringify([...next]));
+    } catch {
+      // no storage
+    }
+  }
+
+  /** A section of the library: folded away unless open (or while a search shows its hits). */
+  private librarySection(key: string, title: string, items: { type: string; label: string }[], q: string) {
+    const hits = q ? items.filter((it) => it.label.toLowerCase().includes(q)) : items;
+    if (q && !hits.length) return nothing;
+    const open = q ? true : this._libOpen.has(key);
+    return html`<button class="fp3d-lib-head fp3d-lib-toggle" aria-expanded=${open} @click=${() => this.toggleLibrary(key)}>
+        <span class="fp3d-lib-caret">${open ? "▾" : "▸"}</span>${title} <span class="fp3d-lib-count">${hits.length}</span>
+      </button>
+      ${open ? html`<div class="fp3d-library">${hits.map((it) => this.libraryButton(it.type, it.label))}</div>` : nothing}`;
+  }
+
   private renderFurnitureLibrary() {
     const room = this.room;
+    const q = this._furnQuery.trim().toLowerCase();
+    const lang = this.hass?.language ?? "en";
     return html`<section>
       <h3>${this.t("furniture_add")}</h3>
       <p class="fp3d-sub">${room ? this.t("furniture_into", { room: room.name }) : this.t("furniture_pick_room")}</p>
-      ${Object.entries(FURNITURE_GROUPS).map(
-        ([group, types]) => html`<h4 class="fp3d-lib-head">${this.t(`furn_group_${group}` as I18nKey)}</h4>
-          <div class="fp3d-library">
-            ${types.map((t) => this.libraryButton(t, this.t(`furn_${t}` as I18nKey)))}
-          </div>`,
+      <input
+        class="fp3d-search"
+        type="search"
+        placeholder=${this.t("furniture_search")}
+        .value=${this._furnQuery}
+        @input=${(e: Event) => (this._furnQuery = (e.target as HTMLInputElement).value)}
+      />
+      ${Object.entries(FURNITURE_GROUPS).map(([group, types]) =>
+        this.librarySection(
+          `group:${group}`,
+          this.t(`furn_group_${group}` as I18nKey),
+          types.map((t) => ({ type: t, label: this.t(`furn_${t}` as I18nKey) })),
+          q,
+        ),
       )}
-      ${(this.packs ?? []).map(
-        (pack) => html`<h4 class="fp3d-lib-head">${pack.name}</h4>
-          <div class="fp3d-library">
-            ${pack.items.map((it) => this.libraryButton(packType(pack.id, it.id), packItemName(it, this.hass?.language ?? "en")))}
-          </div>`,
+      ${(this.packs ?? []).map((pack) =>
+        this.librarySection(
+          `pack:${pack.id}`,
+          pack.name,
+          pack.items.map((it) => ({ type: packType(pack.id, it.id), label: packItemName(it, lang) })),
+          q,
+        ),
       )}
     </section>
     ${this.renderPacks()}`;
@@ -3579,6 +3628,32 @@ export class Fp3dEditor extends LitElement {
         stroke: var(--fp3d-accent);
         stroke-width: 1.5;
         stroke-linecap: round;
+      }
+      .fp3d-lib-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        padding: 6px 0;
+        border: 0;
+        background: none;
+        font: inherit;
+        cursor: pointer;
+        text-align: left;
+      }
+      .fp3d-lib-toggle:hover {
+        color: var(--fp3d-text);
+      }
+      .fp3d-lib-caret {
+        width: 12px;
+        color: var(--fp3d-accent);
+      }
+      .fp3d-lib-count {
+        margin-left: auto;
+        font-weight: 500;
+        letter-spacing: 0;
+        text-transform: none;
+        opacity: 0.7;
       }
       .fp3d-lib-head {
         margin: 10px 0 0;
