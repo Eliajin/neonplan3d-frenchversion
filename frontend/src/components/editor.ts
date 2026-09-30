@@ -99,6 +99,8 @@ export class Fp3dEditor extends LitElement {
     _packMsg: { state: true },
     _preview: { state: true },
     _doc: { state: true },
+    _doc3d: { state: true },
+    _split: { state: true },
     _floorId: { state: true },
     _roomId: { state: true },
     _vertex: { state: true },
@@ -137,6 +139,11 @@ export class Fp3dEditor extends LitElement {
   /** Picture of the furniture under the pointer in the library. */
   private declare _preview: { type: string; url: string | null; left: number; top: number } | null;
   private declare _doc: Building;
+  /** The draft as the 3D pane shows it (follows _doc with a short delay, so drags stay smooth). */
+  private declare _doc3d: Building;
+  private doc3dTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The live 3D pane next to the plan (remembered per browser). */
+  private declare _split: boolean;
   private declare _floorId: string | null;
   private declare _roomId: string | null;
   private declare _vertex: number | null;
@@ -199,6 +206,14 @@ export class Fp3dEditor extends LitElement {
     this._floorMenu = false;
     this._openingPreset = "door";
     this._packMsg = null;
+    let split = false;
+    try {
+      split = localStorage.getItem("neonplan3d.editor3d") === "1";
+    } catch {
+      // no storage
+    }
+    this._split = split;
+    this._doc3d = this._doc;
     this._preview = null;
     this._measureLen = 3;
     this._packages = false;
@@ -234,6 +249,8 @@ export class Fp3dEditor extends LitElement {
   protected willUpdate(changed: PropertyValues): void {
     // this bundle keeps its own pack registry
     if (changed.has("packs")) setPacks(this.packs ?? []);
+    if (changed.has("_doc") && this._split) this.queue3d();
+    if (changed.has("_split") && this._split) this._doc3d = this._doc;
     if (changed.has("building") && this.building !== this._doc) {
       this._doc = this.building;
       if (!this._doc.floors.some((f) => f.id === this._floorId)) this._floorId = this._doc.floors[0]?.id ?? null;
@@ -251,6 +268,92 @@ export class Fp3dEditor extends LitElement {
       }
     });
     this.resizeObserver.observe(stage);
+  }
+
+  /** Hand the draft to the 3D pane a moment after the last change (a drag changes it many times a second). */
+  private queue3d(): void {
+    clearTimeout(this.doc3dTimer);
+    this.doc3dTimer = setTimeout(() => (this._doc3d = this._doc), 150);
+  }
+
+  private toggleSplit(): void {
+    this._split = !this._split;
+    try {
+      localStorage.setItem("neonplan3d.editor3d", this._split ? "1" : "0");
+    } catch {
+      // no storage: the choice lasts for this page
+    }
+  }
+
+  /** Furnishing in the 3D pane: the item moved there is moved in the draft (undoable, saved with the plan). */
+  private onFurnitureMoved3d(e: CustomEvent<{ id: string; x: number; z: number }>): void {
+    const { id, x, z } = e.detail;
+    const wall = this._doc.settings.wall_interior;
+    this.change((doc) => {
+      for (const floor of doc.floors) {
+        const f = floor.furniture.find((m) => m.id === id);
+        if (!f) continue;
+        Object.assign(f, { x, z });
+        const snap = snapToWall(floor, f, wall);
+        if (snap) Object.assign(f, snap);
+      }
+    });
+  }
+
+  private onDeviceMoved3d(e: CustomEvent<{ id: string; x: number; z: number }>): void {
+    const { id, x, z } = e.detail;
+    this.change((doc) => {
+      for (const floor of doc.floors) {
+        const p = floor.placements.find((d) => d.entity_id === id);
+        if (p) Object.assign(p, { x, z });
+      }
+    });
+  }
+
+  private render3d() {
+    return html`<div class="fp3d-editor-3d">
+      <fp3d-view3d
+        .hass=${this.hass}
+        .building=${this._doc3d}
+        .floorId=${this._floorId}
+        .roomId=${null}
+        .wallMode=${"cut"}
+        .explode=${false}
+        .markerMode=${"important"}
+        .heatMode=${"none"}
+        .theme=${"neon"}
+        .packs=${this.packs}
+        .showEnergy=${false}
+        .flows=${false}
+        ?furnish=${this.isAdmin}
+        .selectedFurniture=${this._furnitureId}
+        .selectedDevice=${this._deviceId}
+        .quality=${"auto"}
+        .floorThumbs=${false}
+        .roomLabels=${true}
+        .floorStack=${"single"}
+        .panelOpen=${false}
+        .alerts=${false}
+        .scenes=${false}
+        @furniture-select=${(e: CustomEvent<{ id: string | null }>) => {
+          if (e.detail.id) this.selectItem("furniture", e.detail.id);
+          else if (this._furnitureId) this.selectItem("furniture", null);
+        }}
+        @furniture-move=${this.onFurnitureMoved3d}
+        @device-select=${(e: CustomEvent<{ id: string | null }>) => {
+          if (e.detail.id) this.selectItem("device", e.detail.id);
+          else if (this._deviceId) this.selectItem("device", null);
+        }}
+        @device-move=${this.onDeviceMoved3d}
+        @floor-tap=${(e: CustomEvent<{ floorId: string | null }>) => {
+          if (e.detail.floorId) this._floorId = e.detail.floorId;
+        }}
+        @room-tap=${(e: CustomEvent<{ floorId: string; roomId: string | null }>) => {
+          if (e.detail.floorId) this._floorId = e.detail.floorId;
+          if (e.detail.roomId) this.selectItem("room", e.detail.roomId);
+        }}
+      ></fp3d-view3d>
+    </div>`;
   }
 
   protected updated(): void {
@@ -1451,9 +1554,11 @@ export class Fp3dEditor extends LitElement {
               <button ?disabled=${!this._canUndo} @click=${() => this.undo()} title="Ctrl+Z">${this.t("undo")}</button>
               <button ?disabled=${!this._canRedo} @click=${() => this.redo()} title="Ctrl+Y">${this.t("redo")}</button>
               <button @click=${() => this.fit()}>${this.t("fit")}</button>
+              <button aria-pressed=${this._split} title=${this.t("split_3d_hint")} @click=${() => this.toggleSplit()}>${this.t("split_3d")}</button>
             </div>
             ${walls?.warnings.length ? html`<span class="fp3d-warn">${this.t("overlap_warning")}</span>` : nothing}
           </div>
+          <div class="fp3d-stage-pair ${this._split ? "fp3d-split" : ""}">
           <div class="fp3d-canvas-wrap">
             <svg
               class="fp3d-plan fp3d-tool-${this._tool}"
@@ -1475,6 +1580,8 @@ export class Fp3dEditor extends LitElement {
               ${this.renderDraft()} ${this.renderGuides()}
             </svg>
             <p class="fp3d-hint">${!floor ? this.t("hint_empty") : this.t(`hint_${this._tool}` as I18nKey)}</p>
+          </div>
+          ${this._split ? this.render3d() : nothing}
           </div>
         </div>
         <aside class="fp3d-side">${this.renderSide(floor)}</aside>
@@ -2974,6 +3081,36 @@ export class Fp3dEditor extends LitElement {
       .fp3d-parking-row select {
         flex: 1;
         min-width: 0;
+      }
+      .fp3d-stage-pair {
+        display: flex;
+        min-height: 0;
+        min-width: 0;
+      }
+      .fp3d-stage-pair > .fp3d-canvas-wrap {
+        flex: 1 1 55%;
+        min-width: 0;
+      }
+      .fp3d-editor-3d {
+        flex: 1 1 45%;
+        min-width: 280px;
+        min-height: 0;
+        border-left: 1px solid var(--fp3d-line);
+        container-type: size;
+        container-name: fp3d;
+      }
+      .fp3d-editor-3d fp3d-view3d {
+        display: block;
+        height: 100%;
+      }
+      .fp3d-narrow .fp3d-stage-pair.fp3d-split {
+        flex-direction: column;
+      }
+      .fp3d-narrow .fp3d-editor-3d {
+        flex: 0 0 42%;
+        min-width: 0;
+        border-left: none;
+        border-top: 1px solid var(--fp3d-line);
       }
       .fp3d-canvas-wrap {
         position: relative;

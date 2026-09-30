@@ -56,6 +56,7 @@ export class Fp3dView3d extends LitElement {
     flows: { attribute: false },
     furnish: { type: Boolean },
     selectedFurniture: { attribute: false },
+    selectedDevice: { attribute: false },
     _sky: { state: true },
     quality: { attribute: false },
     showStats: { type: Boolean },
@@ -100,6 +101,7 @@ export class Fp3dView3d extends LitElement {
   /** Furnishing: furniture and lamps are dragged in 3D (admins, panel only). */
   declare furnish: boolean;
   declare selectedFurniture: string | null;
+  declare selectedDevice: string | null;
   /** How much daylight there is (0 = night, 1 = day), from sun.sun. */
   private declare _sky: number;
   declare quality: Quality;
@@ -185,6 +187,7 @@ export class Fp3dView3d extends LitElement {
     this.showEnergy = true;
     this.flows = null;
     this.selectedFurniture = null;
+    this.selectedDevice = null;
     this._sky = 0;
     this.quality = "auto";
     this.showStats = false;
@@ -327,6 +330,7 @@ export class Fp3dView3d extends LitElement {
       this.syncDevices(true);
     }
     if (changed.has("selectedFurniture")) v.selectFurniture(this.selectedFurniture);
+    if (changed.has("selectedDevice")) v.setSelectedDevice(this.selectedDevice);
     if (changed.has("quality") && changed.get("quality") !== undefined) {
       v.setQuality(this.quality);
       this._low = v.low;

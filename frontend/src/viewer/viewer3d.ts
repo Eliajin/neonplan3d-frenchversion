@@ -2105,6 +2105,12 @@ export class FloorplanViewer {
     return true;
   }
 
+  /** Select a device (its pin is marked), or none. */
+  setSelectedDevice(id: string | null): void {
+    if (id === this.selectedDevice) return;
+    this.selectDevice(id);
+  }
+
   /** Mark the selected device's pin; selecting a device drops the furniture selection and vice versa. */
   private selectDevice(id: string | null): void {
     if (id && this.selectedFurniture) {
