@@ -105,6 +105,9 @@ FURNITURE_SCHEMA = vol.Schema(
         # linked entities (e.g. the TV's media player, a power sensor): None = automatic, "none" = no entity
         vol.Optional("entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Optional("power", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        # smart fridge: door sensors of the left and the right door
+        vol.Optional("door_left", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        vol.Optional("door_right", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # parking spots: the vehicle shown (a pack item type) while the entity reports a car, its size
         # factor, and a sensor naming the kind of vehicle with a state -> vehicle mapping
         # height of the bottom edge above the floor (None = default: the floor, a pack item's mount)

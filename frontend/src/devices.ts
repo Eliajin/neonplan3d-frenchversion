@@ -1,7 +1,7 @@
 // Devices of a room: which entities belong to an area, what kind they are, how they are placed and
 // what their state looks like. Pure functions (no Lit, no three.js) so they can be tested directly.
 
-import type { Floor, LampMount, Opening, Placement, Room, Vec2 } from "./model.ts";
+import type { EntityRef, Floor, LampMount, Opening, Placement, Room, Vec2 } from "./model.ts";
 import { centroid, pointInPolygon } from "./model.ts";
 import { packScreen } from "./packs.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
@@ -495,6 +495,7 @@ const FURNITURE_NAMES: Record<string, RegExp> = {
   tv_wall: /\b(tv|fernseh|television|fire ?tv|apple ?tv|chromecast|shield)/i,
   desk: /\b(pc|computer|rechner|desktop|monitor|workstation)/i,
   fridge: /(kühl|fridge|gefrier|freezer)/i,
+  fridge_smart: /(kühl|fridge|gefrier|freezer)/i,
   stove: /(herd|kochfeld|cooktop|stove|induktion)/i,
   kitchen_tall: /(backofen|oven|ofen)/i,
   dishwasher: /(spülmaschine|geschirrspül|dishwasher)/i,
@@ -524,7 +525,19 @@ export function isMediaFurniture(type: string): boolean {
 }
 /** Furniture with a screen that can show a media player or a picture rule (media furniture and the desk's monitor). */
 export function hasScreen(type: string): boolean {
-  return isMediaFurniture(type) || type === "desk";
+  return isMediaFurniture(type) || type === "desk" || type === "fridge_smart";
+}
+
+/** Smart fridges: which of their doors stand open now (a door sensor reporting "on" or "open"). */
+export function fridgeDoors(hass: HomeAssistant, floors: readonly Floor[]): Map<string, { left: boolean; right: boolean }> {
+  const open = (id: EntityRef | undefined) => {
+    if (!id || id === "none") return false;
+    const s = hass.states[id]?.state;
+    return s === "on" || s === "open";
+  };
+  const out = new Map<string, { left: boolean; right: boolean }>();
+  for (const floor of floors) for (const f of floor.furniture) if (f.type === "fridge_smart") out.set(f.id, { left: open(f.door_left), right: open(f.door_right) });
+  return out;
 }
 /** Name hints for picking a lamp's light (a light that fits the name wins, otherwise any free one). */
 const LAMP_NAMES: Record<string, RegExp> = {

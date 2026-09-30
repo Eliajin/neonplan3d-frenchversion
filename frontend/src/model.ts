@@ -82,6 +82,9 @@ export interface Furniture {
   entity?: EntityRef;
   /** Power sensor (null = automatic: the linked entity's device or a matching name). */
   power?: EntityRef;
+  /** Smart fridge: door sensors of the left (freezer) and right (fridge) door; the doors open in 3D while they report open. */
+  door_left?: EntityRef;
+  door_right?: EntityRef;
   /** Height of the bottom edge above the floor (null = default: the floor, a pack item's mount, a surface below). */
   mount_y?: number | null;
   /** Screens: pictures shown while an entity is in a state (first match wins; "*" = any state). */
@@ -359,6 +362,7 @@ export const FURNITURE_TYPES = [
   "stairs",
   "robot_vacuum",
   "parking",
+  "fridge_smart",
 ] as const;
 
 /** Furniture library sections (the editor lists them in this order). */
@@ -366,7 +370,7 @@ export const FURNITURE_GROUPS: Record<string, FurnitureType[]> = {
   lights: ["lamp_ceiling", "lamp_downlight", "lamp_spot", "lamp_panel", "lamp_pendant", "lamp_floor", "lamp_uplight", "lamp_table", "lamp_wall", "led_strip", "lamp_bollard", "lamp_garden"],
   living: ["sofa", "armchair", "stool", "coffee_table", "tv_board", "tv_wall", "sideboard", "shelf", "plant", "rug"],
   dining: ["table", "table_round", "chair", "bench", "corner_bench", "bar_stool"],
-  kitchen: ["kitchen", "kitchen_wall", "kitchen_tall", "island", "sink", "stove", "dishwasher", "fridge"],
+  kitchen: ["kitchen", "kitchen_wall", "kitchen_tall", "island", "sink", "stove", "dishwasher", "fridge", "fridge_smart"],
   sleeping: ["bed", "bunk_bed", "nightstand", "wardrobe", "dresser"],
   bath: ["bathtub", "shower", "wc", "washbasin", "washer", "dryer"],
   work: ["desk", "office_chair", "tall_cabinet", "coat_rack", "radiator", "stairs", "robot_vacuum"],
@@ -462,6 +466,7 @@ export const ELECTRIC_FURNITURE = new Set<string>([
   "tv_wall",
   "desk",
   "fridge",
+  "fridge_smart",
   "stove",
   "kitchen_tall",
   "dishwasher",
@@ -486,6 +491,7 @@ export const FURNITURE_SIZE: Record<FurnitureType, [number, number, number]> = {
   shelf: [0.9, 0.35, 1.9],
   kitchen: [2.4, 0.62, 0.92],
   fridge: [0.6, 0.65, 1.8],
+  fridge_smart: [0.91, 0.73, 1.78],
   stove: [0.6, 0.62, 0.92],
   sink: [0.9, 0.62, 0.92],
   bathtub: [1.7, 0.75, 0.58],

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { appColor, areaEntities, autoPlace, entityName, furnitureEntities, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, powerSensorsOf, primaryEntities, roomPanelEntities, windowPosition } from "./devices.ts";
+import { appColor, areaEntities, autoPlace, entityName, fridgeDoors, furnitureEntities, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, powerSensorsOf, primaryEntities, roomPanelEntities, windowPosition } from "./devices.ts";
 import type { Floor, Opening, Room } from "./model.ts";
 import { centroid, newFloor, pointInPolygon } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -311,4 +311,25 @@ test("area and power lookups are cached per registry and refreshed when the regi
   assert.ok(!areaEntities(hass, "wohnen").includes("light.spaet"));
   hass.states = { ...hass.states, "light.spaet": { entity_id: "light.spaet", state: "on", attributes: {} } };
   assert.ok(areaEntities(hass, "wohnen").includes("light.spaet"));
+});
+
+test("smart fridge doors follow their door sensors ('on' or 'open'; none/unset = closed)", () => {
+  const hass = hassWith();
+  hass.states["binary_sensor.gefrier"] = { entity_id: "binary_sensor.gefrier", state: "on", attributes: {} };
+  hass.states["binary_sensor.kuehl"] = { entity_id: "binary_sensor.kuehl", state: "off", attributes: {} };
+  const floor = {
+    ...newFloor("f", "F", 0),
+    furniture: [
+      { id: "a", type: "fridge_smart", x: 1, z: 1, rotation: 0, w: 0.9, d: 0.7, h: 1.8, variant: null, door_left: "binary_sensor.gefrier", door_right: "binary_sensor.kuehl" },
+      { id: "b", type: "fridge_smart", x: 3, z: 1, rotation: 0, w: 0.9, d: 0.7, h: 1.8, variant: null, door_right: "none" },
+      { id: "c", type: "fridge", x: 5, z: 1, rotation: 0, w: 0.6, d: 0.6, h: 1.8, variant: null },
+    ],
+  };
+  assert.deepEqual(
+    [...fridgeDoors(hass, [floor])],
+    [
+      ["a", { left: true, right: false }],
+      ["b", { left: false, right: false }],
+    ],
+  );
 });

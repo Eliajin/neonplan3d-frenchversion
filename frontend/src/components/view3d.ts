@@ -14,7 +14,7 @@ import {
   openingState,
   TOGGLE_KINDS,
   type FurnitureLinks,
-  type OpeningEntities, hasScreen, pictureRuleMatches,
+  type OpeningEntities, fridgeDoors, hasScreen, pictureRuleMatches,
 } from "../devices.ts";
 import { alertColor, alertEntities, alertSources, alertText, findAlerts, type Alert, type AlertSources } from "../alerts.ts";
 import { iconPath, iconSvg } from "../icons.ts";
@@ -397,6 +397,7 @@ export class Fp3dView3d extends LitElement {
       const presence = b.presence.flatMap((p) => [p.person, p.sensor]);
       const lights = b.floors.flatMap((f) => f.rooms.flatMap((r) => areaEntities(hass, r.area_id).filter((id) => kindOf(id) === "light")));
       const furniture = [...this.furnitureLinks.values()].flatMap((l) => [l.entity, l.power]);
+      const doors = b.floors.flatMap((f) => f.furniture.flatMap((m) => [m.door_left ?? null, m.door_right ?? null]));
       const pictureRules = b.floors.flatMap((f) => f.furniture.flatMap((m) => (m.pictures ?? []).flatMap((r) => [r.entity, ...(r.image.startsWith("camera:") ? [r.image.slice(7)] : [])])));
       const heat =
         this.heatMode === "none"
@@ -406,7 +407,7 @@ export class Fp3dView3d extends LitElement {
       const warn = this.alertSrc ? alertEntities(this.alertSrc) : [];
       const parking = parkingEntities(b.floors);
       const motion = trailSources(hass, b).map((s) => s.entity);
-      const all = [...placed, ...cameraSensors, ...links, ...power, ...furniture, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights, ...heat, ...warn, ...parking, ...motion, "sun.sun"];
+      const all = [...placed, ...cameraSensors, ...links, ...power, ...furniture, ...doors, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights, ...heat, ...warn, ...parking, ...motion, "sun.sun"];
       this.watched = [...new Set(all.filter((id): id is string => !!id))];
       force = true;
     }
@@ -449,6 +450,7 @@ export class Fp3dView3d extends LitElement {
     v.setTrail(trail);
     v.setPickTargets(furniture.targets, this.openingTargets());
     v.setScreens(furniture.screens);
+    v.setFridgeDoors(fridgeDoors(hass, b.floors));
     v.setRobots(this.robotInfos(hass, b));
     v.setParked(parkedVehicles(hass, b));
     const types = new Map(b.floors.flatMap((f) => f.openings.map((o) => [o.id, o.type] as const)));
@@ -651,9 +653,12 @@ export class Fp3dView3d extends LitElement {
     }
     // picture rules: the first rule whose entity is in its state puts its picture on the screen
     this.cameraScreens = 0;
+    const fridges = fridgeDoors(hass, b.floors);
     for (const floor of b.floors) {
       for (const f of floor.furniture) {
         if (!f.pictures?.length || !hasScreen(f.type)) continue;
+        // a fridge's screen sits on its right door: no picture while that door stands open
+        if (f.type === "fridge_smart" && fridges.get(f.id)?.right) continue;
         const rule = f.pictures.find((r) => pictureRuleMatches(hass, r));
         if (!rule) continue;
         const picture = this.pictureUrl(rule.image);

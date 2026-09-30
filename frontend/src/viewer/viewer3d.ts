@@ -46,7 +46,7 @@ import { centroid, pointInPolygon } from "../model.ts";
 import { buildFloorGeometry, SLAB, stairHoles, type FloorGeometry } from "./build.ts";
 import { OrbitControls, type OrbitView } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
-import { pushCameraModel, pushPackLamp, screenRect } from "./furniture.ts";
+import { pushCameraModel, pushPackLamp, screenRect, pushFridgeDoors } from "./furniture.ts";
 import { mountBase, packItem, setPacks, type FurniturePack } from "../packs.ts";
 import { withVehicles } from "../parking.ts";
 import { buildRoof } from "./roof.ts";
@@ -298,6 +298,8 @@ interface FloorView {
   coneMesh: Mesh;
   /** Motion trail on the floor (discs and ribbons). */
   trailMesh: Mesh;
+  /** Doors of smart fridges (they swing open with their sensors). */
+  fridgeMesh: Mesh;
   /** Triangle ranges of lamps (entity ids), furniture walls mesh and openings, for tapping. */
   lampTris: { id: string; start: number; end: number }[];
   /** Triangle range of every camera's field-of-view wedge, by device id (a tap on it hits the camera). */
@@ -360,6 +362,8 @@ export class FloorplanViewer {
   private readonly patternTexture: CanvasTexture;
   private readonly blindTexture: CanvasTexture;
   private openingTargets = new Map<string, OpeningState>();
+  /** Smart fridge doors: how far each stands open (0…1) and where it is going. */
+  private fridges = new Map<string, { l: number; r: number; tl: number; tr: number }>();
   private screens = new Map<string, ScreenState>();
   /** Entities behind furniture (TV, …) and openings (blind, contact), for tapping them in 3D. */
   private pickFurniture = new Map<string, string>();
@@ -817,6 +821,52 @@ export class FloorplanViewer {
     this.invalidate();
   }
 
+  /** Which doors of the smart fridges stand open; the doors swing there over a few frames. */
+  setFridgeDoors(doors: Map<string, { left: boolean; right: boolean }>): void {
+    for (const [id, d] of doors) {
+      const st = this.fridges.get(id) ?? { l: d.left ? 1 : 0, r: d.right ? 1 : 0, tl: 0, tr: 0 };
+      st.tl = d.left ? 1 : 0;
+      st.tr = d.right ? 1 : 0;
+      this.fridges.set(id, st);
+    }
+    for (const id of [...this.fridges.keys()]) if (!doors.has(id)) this.fridges.delete(id);
+    this.invalidate();
+  }
+
+  private stepFridges(dt: number): boolean {
+    const k = 1 - Math.exp(-dt / OPENING_TAU);
+    const touched = new Set<string>();
+    for (const [id, st] of this.fridges) {
+      for (const [cur, to] of [["l", "tl"], ["r", "tr"]] as const) {
+        const d = st[to] - st[cur];
+        if (Math.abs(d) < 0.004) {
+          if (d !== 0) {
+            st[cur] = st[to];
+            touched.add(id);
+          }
+          continue;
+        }
+        st[cur] += d * k;
+        touched.add(id);
+      }
+    }
+    if (!touched.size) return false;
+    for (const fv of this.floors) if (fv.floor.furniture.some((f) => touched.has(f.id))) this.buildFridges(fv);
+    return true;
+  }
+
+  private buildFridges(fv: FloorView): void {
+    const buf = new GeoBuffer();
+    for (const f of fv.floor.furniture) {
+      if (f.type !== "fridge_smart") continue;
+      const st = this.fridges.get(f.id);
+      pushFridgeDoors(buf, f, mountBase(fv.floor, f), st?.l ?? 0, st?.r ?? 0);
+    }
+    fv.fridgeMesh.geometry.dispose();
+    fv.fridgeMesh.geometry = buf.geometry();
+    fv.fridgeMesh.visible = buf.count > 0;
+  }
+
   resetView(): void {
     this.fit(700);
   }
@@ -1184,6 +1234,8 @@ export class FloorplanViewer {
       const trailMesh = new Mesh(new Geometry(), materials.cones);
       trailMesh.visible = false;
       trailMesh.renderOrder = 7;
+      const fridgeMesh = new Mesh(new Geometry(), materials.lamps);
+      fridgeMesh.visible = false;
       const screenMesh = new Mesh(new Geometry(), materials.screens);
       screenMesh.visible = false;
       screenMesh.renderOrder = 5;
@@ -1212,6 +1264,7 @@ export class FloorplanViewer {
         haloMesh,
         coneMesh,
         trailMesh,
+        fridgeMesh,
         screenMesh,
         glassWalls,
       );
@@ -1269,6 +1322,7 @@ export class FloorplanViewer {
         haloMesh,
         coneMesh,
         trailMesh,
+        fridgeMesh,
         lampTris: [],
         coneTris: [],
         lampFurnTris: [],
@@ -1299,6 +1353,7 @@ export class FloorplanViewer {
       });
     }
     this.floorMap = new Map(this.floors.map((f) => [f.floor.id, f]));
+    for (const fv of this.floors) this.buildFridges(fv);
     this.labelsDirty = true;
     if (this.floorId && !b.floors.some((f) => f.id === this.floorId)) this.floorId = null;
     for (const fv of this.floors) {
@@ -2557,7 +2612,7 @@ export class FloorplanViewer {
     } else this.orbitLast = 0;
     const cameraMoving = this.controls.update(now);
     const floorsMoving = this.stepFloors(dt);
-    const openingsMoving = this.stepOpenings(dt);
+    const openingsMoving = this.stepOpenings(dt) || this.stepFridges(dt);
     let flashing = false;
     if (this.flashes.size) {
       // only the floors with a flashing lamp are recoloured (an expired flash needs one last pass)

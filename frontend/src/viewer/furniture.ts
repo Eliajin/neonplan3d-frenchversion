@@ -299,6 +299,72 @@ function fridge(b: Builder, w: number, d: number, h: number): void {
   b.seg(hx, split - 0.4, d / 2 + 0.015, hx, split - 0.08, d / 2 + 0.015, EDGE_GLOW);
 }
 
+/** Smart side-by-side fridge without its doors (they move: see pushFridgeDoors): the body and, behind the doors, shelves. */
+function fridgeSmart(b: Builder, w: number, d: number, h: number): void {
+  const front = d / 2 - FRIDGE_DOOR;
+  b.box(-w / 2, w / 2, 0.02, h, -d / 2, front, C.body, C.bodyTop, EDGE_FURN);
+  b.box(-w / 2 + 0.05, w / 2 - 0.05, 0, 0.02, -d / 2 + 0.05, front - 0.05, C.dark);
+  // shelves of both compartments, seen when a door stands open
+  for (const y of [0.35, 0.7, 1.05, 1.4]) {
+    if (y > h - 0.15) continue;
+    b.seg(-w / 2 + 0.03, y, front + 0.001, -0.03, y, front + 0.001, EDGE_FAINT);
+    b.seg(0.03, y, front + 0.001, w / 2 - 0.03, y, front + 0.001, EDGE_FAINT);
+  }
+}
+
+/** Thickness of a smart fridge's doors. */
+export const FRIDGE_DOOR = 0.06;
+
+/**
+ * The two doors of a smart fridge, each swung open by a fraction (0 closed … 1 wide open) around its
+ * outer hinge: the left one carries the water dispenser, the right one the screen.
+ */
+export function pushFridgeDoors(buf: GeoBuffer, f: Pick<Furniture, "x" | "z" | "rotation" | "w" | "d" | "h">, base: number, left: number, right: number): void {
+  const a = f.rotation * DEG;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  const tf = (lx: number, lz: number): [number, number] => [f.x + lx * c - lz * s, f.z + lx * s + lz * c];
+  const y0 = base + 0.05;
+  const y1 = base + f.h - 0.02;
+  const front = new Color(0x1f2d4c);
+  const side = new Color(C.body);
+  const dark = new Color(C.dark);
+  const accent = new Color(C.accent);
+  const dw = f.w / 2 - 0.006;
+  // a door: u runs from the hinge along the door (positive to the right), v through its thickness (0 = front face)
+  const door = (hx: number, sign: 1 | -1, angle: number) => {
+    const ca = Math.cos(angle);
+    const sa = Math.sin(angle);
+    const at = (u: number, v: number): [number, number] => tf(hx + sign * (u * ca - v * sa), f.d / 2 + u * sa + v * ca);
+    const quad = (p: [number, number][], ya: number, yb: number, col: Color) => {
+      const [p0, p1, p2, p3] = p;
+      buf.tri([p0[0], ya, p0[1]], [p1[0], ya, p1[1]], [p2[0], yb, p2[1]], col);
+      buf.tri([p0[0], ya, p0[1]], [p2[0], yb, p2[1]], [p3[0], yb, p3[1]], col);
+    };
+    const box = (u0: number, u1: number, ya: number, yb: number, v0: number, v1: number, col: Color, face = col) => {
+      const q = [at(u0, v1), at(u1, v1), at(u1, v0), at(u0, v0)];
+      // front (v1 side), back, sides, top and bottom
+      quad([q[0], q[1], q[1], q[0]], ya, yb, face);
+      quad([q[3], q[2], q[2], q[3]], ya, yb, col);
+      quad([q[0], q[3], q[3], q[0]], ya, yb, col);
+      quad([q[1], q[2], q[2], q[1]], ya, yb, col);
+      quad([q[0], q[1], q[2], q[3]], yb, yb, col);
+      quad([q[3], q[2], q[1], q[0]], ya, ya, col);
+    };
+    box(0, dw, y0, y1, -FRIDGE_DOOR, 0, side, front);
+    // handle at the free edge
+    box(dw - 0.05, dw - 0.03, base + f.h * 0.45, base + f.h * 0.75, 0.005, 0.025, accent);
+    return box;
+  };
+  const opening = 1.83; // ~105°
+  const leftBox = door(-f.w / 2, 1, left * opening);
+  // water dispenser: a dark recess in the left door
+  leftBox(0.12, 0.3, base + f.h * 0.5, base + f.h * 0.68, 0.001, 0.005, dark);
+  const rightBox = door(f.w / 2, -1, right * opening);
+  // the screen: a dark panel on the right door (a picture rule puts its picture over it)
+  rightBox(0.06, dw - 0.06, base + f.h * 0.52, base + f.h * 0.86, 0.001, 0.005, dark);
+}
+
 function stove(b: Builder, w: number, d: number, h: number): void {
   cabinet(b, w, d - 0.02, h - 0.04, 1, h - 0.24, true);
   b.box(-w / 2, w / 2, h - 0.04, h, -d / 2, d / 2, C.dark, C.dark, EDGE_FURN);
@@ -641,6 +707,11 @@ export function screenRect(f: Furniture, floor?: Floor): { x0: number; x1: numbe
     return { x0: -w / 2 + 0.02, x1: w / 2 - 0.02, y0: y0 + 0.02, y1: y0 + h - 0.02, z: d / 2 + 0.003 };
   }
   if (f.type === "desk") return { x0: -0.28, x1: 0.28, y0: h + 0.1, y1: h + 0.4, z: -d / 2 + 0.115 };
+  if (f.type === "fridge_smart") {
+    // the screen sits on the right door (mirrored: the door's u runs to the left from its hinge at +w/2)
+    const base = floor ? mountBase(floor, f) : 0;
+    return { x0: 0.06, x1: w / 2 - 0.06, y0: base + h * 0.52 + 0.01, y1: base + h * 0.86 - 0.01, z: d / 2 + 0.006 };
+  }
   // glowing fronts of appliances that run and of a radiator that heats
   if (f.type === "radiator") return { x0: -w / 2 + 0.02, x1: w / 2 - 0.02, y0: RADIATOR_Y + 0.02, y1: RADIATOR_Y + h - 0.02, z: d / 2 + 0.004 };
   if (f.type === "washer" || f.type === "dryer") {
@@ -713,6 +784,9 @@ export function pushFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuff
       break;
     case "fridge":
       fridge(b, w, d, h);
+      break;
+    case "fridge_smart":
+      fridgeSmart(b, w, d, h);
       break;
     case "stove":
       stove(b, w, d, h);

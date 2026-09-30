@@ -142,6 +142,7 @@ const shots = [
   { name: "card-portrait-room", query: "?card&floor=eg", width: 700, height: 1000, click: "Wohnzimmer" },
   { name: "view-alert-banner", query: "?alerts", width: 1280, height: 800, click: "Erdgeschoss" },
   { name: "view-trail", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Spur", wait: 1500 },
+  { name: "view-fridge", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Küche", viewScript: "v.markerMode = 'none'; const c = v.viewer.controls; c.view.target.set(6.6, 1.0, 0.8); c.view.radius = 3.6; c.view.theta = -0.75; c.view.phi = 1.2; c.events.change(); v.viewer.invalidate();" },
   { name: "card-alert", query: "?card&alerts", width: 1400, height: 900 },
   { name: "card-scenes", query: "?card&nopanel", width: 1400, height: 900, click: "Wohnzimmer" },
   { name: "card-night", query: "?card&night", width: 1400, height: 900 },
