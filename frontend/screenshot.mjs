@@ -114,6 +114,7 @@ const shots = [
   { name: "card-og-stacked", query: "?card&floor=og&stack=stacked", width: 1400, height: 900 },
   { name: "card-og-single", query: "?card&floor=og&stack=single", width: 1400, height: 900 },
   { name: "view-camera", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Wohnzimmer", viewScript: "v.onDeviceTap('camera.wohnzimmer', 420, 380);" },
+  { name: "view-camera-model", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Wohnzimmer", viewScript: "v.panelOpen = false; v.viewer.flyTo({ target: [0.9, 1.2, 0.9], radius: 4.5, theta: 2.2, phi: 1.0 }, 0);" },
   { name: "view-media-wall", query: "", width: 1280, height: 800, click: "Obergeschoss", then: "Arbeitszimmer", viewScript: "v.markerMode = 'none';" },
   { name: "view-find", query: "", width: 1280, height: 800, viewScript: "v._find = 'licht';" },
   { name: "view-find-go", query: "", width: 1280, height: 800, viewScript: "v._find = 'stehlampe'; setTimeout(() => v.renderRoot.querySelector('.fp3d-find-list button').click(), 300);" },
