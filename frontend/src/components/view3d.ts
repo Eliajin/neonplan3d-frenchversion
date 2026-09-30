@@ -272,6 +272,8 @@ export class Fp3dView3d extends LitElement {
         onDeviceSwipe: (id, phase, dy, x, y) => this.onDeviceSwipe(id, phase, dy, x, y),
         onFurnitureSelect: (id) => this.fire("furniture-select", { id }),
         onFurnitureMove: (id, x, z) => this.fire("furniture-move", { id, x, z }),
+        onDeviceSelect: (id) => this.fire("device-select", { id }),
+        onDeviceMove: (id, x, z) => this.fire("device-move", { id, x, z }),
         // stats can be switched on at any time; they only cause updates while shown
         onStats: (s) => {
           if (this.showStats) this._stats = s;
@@ -320,7 +322,10 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("explode")) v.setExplode(this.explode);
     if (changed.has("floorStack")) v.setFloorStack(this.floorStack);
     if (changed.has("theme")) v.setTheme(this.theme);
-    if (changed.has("furnish")) v.setFurnishMode(this.furnish);
+    if (changed.has("furnish")) {
+      v.setFurnishMode(this.furnish);
+      this.syncDevices(true);
+    }
     if (changed.has("selectedFurniture")) v.selectFurniture(this.selectedFurniture);
     if (changed.has("quality") && changed.get("quality") !== undefined) {
       v.setQuality(this.quality);
@@ -674,6 +679,8 @@ export class Fp3dView3d extends LitElement {
    * off) and keeps devices without an object (sensors, heating, switches) and values (watts, the app).
    */
   private showPin(m: DeviceMarker & { fromFurniture?: boolean }): boolean {
+    // while furnishing every placed device has a pin to grab it by
+    if (this.furnish && !m.fromFurniture) return true;
     if (this.markerMode === "none") return false;
     if (this.markerMode === "all") return true;
     if (m.lamp) return false;
@@ -1573,6 +1580,10 @@ export class Fp3dView3d extends LitElement {
       }
       .fp3d-dev-full .fp3d-dev-text {
         display: inline;
+      }
+      .fp3d-dev-sel {
+        outline: 2px solid var(--fp3d-accent);
+        outline-offset: 2px;
       }
       .fp3d-dev-on {
         color: #2a1a00;

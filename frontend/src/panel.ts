@@ -14,6 +14,8 @@ import type { HeatMode } from "./heatmap.ts";
 import { THEMES, type Theme } from "./themes.ts";
 import { snapToWall } from "./geometry/snap.ts";
 import { furnitureName } from "./furniture-names.ts";
+import { defaultHeight, entityName, kindOf } from "./devices.ts";
+import type { LampMount } from "./model.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
 
 type Mode = "view" | "editor";
@@ -55,6 +57,7 @@ export class Floorplan3dPanel extends LitElement {
     _theme: { state: true },
     _furnish: { state: true },
     _selFurniture: { state: true },
+    _selDevice: { state: true },
     _floorStack: { state: true },
     _roomNames: { state: true },
   };
@@ -78,6 +81,7 @@ export class Floorplan3dPanel extends LitElement {
   private declare _theme: Theme;
   private declare _furnish: boolean;
   private declare _selFurniture: string | null;
+  private declare _selDevice: string | null;
   /** Floors below an opened floor, and whether room names show (both kept per device). */
   private declare _floorStack: FloorStack;
   private declare _roomNames: boolean;
@@ -105,6 +109,7 @@ export class Floorplan3dPanel extends LitElement {
     this._theme = theme && THEMES.includes(theme) ? theme : "neon";
     this._furnish = false;
     this._selFurniture = null;
+    this._selDevice = null;
     const stack = prefs.get("floor_stack");
     this._floorStack = stack === "stacked" || stack === "single" ? stack : "dim";
     this._roomNames = prefs.get("room_names") !== "0";
@@ -165,6 +170,69 @@ export class Floorplan3dPanel extends LitElement {
       if (f) change(f, floor);
     }
     this.data.edit(next);
+  }
+
+  /** Change one placed device (furnishing in 3D) and save. */
+  private editDevice(entityId: string, change: (p: Building["floors"][number]["placements"][number], floor: Building["floors"][number]) => void): void {
+    const b = this.data.building;
+    if (!b) return;
+    const next = structuredClone(b);
+    for (const floor of next.floors) {
+      const p = floor.placements.find((x) => x.entity_id === entityId);
+      if (p) change(p, floor);
+    }
+    this.data.edit(next);
+  }
+
+  private moveDevice(e: CustomEvent<{ id: string; x: number; z: number }>): void {
+    const { id, x, z } = e.detail;
+    this.editDevice(id, (p) => Object.assign(p, { x, z }));
+  }
+
+  private turnDevice(delta: number): void {
+    if (!this._selDevice) return;
+    this.editDevice(this._selDevice, (p) => (p.rotation = ((((p.rotation ?? 0) + delta) % 360) + 360) % 360));
+  }
+
+  private deleteDevice(): void {
+    const id = this._selDevice;
+    const b = this.data.building;
+    if (!id || !b) return;
+    const next = structuredClone(b);
+    for (const floor of next.floors) floor.placements = floor.placements.filter((p) => p.entity_id !== id);
+    this.data.edit(next);
+    this._selDevice = null;
+  }
+
+  /** Height and, for lights, the mount of the selected device, editable in the furnish bar. */
+  private renderDeviceFields(id: string) {
+    const b = this.data.building;
+    const floor = b?.floors.find((fl) => fl.placements.some((p) => p.entity_id === id));
+    const p = floor?.placements.find((x) => x.entity_id === id);
+    if (!floor || !p) return nothing;
+    const kind = kindOf(id);
+    const light = kind === "light";
+    const auto = kind ? defaultHeight(kind, floor.height, light ? (p.mount ?? "ceiling") : null) : 1;
+    return html`${light
+        ? html`<select class="fp3d-size-select" title=${this.t("lamp_mount")} @change=${(e: Event) => this.editDevice(id, (d) => Object.assign(d, { mount: (e.target as HTMLSelectElement).value as LampMount, y: null }))}>
+            ${(["ceiling", "floor", "table", "wall"] as const).map((m) => html`<option value=${m} ?selected=${m === (p.mount ?? "ceiling")}>${this.t(`lamp_${m}`)}</option>`)}
+          </select>`
+        : nothing}
+      <label class="fp3d-size" title=${this.t("marker_height")}
+        >${this.t("size_short_h")}
+        <input
+          type="number"
+          inputmode="decimal"
+          step="0.05"
+          min="0"
+          .value=${String(Math.round((p.y ?? auto) * 100) / 100)}
+          @change=${(e: Event) => {
+            const v = parseFloat((e.target as HTMLInputElement).value.replace(",", "."));
+            if (Number.isFinite(v) && v >= 0) this.editDevice(id, (d) => (d.y = Math.round(v * 1000) / 1000));
+          }}
+        />
+      </label>
+      ${p.y !== null ? html`<button class="fp3d-chip" @click=${() => this.editDevice(id, (d) => (d.y = null))}>${this.t("height_auto")}</button>` : nothing}`;
   }
 
   private furnitureName(id: string): string {
@@ -420,6 +488,8 @@ export class Floorplan3dPanel extends LitElement {
           .selectedFurniture=${this._selFurniture}
           @furniture-select=${(e: CustomEvent<{ id: string | null }>) => (this._selFurniture = e.detail.id)}
           @furniture-move=${this.moveFurniture}
+          @device-select=${(e: CustomEvent<{ id: string | null }>) => (this._selDevice = e.detail.id)}
+          @device-move=${this.moveDevice}
           .quality=${this._quality}
           ?showStats=${this._stats}
           @room-tap=${this.onRoomTap}
@@ -514,8 +584,14 @@ export class Floorplan3dPanel extends LitElement {
                     <button class="fp3d-chip" @click=${() => this.turnFurniture(-45)}>↺ 45°</button>
                     <button class="fp3d-chip" @click=${() => this.turnFurniture(45)}>↻ 45°</button>
                     <button class="fp3d-chip fp3d-danger-chip" @click=${() => this.deleteFurniture()}>${this.t("delete")}</button>`
-                : html`<span>${this.t("furnish_hint")}</span>`}
-              <button class="fp3d-chip fp3d-chip-on" @click=${() => ((this._furnish = false), (this._selFurniture = null))}>${this.t("done")}</button>
+                : this._selDevice
+                  ? html`<span>${entityName(this.hass, this._selDevice)}</span>
+                      ${this.renderDeviceFields(this._selDevice)}
+                      <button class="fp3d-chip" @click=${() => this.turnDevice(-45)}>↺ 45°</button>
+                      <button class="fp3d-chip" @click=${() => this.turnDevice(45)}>↻ 45°</button>
+                      <button class="fp3d-chip fp3d-danger-chip" @click=${() => this.deleteDevice()}>${this.t("delete")}</button>`
+                  : html`<span>${this.t("furnish_hint")}</span>`}
+              <button class="fp3d-chip fp3d-chip-on" @click=${() => ((this._furnish = false), (this._selFurniture = null), (this._selDevice = null))}>${this.t("done")}</button>
             </div>`
           : nothing}
       </div>
@@ -609,6 +685,14 @@ export class Floorplan3dPanel extends LitElement {
         background: var(--fp3d-chrome);
         box-shadow: var(--fp3d-shadow);
         font-size: 13.5px;
+      }
+      .fp3d-size-select {
+        font: inherit;
+        color: var(--fp3d-text);
+        background: var(--fp3d-chrome-solid);
+        border: 1px solid var(--fp3d-line);
+        border-radius: 999px;
+        padding: 4px 10px;
       }
       .fp3d-size {
         display: inline-flex;

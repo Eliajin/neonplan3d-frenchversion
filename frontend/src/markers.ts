@@ -78,6 +78,7 @@ export function buildMarkers(hass: HomeAssistant, building: Building): DeviceMar
         z: pl.z,
         y: pl.y ?? defaultHeight(kind, floor.height, pl.mount ?? null),
         lamp: kind === "light" ? (pl.mount ?? "ceiling") : null,
+        rotation: pl.rotation ?? 0,
         icon: iconSvg(kind),
         name: entityName(hass, pl.entity_id, areaName),
         text: stateText(hass, st),

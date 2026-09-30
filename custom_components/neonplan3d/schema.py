@@ -112,6 +112,8 @@ PLACEMENT_SCHEMA = vol.Schema(
         vol.Required("y"): vol.Any(None, _LENGTH),
         # lights: how the lamp is mounted (None = ceiling)
         vol.Optional("mount", default=None): vol.Any(None, vol.In(["ceiling", "floor", "table", "wall"])),
+        # turn around the vertical axis (degrees)
+        vol.Optional("rotation", default=0.0): vol.Coerce(float),
     },
     extra=vol.ALLOW_EXTRA,
 )

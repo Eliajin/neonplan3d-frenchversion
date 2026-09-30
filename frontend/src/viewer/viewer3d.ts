@@ -86,6 +86,9 @@ export interface ViewerOptions {
    * it; "move" reports the distance from the start (pixels, down positive).
    */
   onDeviceSwipe?: (entityId: string, phase: "start" | "move" | "end", dy: number, x: number, y: number) => boolean | void;
+  /** Furnishing in 3D: a device was selected (null: none) or dragged to a new place. */
+  onDeviceSelect?: (entityId: string | null) => void;
+  onDeviceMove?: (entityId: string, x: number, z: number) => void;
   /** Furnishing in 3D: an item was selected (null: none) or dragged to a new place. */
   onFurnitureSelect?: (furnitureId: string | null) => void;
   onFurnitureMove?: (furnitureId: string, x: number, z: number) => void;
@@ -418,6 +421,10 @@ export class FloorplanViewer {
   /** Furnishing in 3D: items can be dragged; the selected one shows a wireframe box. */
   private furnish = false;
   private selectedFurniture: string | null = null;
+  /** Furnishing: the selected device, the pin a pointer just went down on, and a device being dragged. */
+  private selectedDevice: string | null = null;
+  private pendingDevice: string | null = null;
+  private deviceGrab: { id: string; floorId: string; offset: [number, number]; x: number; z: number; moved: boolean } | null = null;
   private grab: { floorId: string; id: string; offset: [number, number]; x: number; z: number; moved: boolean } | null = null;
   private ghost: LineSegments | null = null;
   private theme: Theme = "neon";
@@ -733,6 +740,7 @@ export class FloorplanViewer {
 
   /** Select a furniture item (wireframe box), or none. */
   selectFurniture(id: string | null): void {
+    if (id && this.selectedDevice) this.selectDevice(null);
     this.selectedFurniture = id;
     this.updateGhost();
     this.invalidate();
@@ -915,6 +923,11 @@ export class FloorplanViewer {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let held = false;
     pin.addEventListener("pointerdown", (e) => {
+      if (this.furnish) {
+        // the controls see this pointer too (no stopPropagation) and call grab(): the device is dragged
+        this.pendingDevice = entityId;
+        return;
+      }
       e.stopPropagation();
       held = false;
       clearTimeout(timer);
@@ -932,6 +945,11 @@ export class FloorplanViewer {
     pin.addEventListener("contextmenu", (e) => e.preventDefault());
     pin.addEventListener("click", (e) => {
       e.stopPropagation();
+      if (this.furnish) {
+        this.selectDevice(entityId);
+        this.options.onDeviceSelect?.(entityId);
+        return;
+      }
       if (held) return;
       const r = pin.getBoundingClientRect();
       const h = this.host.getBoundingClientRect();
@@ -2002,6 +2020,11 @@ export class FloorplanViewer {
 
   private onTap(x: number, y: number): void {
     const hit = this.pick(x, y);
+    if (hit && "entity" in hit && this.furnish) {
+      this.selectDevice(hit.entity);
+      this.options.onDeviceSelect?.(hit.entity);
+      return;
+    }
     if (hit && "entity" in hit) {
       this.flashes.set(hit.entity, performance.now() + FLASH_MS);
       this.invalidate();
@@ -2043,12 +2066,22 @@ export class FloorplanViewer {
 
   private grabFurniture(x: number, y: number): boolean {
     if (!this.furnish) return false;
+    // a device: its pin was pressed, or its lamp model is under the pointer
+    const pending = this.pendingDevice;
+    this.pendingDevice = null;
+    const picked = pending ? null : this.pick(x, y);
+    const deviceId = pending ?? (picked && "entity" in picked ? picked.entity : null);
+    if (deviceId) return this.grabDevice(deviceId, x, y);
     const hit = this.furnitureAt(x, y);
     if (!hit) {
       // a tap on empty space clears the selection, a drag still turns the view
       if (this.selectedFurniture) {
         this.selectFurniture(null);
         this.options.onFurnitureSelect?.(null);
+      }
+      if (this.selectedDevice) {
+        this.selectDevice(null);
+        this.options.onDeviceSelect?.(null);
       }
       return false;
     }
@@ -2061,7 +2094,42 @@ export class FloorplanViewer {
     return true;
   }
 
+  private grabDevice(id: string, x: number, y: number): boolean {
+    const d = this.devices.find((m) => m.id === id);
+    const fv = d && this.floorMap.get(d.floorId);
+    const p = fv && this.floorPoint(fv, x, y);
+    if (!d || !fv || !p) return false;
+    this.deviceGrab = { id, floorId: fv.floor.id, offset: [d.x - p[0], d.z - p[1]], x: d.x, z: d.z, moved: false };
+    this.selectDevice(id);
+    this.options.onDeviceSelect?.(id);
+    return true;
+  }
+
+  /** Mark the selected device's pin; selecting a device drops the furniture selection and vice versa. */
+  private selectDevice(id: string | null): void {
+    if (id && this.selectedFurniture) {
+      this.selectFurniture(null);
+      this.options.onFurnitureSelect?.(null);
+    }
+    this.selectedDevice = id;
+    for (const [entity, pin] of this.devicePins) pin.el.classList.toggle("fp3d-dev-sel", entity === id);
+  }
+
   private dragFurniture(x: number, y: number): void {
+    const dg = this.deviceGrab;
+    if (dg) {
+      const fv = this.floorMap.get(dg.floorId);
+      const d = this.devices.find((m) => m.id === dg.id);
+      const p = fv && this.floorPoint(fv, x, y);
+      if (!fv || !d || !p) return;
+      const grid = this.building?.settings.grid ?? 0.05;
+      dg.x = d.x = Math.round((p[0] + dg.offset[0]) / grid) * grid;
+      dg.z = d.z = Math.round((p[1] + dg.offset[1]) / grid) * grid;
+      dg.moved = true;
+      this.labelsDirty = true;
+      this.invalidate();
+      return;
+    }
     const g = this.grab;
     const fv = g && this.floorMap.get(g.floorId);
     if (!g || !fv) return;
@@ -2076,6 +2144,9 @@ export class FloorplanViewer {
   }
 
   private dropFurniture(): void {
+    const dg = this.deviceGrab;
+    this.deviceGrab = null;
+    if (dg?.moved) this.options.onDeviceMove?.(dg.id, Math.round(dg.x * 1000) / 1000, Math.round(dg.z * 1000) / 1000);
     const g = this.grab;
     this.grab = null;
     if (g?.moved) this.options.onFurnitureMove?.(g.id, Math.round(g.x * 1000) / 1000, Math.round(g.z * 1000) / 1000);

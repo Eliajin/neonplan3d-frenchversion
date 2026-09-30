@@ -90,6 +90,8 @@ export interface Placement {
   y: number | null;
   /** Lights: how the lamp is mounted; null = ceiling. */
   mount?: LampMount | null;
+  /** Turn around the vertical axis (degrees): wall lamps, spots, displays face that way. */
+  rotation?: number;
 }
 
 export interface Background {
@@ -560,7 +562,7 @@ export function normalizeBuilding(b: Building): Building {
     f.outdoor = f.outdoor ?? [];
     f.rooms = f.rooms.map((r) => ({ ...r, panel: r.panel ?? [] }));
     f.ha_floor = f.ha_floor ?? null;
-    f.placements = f.placements.map((p) => ({ ...p, mount: p.mount ?? null }));
+    f.placements = f.placements.map((p) => ({ ...p, mount: p.mount ?? null, rotation: p.rotation ?? 0 }));
     f.furniture = f.furniture.map((m) => ({ ...m, entity: m.entity ?? null, power: m.power ?? null }));
     // lights placed as devices (before lamps existed) become lamps of their mount type
     const lights = f.placements.filter((p) => p.entity_id.startsWith("light."));
