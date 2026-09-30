@@ -328,12 +328,37 @@ export class Fp3dEditor extends LitElement {
     });
   }
 
+  /** Bar under the 3D pane: turn or delete the selected item or device (as when furnishing in the panel). */
+  private render3dBar() {
+    if (!this.isAdmin) return nothing;
+    const f = this.furnitureItem;
+    const d = this.device;
+    if (f) {
+      return html`<div class="fp3d-3d-bar">
+        <span>${furnitureName(this.hass, f.type)}</span>
+        <button class="fp3d-chip" @click=${() => this.rotateFurniture(-45)}>↺ 45°</button>
+        <button class="fp3d-chip" @click=${() => this.rotateFurniture(45)}>↻ 45°</button>
+        <button class="fp3d-chip fp3d-danger-chip" @click=${() => this.deleteFurniture()}>${this.t("delete")}</button>
+      </div>`;
+    }
+    if (d) {
+      return html`<div class="fp3d-3d-bar">
+        <span>${entityName(this.hass, d.entity_id)}</span>
+        <button class="fp3d-chip" @click=${() => this.updateDevice({ rotation: ((((d.rotation ?? 0) - 45) % 360) + 360) % 360 })}>↺ 45°</button>
+        <button class="fp3d-chip" @click=${() => this.updateDevice({ rotation: (((d.rotation ?? 0) + 45) % 360) % 360 })}>↻ 45°</button>
+        <button class="fp3d-chip fp3d-danger-chip" @click=${() => this.removeDevice(d.entity_id)}>${this.t("delete")}</button>
+      </div>`;
+    }
+    return nothing;
+  }
+
   private render3d() {
     return html`<div class="fp3d-editor-3d">
       <div class="fp3d-seg fp3d-3d-walls">
         <button aria-pressed=${this._wall3d === "auto"} @click=${() => (this._wall3d = "auto")}>${this.t("walls_auto")}</button>
         <button aria-pressed=${this._wall3d === "cut"} @click=${() => (this._wall3d = "cut")}>${this.t("walls_cut")}</button>
       </div>
+      ${this.render3dBar()}
       <fp3d-view3d
         .hass=${this.hass}
         .building=${this._doc3d}
@@ -3167,6 +3192,27 @@ export class Fp3dEditor extends LitElement {
         top: 10px;
         left: 10px;
         z-index: 3;
+      }
+      .fp3d-3d-bar {
+        position: absolute;
+        left: 50%;
+        bottom: 12px;
+        transform: translateX(-50%);
+        z-index: 3;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        max-width: calc(100% - 24px);
+        padding: 6px 8px 6px 14px;
+        border-radius: 999px;
+        background: var(--fp3d-chrome);
+        box-shadow: var(--fp3d-shadow);
+        font-size: 13px;
+      }
+      .fp3d-danger-chip {
+        color: var(--fp3d-danger, #ff6b7a);
       }
       .fp3d-narrow .fp3d-stage-pair.fp3d-split {
         flex-direction: column;
