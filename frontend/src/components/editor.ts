@@ -284,6 +284,7 @@ export class Fp3dEditor extends LitElement {
     if (changed.has("_split") && this._split) this._doc3d = this._doc;
     if (changed.has("building") && this.building !== this._doc) {
       this._doc = this.building;
+      this._doc3d = this.building;
       if (!this._doc.floors.some((f) => f.id === this._floorId)) this._floorId = this._doc.floors[0]?.id ?? null;
       if (!this.floor?.rooms.some((r) => r.id === this._roomId)) this._roomId = null;
     }
@@ -450,13 +451,13 @@ export class Fp3dEditor extends LitElement {
         .alerts=${false}
         .scenes=${false}
         @furniture-select=${(e: CustomEvent<{ id: string | null }>) => {
-          if (e.detail.id) this.selectItem("furniture", e.detail.id);
-          else if (this._furnitureId) this.selectItem("furniture", null);
+          if (e.detail.id) this.selectFrom3d("furniture", e.detail.id);
+          else if (this._furnitureId) this.selectFrom3d("furniture", null);
         }}
         @furniture-move=${this.onFurnitureMoved3d}
         @device-select=${(e: CustomEvent<{ id: string | null }>) => {
-          if (e.detail.id) this.selectItem("device", e.detail.id);
-          else if (this._deviceId) this.selectItem("device", null);
+          if (e.detail.id) this.selectFrom3d("device", e.detail.id);
+          else if (this._deviceId) this.selectFrom3d("device", null);
         }}
         @device-move=${this.onDeviceMoved3d}
         @floor-tap=${(e: CustomEvent<{ floorId: string | null }>) => {
@@ -464,7 +465,7 @@ export class Fp3dEditor extends LitElement {
         }}
         @room-tap=${(e: CustomEvent<{ floorId: string; roomId: string | null }>) => {
           if (e.detail.floorId) this._floorId = e.detail.floorId;
-          if (e.detail.roomId) this.selectItem("room", e.detail.roomId);
+          if (e.detail.roomId) this.selectFrom3d("room", e.detail.roomId);
         }}
       ></fp3d-view3d>
     </div>`;
@@ -1309,6 +1310,8 @@ export class Fp3dEditor extends LitElement {
   /** Select a room, an opening or a furniture item (only one at a time). */
   private selectItem(kind: "room" | "opening" | "furniture" | "device" | "outdoor", id: string | null): void {
     this._notice = null;
+    // a selection made in the plan (or by a tool) opens the folded sidebar
+    if (id) this._sideOpen = true;
     this._outdoorId = kind === "outdoor" ? id : null;
     if (kind === "outdoor") this._roomId = null;
     if (kind !== "room" || id !== this._roomId) this._vertex = null;
@@ -2079,7 +2082,14 @@ export class Fp3dEditor extends LitElement {
 
   /** Something is selected or being placed: the sidebar has a form or the library to show. */
   private get sideHasWork(): boolean {
-    return !!(this._roomId || this._openingId || this._furnitureId || this._deviceId || this._outdoorId || this._tool === "furniture" || this._tool === "outdoor" || this._tool === "opening");
+    return this._tool === "furniture" || this._tool === "outdoor" || this._tool === "opening";
+  }
+
+  /** Select from the 3D pane: the folded sidebar stays folded (the bar under the pane has the essentials). */
+  private selectFrom3d(kind: "room" | "furniture" | "device", id: string | null): void {
+    const open = this._sideOpen;
+    this.selectItem(kind, id);
+    this._sideOpen = open;
   }
 
   private setSidePinned(pinned: boolean): void {
@@ -2100,6 +2110,9 @@ export class Fp3dEditor extends LitElement {
     if (!open) {
       return html`<aside class="fp3d-side fp3d-side-strip">
         <button class="fp3d-strip-btn" title=${this.t("side_open")} @click=${() => (this._sideOpen = true)}>☰</button>
+        ${this._furnitureId || this._deviceId || this._openingId
+          ? html`<button class="fp3d-strip-btn fp3d-strip-hot" title=${this.t("side_details")} @click=${() => (this._sideOpen = true)}>⚙</button>`
+          : nothing}
         <button class="fp3d-strip-btn" title=${this.t("tool_furniture")} @click=${() => ((this._tool = "furniture"), (this._draft = []))}>🛋</button>
         <button class="fp3d-strip-btn" title=${this.t("tool_opening")} @click=${() => ((this._tool = "opening"), (this._draft = []))}>🚪</button>
       </aside>`;
@@ -2115,7 +2128,7 @@ export class Fp3dEditor extends LitElement {
   private renderPinRow(overlay = false) {
     if (!this._split || this.narrow) return nothing;
     return html`<div class="fp3d-pin-row">
-      ${overlay ? html`<button class="fp3d-btn" @click=${() => ((this._sideOpen = false), this.selectItem("room", null))}>${this.t("side_close")}</button>` : nothing}
+      ${overlay ? html`<button class="fp3d-btn" @click=${() => (this._sideOpen = false)}>${this.t("side_close")}</button>` : nothing}
       <button class="fp3d-btn" aria-pressed=${this._sidePinned} title=${this.t("side_pin_hint")} @click=${() => this.setSidePinned(!this._sidePinned)}>
         📌 ${this.t(this._sidePinned ? "side_pinned" : "side_pin")}
       </button>
@@ -3265,6 +3278,10 @@ export class Fp3dEditor extends LitElement {
         color: var(--fp3d-text);
         font-size: 18px;
         cursor: pointer;
+      }
+      .fp3d-strip-hot {
+        border-color: var(--fp3d-accent);
+        color: var(--fp3d-accent);
       }
       .fp3d-side-overlay {
         position: absolute;
