@@ -150,6 +150,14 @@ export interface DeviceMarker {
 
 export type FloorStack = "dim" | "stacked" | "single";
 
+/** A spot of the motion trail: where motion was reported, with an age from 0 (new) to 1 (old). */
+export interface TrailSpot {
+  floorId: string;
+  x: number;
+  z: number;
+  age: number;
+}
+
 export type LampModel = "ceiling" | "downlight" | "spot" | "panel" | "pendant" | "floor" | "uplight" | "table" | "wall" | "strip" | "bollard" | "garden";
 
 /** Piece of energy cable (floor-local coordinates); the flow runs from a to b. */
@@ -286,6 +294,8 @@ interface FloorView {
   /** Soft glow around lit lamps, and light cones under spots (quality "High"). */
   haloMesh: Points;
   coneMesh: Mesh;
+  /** Motion trail on the floor (discs and ribbons). */
+  trailMesh: Mesh;
   /** Triangle ranges of lamps (entity ids), furniture walls mesh and openings, for tapping. */
   lampTris: { id: string; start: number; end: number }[];
   /** Triangle range of every camera's field-of-view wedge, by device id (a tap on it hits the camera). */
@@ -1169,6 +1179,9 @@ export class FloorplanViewer {
       const coneMesh = new Mesh(new Geometry(), materials.cones);
       coneMesh.visible = false;
       coneMesh.renderOrder = 7;
+      const trailMesh = new Mesh(new Geometry(), materials.cones);
+      trailMesh.visible = false;
+      trailMesh.renderOrder = 7;
       const screenMesh = new Mesh(new Geometry(), materials.screens);
       screenMesh.visible = false;
       screenMesh.renderOrder = 5;
@@ -1196,6 +1209,7 @@ export class FloorplanViewer {
         sunMesh,
         haloMesh,
         coneMesh,
+        trailMesh,
         screenMesh,
         glassWalls,
       );
@@ -1252,6 +1266,7 @@ export class FloorplanViewer {
         sunSig: "",
         haloMesh,
         coneMesh,
+        trailMesh,
         lampTris: [],
         coneTris: [],
         lampFurnTris: [],
@@ -2456,6 +2471,39 @@ export class FloorplanViewer {
     }
     if (!active) this.robotLast = 0;
     return active;
+  }
+
+  /** Motion trail: a disc where motion was reported and ribbons between the spots in time order, fading with age. */
+  setTrail(spots: TrailSpot[]): void {
+    const col = (age: number) => new Color(0.25 - 0.2 * age, 0.95 - 0.83 * age, 1 - 0.7 * age);
+    const dark = new Color(0, 0, 0);
+    const y = 0.02;
+    for (const fv of this.floors) {
+      const buf = new GeoBuffer();
+      let prev: TrailSpot | null = null;
+      for (const p of spots) {
+        if (p.floorId !== fv.floor.id) continue;
+        const c = col(p.age);
+        if (prev) {
+          const len = Math.hypot(p.x - prev.x, p.z - prev.z) || 1;
+          const nx = (-(p.z - prev.z) / len) * 0.06;
+          const nz = ((p.x - prev.x) / len) * 0.06;
+          const c0 = col(prev.age);
+          buf.tri([prev.x + nx, y, prev.z + nz], [p.x + nx, y, p.z + nz], [p.x - nx, y, p.z - nz], c0, c, c);
+          buf.tri([prev.x + nx, y, prev.z + nz], [p.x - nx, y, p.z - nz], [prev.x - nx, y, prev.z - nz], c0, c, c0);
+        }
+        for (let i = 0; i < 12; i++) {
+          const a0 = (i / 12) * Math.PI * 2;
+          const a1 = ((i + 1) / 12) * Math.PI * 2;
+          buf.tri([p.x, y, p.z], [p.x + Math.cos(a1) * 0.22, y, p.z + Math.sin(a1) * 0.22], [p.x + Math.cos(a0) * 0.22, y, p.z + Math.sin(a0) * 0.22], c, dark, dark);
+        }
+        prev = p;
+      }
+      fv.trailMesh.geometry.dispose();
+      fv.trailMesh.geometry = buf.geometry();
+      fv.trailMesh.visible = buf.count > 0;
+    }
+    this.invalidate();
   }
 
   /** The current view (a copy), to come back to it later with flyTo. */

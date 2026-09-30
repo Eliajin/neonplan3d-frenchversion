@@ -175,6 +175,8 @@ const DEVICES = [
   entity("scene.wohnzimmer_lesen", "wohnzimmer", "unknown", { friendly_name: "Wohnzimmer Lesen" }),
   entity("script.wohnzimmer_alles_aus", "wohnzimmer", "off", { friendly_name: "Wohnzimmer Alles aus" }),
   entity("binary_sensor.flur_bewegung", "flur", "off", { friendly_name: "Flur Bewegung", device_class: "motion" }),
+  entity("binary_sensor.kueche_praesenz", "kueche", "off", { friendly_name: "Küche Präsenz", device_class: "presence" }),
+  entity("binary_sensor.wohnzimmer_kamera_bewegung", "wohnzimmer", "on", { friendly_name: "Wohnzimmer Kamera Bewegung", device_class: "motion" }),
   entity("binary_sensor.haustuer", "flur", "off", { friendly_name: "Haustür", device_class: "door" }),
   entity("cover.garagentor", "garage", "open", { friendly_name: "Garagentor", device_class: "garage", current_position: 60, supported_features: 15 }),
   entity("binary_sensor.wohnzimmer_terrasse", "wohnzimmer", "on", { friendly_name: "Terrassentür", device_class: "opening" }),
@@ -220,6 +222,8 @@ for (const [suffix, name] of [
 }
 // devices with a power sensor of their own
 for (const [id, device] of [
+  ["camera.wohnzimmer", "d_cam"],
+  ["binary_sensor.wohnzimmer_kamera_bewegung", "d_cam"],
   ["media_player.fernseher", "d_tv"],
   ["sensor.fernseher_leistung", "d_tv"],
   ["switch.kaffeemaschine", "d_kaffee"],

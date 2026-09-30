@@ -61,6 +61,7 @@
   - Glowing cables run from the meter along the wall bases and through the walls to every placed device that reports power (its own sensor or a power sensor of the same device); cables shared by several devices carry their sum.
   - Stripes move with the power (still at 0 W); grid import is cyan, solar and export yellow, battery green. The animation runs at about 30 fps and stops when nothing flows or the page is hidden.
   - Watt labels at the devices and an energy bar with consumption, grid, solar, battery and tariff.
+- **Motion trail**: the "Trail" switch shows where motion, occupancy and presence sensors (including a camera's) reported motion in the last 30 minutes: glowing spots with the time, joined in order and fading with age. Sensors placed in the plan sit at their spot, a camera's at the camera, others at the centre of their room.
 - **Presence**: per person a room sensor (e.g. ESPresense, Bermuda) whose state names the room or area; people at home show as pink markers in their room. Floor labels count rooms, lights on, open windows and people.
 - **Backup**: restore points while editing (at most one every 10 minutes, the last 20 are kept), export and import as a JSON file, and "share as template" without areas, devices, sensors and images.
 - **Updates without restart trouble**: fields added by newer versions are passed through, so saving keeps working after an update until Home Assistant restarts.
@@ -103,6 +104,7 @@ floor_thumbs: true      # optional: floor pictures to switch floors (default: on
 alerts: true            # optional: smoke, gas, CO, water, alarm and windows open in the rain pulse
 alert_jump: false       # optional: jump to the room of a new warning
 scenes: true            # optional: scene and script buttons of the selected room
+motion_trail: false     # optional: where motion was reported in the last 30 minutes, with times
 idle_return: 0          # optional: kiosk – seconds without a touch until the start view returns
 night: "off"            # optional: kiosk – dim at night: off | sun | "22:00-06:00"
 idle_orbit: false       # optional: kiosk – slow camera turn after the idle return

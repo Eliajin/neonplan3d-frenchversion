@@ -26,6 +26,7 @@ import { fetchImage } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { getPacks, mountBase, packItem, packsVersion } from "../packs.ts";
 import { parkedVehicles, parkingEntities } from "../parking.ts";
+import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
 import { searchIndex, searchItems, type SearchItem } from "../search.ts";
 import { coverPositionable, lightAbilities } from "./quick-menu.ts";
 import "./quick-menu.ts";
@@ -56,6 +57,7 @@ export class Fp3dView3d extends LitElement {
     showEnergy: { attribute: false },
     flows: { attribute: false },
     furnish: { type: Boolean },
+    trail: { type: Boolean },
     selectedFurniture: { attribute: false },
     selectedDevice: { attribute: false },
     _sky: { state: true },
@@ -103,6 +105,11 @@ export class Fp3dView3d extends LitElement {
   declare flows: boolean | null;
   /** Furnishing: furniture and lamps are dragged in 3D (admins, panel only). */
   declare furnish: boolean;
+  /** Motion trail: where motion was reported in the last half hour, with times. */
+  declare trail: boolean;
+  /** History rows of the trail's sensors (fetched while the trail is shown, again every minute). */
+  private trailRows: Record<string, HistoryRow[]> = {};
+  private trailTimer: ReturnType<typeof setInterval> | undefined;
   declare selectedFurniture: string | null;
   declare selectedDevice: string | null;
   /** How much daylight there is (0 = night, 1 = day), from sun.sun. */
@@ -199,6 +206,7 @@ export class Fp3dView3d extends LitElement {
     this.heatMode = "none";
     this.theme = "neon";
     this.furnish = false;
+    this.trail = false;
     this.showEnergy = true;
     this.flows = null;
     this.selectedFurniture = null;
@@ -251,6 +259,8 @@ export class Fp3dView3d extends LitElement {
     this.alertTimer = undefined;
     clearInterval(this.cameraTimer);
     this.cameraTimer = undefined;
+    clearInterval(this.trailTimer);
+    this.trailTimer = undefined;
     this.viewer?.dispose();
     this.viewer = null;
   }
@@ -355,6 +365,7 @@ export class Fp3dView3d extends LitElement {
     }
     if (changed.has("selectedFurniture")) v.selectFurniture(this.selectedFurniture);
     if (changed.has("selectedDevice")) v.setSelectedDevice(this.selectedDevice);
+    if (changed.has("trail")) this.watchTrail();
     if (changed.has("quality") && changed.get("quality") !== undefined) {
       v.setQuality(this.quality);
       this._low = v.low;
@@ -394,7 +405,8 @@ export class Fp3dView3d extends LitElement {
       this.alertSrc = this.alerts ? alertSources(hass, b) : null;
       const warn = this.alertSrc ? alertEntities(this.alertSrc) : [];
       const parking = parkingEntities(b.floors);
-      const all = [...placed, ...cameraSensors, ...links, ...power, ...furniture, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights, ...heat, ...warn, ...parking, "sun.sun"];
+      const motion = trailSources(hass, b).map((s) => s.entity);
+      const all = [...placed, ...cameraSensors, ...links, ...power, ...furniture, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights, ...heat, ...warn, ...parking, ...motion, "sun.sun"];
       this.watched = [...new Set(all.filter((id): id is string => !!id))];
       force = true;
     }
@@ -409,14 +421,32 @@ export class Fp3dView3d extends LitElement {
     const summary = energySummary(hass, b, consumers);
     // a placed power sensor shows its value as state text already, so only devices get a watt badge
     const byDevice = new Map(consumers.filter((c) => c.id !== c.powerEntity).map((c) => [c.id, c.power]));
-    v.setDevices(
-      [...deviceMarkers, ...furniture.markers].map((m) => {
+    const trail = this.trail ? this.trailNow(hass, b) : [];
+    v.setDevices([
+      ...[...deviceMarkers, ...furniture.markers].map((m) => {
         const power = byDevice.get(m.id) ?? null;
         // at night (kiosk) colour effects rest
         const marker = { ...m, power, powerText: power === null ? undefined : formatPower(hass, power), effect: this.dimmed ? false : m.effect };
         return { ...marker, pin: this.showPin(marker) };
       }),
-    );
+      // trail spots carry a pin with the time of the motion; the same sensor again stacks its pins
+      ...trail.map((p, i) => ({
+        id: `trail:${i}`,
+        floorId: p.floorId,
+        roomId: null,
+        x: p.x,
+        z: p.z,
+        y: 0.3 + 0.4 * trail.slice(0, i).filter((q) => q.entity === p.entity).length,
+        icon: TRAIL_ICON,
+        name: entityName(hass, p.entity),
+        text: trailTime(hass, p.time),
+        active: false,
+        unavailable: false,
+        glow: null,
+        pin: true,
+      })),
+    ]);
+    v.setTrail(trail);
     v.setPickTargets(furniture.targets, this.openingTargets());
     v.setScreens(furniture.screens);
     v.setRobots(this.robotInfos(hass, b));
@@ -633,6 +663,51 @@ export class Fp3dView3d extends LitElement {
     }
     this.watchCameras(this.cameraScreens > 0 || !!this._through);
     return { markers, consumers, screens, targets };
+  }
+
+  /** The trail's spots right now: history rows plus the sensors that are on. */
+  private trailNow(hass: HomeAssistant, b: Building) {
+    const now = Date.now();
+    const sources = trailSources(hass, b);
+    const live = sources.map((s) => {
+      const st = hass.states[s.entity];
+      return { entity: s.entity, state: st?.state, lastChanged: st?.last_changed ? Date.parse(st.last_changed) : undefined };
+    });
+    return trailPoints(sources, trailEvents(this.trailRows, live, now), now);
+  }
+
+  /** While the trail is shown, the sensors' history of the last half hour is fetched, again every minute. */
+  private watchTrail(): void {
+    clearInterval(this.trailTimer);
+    this.trailTimer = undefined;
+    if (!this.trail) {
+      this.trailRows = {};
+      this.syncDevices(true);
+      return;
+    }
+    const fetch = async () => {
+      const hass = this.hass;
+      const b = this.building;
+      if (!hass || !b || document.hidden) return;
+      const ids = trailSources(hass, b).map((s) => s.entity);
+      if (!ids.length) return;
+      try {
+        const rows = await hass.callWS<Record<string, HistoryRow[]> | null>({
+          type: "history/history_during_period",
+          start_time: new Date(Date.now() - TRAIL_WINDOW_MS).toISOString(),
+          entity_ids: ids,
+          minimal_response: true,
+          no_attributes: true,
+          significant_changes_only: false,
+        });
+        this.trailRows = rows ?? {};
+      } catch {
+        this.trailRows = {};
+      }
+      this.syncDevices(true);
+    };
+    void fetch();
+    this.trailTimer = setInterval(() => void fetch(), 60000);
   }
 
   /** While a screen shows a camera, its snapshot is fetched again every few seconds (slower on the tablet level). */
@@ -1036,6 +1111,7 @@ export class Fp3dView3d extends LitElement {
   }
 
   private onDeviceTap(entityId: string, x = 0, y = 0): void {
+    if (entityId.startsWith("trail:")) return;
     const kind = kindOf(entityId);
     // blinds have no single on/off: a tap opens their quick menu (up, positions, stop, down); a camera shows its picture
     if (kind === "cover" || kind === "camera") {
@@ -1298,6 +1374,17 @@ export class Fp3dView3d extends LitElement {
         height: 24px;
         border-radius: 50%;
         background: rgba(91, 124, 255, 0.14);
+      }
+      .fp3d-dev[data-entity^="trail:"] {
+        padding: 2px 4px 2px 2px;
+        font-size: 11px;
+        border-color: rgba(55, 224, 255, 0.5);
+      }
+      .fp3d-dev[data-entity^="trail:"] .fp3d-dev-icon {
+        color: #37e0ff;
+      }
+      .fp3d-dev[data-entity^="trail:"] .fp3d-dev-text {
+        display: inline;
       }
       .fp3d-dev-text {
         display: none;

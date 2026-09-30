@@ -140,6 +140,17 @@
             case "neonplan3d/packs/remove":
               importedPacks = importedPacks.filter((p) => p.id !== msg.pack_id);
               return null;
+            case "history/history_during_period": {
+              // invented motion of the last half hour: hall, kitchen, then the living-room camera
+              const now = Date.now() / 1000;
+              const on = (entity, ...minutesAgo) => [entity, minutesAgo.flatMap((m) => [{ s: "on", lu: now - m * 60 }, { s: "off", lu: now - m * 60 + 40 }])];
+              return Object.fromEntries([
+                on("binary_sensor.flur_bewegung", 26, 12),
+                on("binary_sensor.kueche_praesenz", 22, 9),
+                on("binary_sensor.wohnzimmer_kamera_bewegung", 17, 3),
+                on("binary_sensor.garage_auto", 28),
+              ]);
+            }
             default:
               throw { code: "unknown_command", message: msg.type };
           }
