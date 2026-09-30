@@ -163,6 +163,8 @@ export interface ScreenState {
   level: number;
   /** Picture of what is running (app icon or cover art from the media player), if any. */
   picture?: string | null;
+  /** No glow frame around the screen (a logo from a picture rule stands on its own). */
+  plain?: boolean;
 }
 
 /** Position of the sun (from sun.sun): degrees above the horizon and clockwise from north. */
@@ -1743,6 +1745,7 @@ export class FloorplanViewer {
       const z = r.z + 0.004;
       buf.tri(P(r.x0, r.y0, z), P(r.x1, r.y0, z), P(r.x1, r.y1, z), core);
       buf.tri(P(r.x0, r.y0, z), P(r.x1, r.y1, z), P(r.x0, r.y1, z), core);
+      if (st.plain) continue;
       // glow frame fading out around the screen
       const g = 0.18 + 0.12 * st.level;
       const halo = core.clone().multiplyScalar(0.5);
