@@ -2862,7 +2862,7 @@ export class Fp3dEditor extends LitElement {
     const ids: string[] = [];
     for (const floor of this._doc.floors) {
       for (const m of floor.furniture) {
-        for (const r of m.pictures ?? []) if (r.image && !/^https?:\/\//.test(r.image) && !ids.includes(r.image)) ids.push(r.image);
+        for (const r of m.pictures ?? []) if (r.image && !/^https?:\/\//.test(r.image) && !r.image.startsWith("camera:") && !ids.includes(r.image)) ids.push(r.image);
       }
     }
     return ids;
@@ -2903,6 +2903,8 @@ export class Fp3dEditor extends LitElement {
     const patchGroup = (g: (typeof groups)[number], change: Partial<ScreenPicture>) => set(rules.map((x, i) => (g.rows.includes(i) ? { ...x, ...change } : x)));
     const patchRow = (i: number, change: Partial<ScreenPicture>) => set(rules.map((x, j) => (j === i ? { ...x, ...change } : x)));
     const stored = this.storedPictures();
+    const cameras = this.entityOptions((id) => id.startsWith("camera."));
+    const cameraOf = (r: ScreenPicture) => (r.image.startsWith("camera:") ? r.image.slice(7) : null);
     return html`<div class="fp3d-wide">
       <div class="fp3d-sub">${this.t("screen_pictures")}</div>
       ${rules.length
@@ -2954,6 +2956,9 @@ export class Fp3dEditor extends LitElement {
               />
               <datalist id="fp3d-picture-states-${i}"><option value="*"></option>${suggestions(g.entity, g.attribute).map((v) => html`<option value=${v}></option>`)}</datalist>
               ${this._images[r.image] ? html`<img class="fp3d-picture-thumb" src=${this._images[r.image].url} alt="" /> ` : nothing}
+              ${cameraOf(r) && this.hass?.states[cameraOf(r)!]?.attributes.entity_picture
+                ? html`<img class="fp3d-picture-thumb" src=${String(this.hass.states[cameraOf(r)!].attributes.entity_picture)} alt="" />`
+                : nothing}
               <label class="fp3d-btn fp3d-picture-pick">
                 ${r.image ? this.t("picture_change") : this.t("picture_pick")}
                 <input type="file" accept="image/*" hidden ?disabled=${!admin} @change=${(e: Event) => void this.uploadPicture(e, f, i)} />
@@ -2975,6 +2980,21 @@ export class Fp3dEditor extends LitElement {
                   if (v) patchRow(i, { image: v });
                 }}
               />
+              ${cameras.length
+                ? html`<fp3d-entity-picker
+                    class="fp3d-picture-camera"
+                    .options=${cameras}
+                    .fixed=${[{ id: "none", label: this.t("picture_camera_none") }]}
+                    .value=${cameraOf(r) ?? "none"}
+                    .placeholder=${this.t("picture_camera")}
+                    ?disabled=${!admin}
+                    @change=${(e: CustomEvent<{ value: string }>) => {
+                      e.stopPropagation();
+                      if (e.detail.value !== "none") patchRow(i, { image: `camera:${e.detail.value}` });
+                      else if (cameraOf(r)) patchRow(i, { image: "" });
+                    }}
+                  ></fp3d-entity-picker>`
+                : nothing}
               <span class="fp3d-sub">${hit ? this.t("picture_matches") : ""}</span>
               <button class="fp3d-btn" ?disabled=${!admin} title=${this.t("delete")} @click=${() => set(rules.filter((_, j) => j !== i))}>✕</button>
             </div>`;
@@ -3542,7 +3562,8 @@ export class Fp3dEditor extends LitElement {
         grid-column: 1 / -1;
         min-width: 0;
       }
-      .fp3d-picture-row > .fp3d-sub {
+      .fp3d-picture-row > .fp3d-sub,
+      .fp3d-picture-row > .fp3d-picture-camera {
         grid-column: 1 / -1;
       }
       .fp3d-picture-row.fp3d-rule-hit {

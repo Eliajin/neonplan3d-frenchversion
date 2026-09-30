@@ -175,6 +175,10 @@ export class Fp3dView3d extends LitElement {
   private watched: string[] = [];
   /** Stored images used as screen pictures, as data URLs (fetched once); null while loading or missing. */
   private pictureUrls = new Map<string, string | null>();
+  /** Screens showing a camera: their snapshots are refreshed every few seconds (a changing query parameter). */
+  private cameraTick = 0;
+  private cameraTimer: ReturnType<typeof setInterval> | undefined;
+  private cameraScreens = 0;
 
   constructor() {
     super();
@@ -235,6 +239,8 @@ export class Fp3dView3d extends LitElement {
     this.resizeObs = null;
     clearInterval(this.alertTimer);
     this.alertTimer = undefined;
+    clearInterval(this.cameraTimer);
+    this.cameraTimer = undefined;
     this.viewer?.dispose();
     this.viewer = null;
   }
@@ -365,7 +371,7 @@ export class Fp3dView3d extends LitElement {
       const presence = b.presence.flatMap((p) => [p.person, p.sensor]);
       const lights = b.floors.flatMap((f) => f.rooms.flatMap((r) => areaEntities(hass, r.area_id).filter((id) => kindOf(id) === "light")));
       const furniture = [...this.furnitureLinks.values()].flatMap((l) => [l.entity, l.power]);
-      const pictureRules = b.floors.flatMap((f) => f.furniture.flatMap((m) => (m.pictures ?? []).map((r) => r.entity)));
+      const pictureRules = b.floors.flatMap((f) => f.furniture.flatMap((m) => (m.pictures ?? []).flatMap((r) => [r.entity, ...(r.image.startsWith("camera:") ? [r.image.slice(7)] : [])])));
       const heat =
         this.heatMode === "none"
           ? []
@@ -599,6 +605,7 @@ export class Fp3dView3d extends LitElement {
       }
     }
     // picture rules: the first rule whose entity is in its state puts its picture on the screen
+    this.cameraScreens = 0;
     for (const floor of b.floors) {
       for (const f of floor.furniture) {
         if (!f.pictures?.length || !isMediaFurniture(f.type)) continue;
@@ -609,12 +616,34 @@ export class Fp3dView3d extends LitElement {
         if (picture) screens.set(f.id, { color: bg, level: 1, picture, plain: true });
       }
     }
+    this.watchCameras(this.cameraScreens > 0);
     return { markers, consumers, screens, targets };
   }
 
-  /** A picture rule's image as a URL: http(s) as is, a stored image as a data URL (fetched once). */
+  /** While a screen shows a camera, its snapshot is fetched again every few seconds (slower on the tablet level). */
+  private watchCameras(on: boolean): void {
+    if (on && !this.cameraTimer) {
+      this.cameraTimer = setInterval(() => {
+        if (document.hidden) return;
+        this.cameraTick++;
+        this.syncDevices(true);
+      }, this._low ? 10000 : 5000);
+    } else if (!on && this.cameraTimer) {
+      clearInterval(this.cameraTimer);
+      this.cameraTimer = undefined;
+    }
+  }
+
+  /** A picture rule's image as a URL: http(s) as is, a camera's current snapshot, a stored image as a data URL (fetched once). */
   private pictureUrl(image: string): string | null {
     if (/^https?:\/\//.test(image)) return image;
+    if (image.startsWith("camera:")) {
+      const st = this.hass.states[image.slice(7)];
+      const picture = st?.attributes.entity_picture as string | undefined;
+      if (!picture || isUnavailable(st)) return null;
+      this.cameraScreens++;
+      return picture.startsWith("data:") ? picture : `${picture}${picture.includes("?") ? "&" : "?"}fp3d=${this.cameraTick}`;
+    }
     if (this.pictureUrls.has(image)) return this.pictureUrls.get(image) ?? null;
     this.pictureUrls.set(image, null);
     fetchImage(this.hass, image).then(

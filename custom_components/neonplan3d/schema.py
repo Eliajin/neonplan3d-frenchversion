@@ -269,6 +269,7 @@ def image_ids(building: dict) -> set[str]:
     for floor in building.get("floors", []):
         for item in floor.get("furniture", []):
             for rule in item.get("pictures") or []:
-                if not rule["image"].startswith(("http://", "https://")):
+                # a URL or a camera ("camera:<entity>") is no stored image
+                if not rule["image"].startswith(("http://", "https://", "camera:")):
                     ids.add(rule["image"])
     return ids
