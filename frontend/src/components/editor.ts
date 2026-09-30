@@ -57,6 +57,7 @@ import {
   type ScreenPicture,
 } from "../model.ts";
 import { controls, tokens } from "../styles.ts";
+import "./entity-picker.ts";
 import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
 import { importPack, removePack } from "../api.ts";
 import { load3d } from "../load3d.ts";
@@ -2437,19 +2438,22 @@ export class Fp3dEditor extends LitElement {
   private entitySelect(label: string, value: string | null, auto: string | null | undefined, options: { id: string; label: string }[], onChange: (v: string | null) => void) {
     const autoLabel =
       auto === undefined ? null : auto ? this.t("entity_auto", { name: entityName(this.hass, auto) }) : this.t("entity_auto_none");
+    // searchable picker: the fixed choices (automatic, none) first, then the entities filtered as you type
+    const fixed = [...(autoLabel !== null ? [{ id: "__auto", label: autoLabel }] : []), { id: "none", label: this.t("entity_none") }];
+    const current = value === null ? (autoLabel !== null ? "__auto" : "none") : value;
     return html`<label class="fp3d-field fp3d-wide"
       >${label}
-      <select
+      <fp3d-entity-picker
+        .options=${options}
+        .fixed=${fixed}
+        .value=${current}
+        .placeholder=${this.t("entity_search")}
         ?disabled=${!this.isAdmin}
-        @change=${(e: Event) => {
-          const v = (e.target as HTMLSelectElement).value;
-          onChange(v === "__auto" ? null : v);
+        @change=${(e: CustomEvent<{ value: string }>) => {
+          e.stopPropagation();
+          onChange(e.detail.value === "__auto" ? null : e.detail.value);
         }}
-      >
-        ${autoLabel !== null ? html`<option value="__auto" ?selected=${value === null}>${autoLabel}</option>` : nothing}
-        <option value="none" ?selected=${value === "none" || (autoLabel === null && value === null)}>${this.t("entity_none")}</option>
-        ${options.map((o) => html`<option value=${o.id} ?selected=${o.id === value}>${o.label}</option>`)}
-      </select></label
+      ></fp3d-entity-picker></label
     >`;
   }
 
@@ -2865,9 +2869,16 @@ export class Fp3dEditor extends LitElement {
       <div class="fp3d-sub">${this.t("screen_pictures")}</div>
       ${rules.map(
         (r, i) => html`<div class="fp3d-picture-rule">
-          <select ?disabled=${!admin} @change=${(e: Event) => set(rules.map((x, j) => (j === i ? { ...x, entity: (e.target as HTMLSelectElement).value } : x)))}>
-            ${entities.map((o) => html`<option value=${o.id} ?selected=${o.id === r.entity}>${o.label}</option>`)}
-          </select>
+          <fp3d-entity-picker
+            .options=${entities}
+            .value=${r.entity}
+            .placeholder=${this.t("entity_search")}
+            ?disabled=${!admin}
+            @change=${(e: CustomEvent<{ value: string }>) => {
+              e.stopPropagation();
+              set(rules.map((x, j) => (j === i ? { ...x, entity: e.detail.value } : x)));
+            }}
+          ></fp3d-entity-picker>
           <input
             type="text"
             list="fp3d-picture-states-${i}"
@@ -3427,7 +3438,7 @@ export class Fp3dEditor extends LitElement {
         border: 1px solid var(--fp3d-line);
         border-radius: 10px;
       }
-      .fp3d-picture-rule select,
+      .fp3d-picture-rule fp3d-entity-picker,
       .fp3d-picture-rule input[type="url"] {
         grid-column: 1 / -1;
         min-width: 0;
