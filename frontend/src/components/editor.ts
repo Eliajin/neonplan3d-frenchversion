@@ -2616,28 +2616,35 @@ export class Fp3dEditor extends LitElement {
       )}
       <label class="fp3d-btn fp3d-primary fp3d-pack-import">
         ${this.t("pack_import")}
-        <input type="file" accept=".fp3dpack,.json,application/json" hidden @change=${(e: Event) => this.importPackFile(e)} />
+        <input type="file" accept=".fp3dpack,.json,application/json" multiple hidden @change=${(e: Event) => this.importPackFile(e)} />
       </label>
       ${this._packMsg ? html`<p class="fp3d-sub ${this._packMsg.ok ? "fp3d-notice" : "fp3d-pack-error"}">${this._packMsg.text}</p>` : nothing}
       <p class="fp3d-sub">${this.t("packs_hint")}</p>
     </section>`;
   }
 
+  /** Imports one or several pack files at once (a buyer of a bundle picks them all in one go). */
   private async importPackFile(e: Event): Promise<void> {
     const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
+    const files = [...(input.files ?? [])];
     input.value = "";
-    if (!file || !this.hass) return;
-    try {
-      const res = await importPack(this.hass, await file.text());
-      this._packMsg = { ok: true, text: this.t("pack_imported", { name: res.name, publisher: res.publisher, n: res.items }) };
-      this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
-    } catch (err) {
-      const { code, message } = (err ?? {}) as { code?: string; message?: string };
-      const key = `pack_error_${code}` as I18nKey;
-      const text = this.t(key, { detail: message ?? String(err) });
-      this._packMsg = { ok: false, text: text === key ? this.t("pack_error_other", { detail: message ?? String(err) }) : text };
+    if (!files.length || !this.hass) return;
+    const done: string[] = [];
+    const failed: string[] = [];
+    for (const file of files) {
+      try {
+        const res = await importPack(this.hass, await file.text());
+        done.push(this.t("pack_imported", { name: res.name, publisher: res.publisher, n: res.items }));
+      } catch (err) {
+        const { code, message } = (err ?? {}) as { code?: string; message?: string };
+        const key = `pack_error_${code}` as I18nKey;
+        const text = this.t(key, { detail: message ?? String(err) });
+        failed.push(`${file.name}: ${text === key ? this.t("pack_error_other", { detail: message ?? String(err) }) : text}`);
+      }
     }
+    if (done.length) this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
+    const summary = files.length > 1 ? [this.t("packs_imported_n", { n: done.length, total: files.length })] : [];
+    this._packMsg = { ok: failed.length === 0, text: [...summary, ...done, ...failed].join(" · ") };
   }
 
   private async deletePack(pack: FurniturePack): Promise<void> {
