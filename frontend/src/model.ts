@@ -71,6 +71,8 @@ export interface Furniture {
   entity?: EntityRef;
   /** Power sensor (null = automatic: the linked entity's device or a matching name). */
   power?: EntityRef;
+  /** Wall-hung pack items: height of the bottom edge above the floor (null = the pack's default). */
+  mount_y?: number | null;
   /** Parking spots: the vehicle shown (a pack item type) while `entity` reports a car. */
   vehicle?: string | null;
   /** Parking spots: size factor of the vehicle (1 = the pack item's size). */

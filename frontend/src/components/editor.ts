@@ -61,7 +61,7 @@ import { importPack, removePack } from "../api.ts";
 import { load3d } from "../load3d.ts";
 import type { WallMode } from "../viewer/viewer3d.ts";
 import { furnitureName } from "../furniture-names.ts";
-import { furnitureSize, isElectric, packItem, packItemName, packType, setPacks, type FurniturePack } from "../packs.ts";
+import { furnitureSize, isElectric, mountBase, packItem, packItemName, packType, setPacks, type FurniturePack } from "../packs.ts";
 
 type Tool = "select" | "rect" | "polygon" | "measure" | "opening" | "furniture" | "outdoor" | "meter";
 
@@ -103,6 +103,8 @@ export class Fp3dEditor extends LitElement {
     _doc3d: { state: true },
     _split: { state: true },
     _wall3d: { state: true },
+    _sidePinned: { state: true },
+    _sideOpen: { state: true },
     _floorId: { state: true },
     _roomId: { state: true },
     _vertex: { state: true },
@@ -150,6 +152,9 @@ export class Fp3dEditor extends LitElement {
   private declare _split: boolean;
   /** Walls in the 3D pane: full height ("auto") or cut at the cut height (shows wall units and shelves). */
   private declare _wall3d: WallMode;
+  /** Sidebar beside the 3D pane: pinned open always, or folded to a strip while nothing is selected. */
+  private declare _sidePinned: boolean;
+  private declare _sideOpen: boolean;
   private declare _floorId: string | null;
   private declare _roomId: string | null;
   private declare _vertex: number | null;
@@ -232,6 +237,14 @@ export class Fp3dEditor extends LitElement {
     this._split = split;
     this._wall3d = "cut";
     this._doc3d = this._doc;
+    this._sideOpen = false;
+    let pinned = true;
+    try {
+      pinned = localStorage.getItem("neonplan3d.sidePinned") !== "0";
+    } catch {
+      // no storage
+    }
+    this._sidePinned = pinned;
     this._preview = null;
     this._measureLen = 3;
     this._packages = false;
@@ -334,16 +347,70 @@ export class Fp3dEditor extends LitElement {
     const f = this.furnitureItem;
     const d = this.device;
     if (f) {
+      const wallItem = packItem(f.type)?.mount === "wall";
+      const num = (key: "w" | "d" | "h", label: string, min = 0.05) => html`<label class="fp3d-3d-size" title=${this.t(`size_${key}` as I18nKey)}
+        >${label}
+        <input
+          type="number"
+          inputmode="decimal"
+          step="0.05"
+          min=${min}
+          .value=${String(Math.round(f[key] * 100) / 100)}
+          @change=${(e: Event) => {
+            const v = parseFloat((e.target as HTMLInputElement).value.replace(",", "."));
+            if (Number.isFinite(v) && v >= min) this.updateFurniture({ [key]: Math.round(v * 1000) / 1000 });
+          }}
+        />
+      </label>`;
       return html`<div class="fp3d-3d-bar">
         <span>${furnitureName(this.hass, f.type)}</span>
+        ${num("w", this.t("size_short_w"))} ${num("d", this.t("size_short_d"))} ${num("h", this.t("size_short_h"))}
+        ${wallItem
+          ? html`<label class="fp3d-3d-size" title=${this.t("mount_height")}
+              >↕
+              <input
+                type="number"
+                inputmode="decimal"
+                step="0.05"
+                min="0"
+                .value=${String(Math.round((f.mount_y ?? mountBase(this.floor!, f)) * 100) / 100)}
+                @change=${(e: Event) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value.replace(",", "."));
+                  if (Number.isFinite(v) && v >= 0) this.updateFurniture({ mount_y: Math.round(v * 1000) / 1000 });
+                }}
+              />
+            </label>`
+          : nothing}
         <button class="fp3d-chip" @click=${() => this.rotateFurniture(-45)}>↺ 45°</button>
         <button class="fp3d-chip" @click=${() => this.rotateFurniture(45)}>↻ 45°</button>
         <button class="fp3d-chip fp3d-danger-chip" @click=${() => this.deleteFurniture()}>${this.t("delete")}</button>
       </div>`;
     }
     if (d) {
+      const kind = kindOf(d.entity_id);
+      const light = kind === "light";
+      const auto = kind ? defaultHeight(kind, this.floor?.height ?? 2.5, light ? (d.mount ?? "ceiling") : null) : 1;
       return html`<div class="fp3d-3d-bar">
         <span>${entityName(this.hass, d.entity_id)}</span>
+        ${light
+          ? html`<select class="fp3d-3d-select" title=${this.t("lamp_mount")} @change=${(e: Event) => this.updateDevice({ mount: (e.target as HTMLSelectElement).value as LampMount, y: null })}>
+              ${(["ceiling", "floor", "table", "wall"] as const).map((m) => html`<option value=${m} ?selected=${m === (d.mount ?? "ceiling")}>${this.t(`lamp_${m}`)}</option>`)}
+            </select>`
+          : nothing}
+        <label class="fp3d-3d-size" title=${this.t("marker_height")}
+          >${this.t("size_short_h")}
+          <input
+            type="number"
+            inputmode="decimal"
+            step="0.05"
+            min="0"
+            .value=${String(Math.round((d.y ?? auto) * 100) / 100)}
+            @change=${(e: Event) => {
+              const v = parseFloat((e.target as HTMLInputElement).value.replace(",", "."));
+              if (Number.isFinite(v) && v >= 0) this.updateDevice({ y: Math.round(v * 1000) / 1000 });
+            }}
+          />
+        </label>
         <button class="fp3d-chip" @click=${() => this.updateDevice({ rotation: ((((d.rotation ?? 0) - 45) % 360) + 360) % 360 })}>↺ 45°</button>
         <button class="fp3d-chip" @click=${() => this.updateDevice({ rotation: (((d.rotation ?? 0) + 45) % 360) % 360 })}>↻ 45°</button>
         <button class="fp3d-chip fp3d-danger-chip" @click=${() => this.removeDevice(d.entity_id)}>${this.t("delete")}</button>
@@ -1631,7 +1698,7 @@ export class Fp3dEditor extends LitElement {
           ${this._split ? this.render3d() : nothing}
           </div>
         </div>
-        <aside class="fp3d-side">${this.renderSide(floor)}</aside>
+        ${this.renderAside(floor)}
       </div>
     `;
   }
@@ -2008,6 +2075,51 @@ export class Fp3dEditor extends LitElement {
           if (Number.isFinite(v)) onChange(v);
         }}
     /></label>`;
+  }
+
+  /** Something is selected or being placed: the sidebar has a form or the library to show. */
+  private get sideHasWork(): boolean {
+    return !!(this._roomId || this._openingId || this._furnitureId || this._deviceId || this._outdoorId || this._tool === "furniture" || this._tool === "outdoor" || this._tool === "opening");
+  }
+
+  private setSidePinned(pinned: boolean): void {
+    this._sidePinned = pinned;
+    this._sideOpen = false;
+    try {
+      localStorage.setItem("neonplan3d.sidePinned", pinned ? "1" : "0");
+    } catch {
+      // no storage
+    }
+  }
+
+  /** The sidebar: always beside the plan, or, next to the 3D pane, folded to a strip while idle. */
+  private renderAside(floor: Floor | undefined) {
+    const folding = this._split && !this._sidePinned && !this.narrow;
+    if (!folding) return html`<aside class="fp3d-side">${this.renderPinRow()}${this.renderSide(floor)}</aside>`;
+    const open = this.sideHasWork || this._sideOpen;
+    if (!open) {
+      return html`<aside class="fp3d-side fp3d-side-strip">
+        <button class="fp3d-strip-btn" title=${this.t("side_open")} @click=${() => (this._sideOpen = true)}>☰</button>
+        <button class="fp3d-strip-btn" title=${this.t("tool_furniture")} @click=${() => ((this._tool = "furniture"), (this._draft = []))}>🛋</button>
+        <button class="fp3d-strip-btn" title=${this.t("tool_opening")} @click=${() => ((this._tool = "opening"), (this._draft = []))}>🚪</button>
+      </aside>`;
+    }
+    // open over the 3D pane, so the pane keeps its size
+    return html`<aside class="fp3d-side fp3d-side-strip"></aside>
+      <aside class="fp3d-side fp3d-side-overlay">
+        ${this.renderPinRow(true)}
+        ${this.renderSide(floor)}
+      </aside>`;
+  }
+
+  private renderPinRow(overlay = false) {
+    if (!this._split || this.narrow) return nothing;
+    return html`<div class="fp3d-pin-row">
+      ${overlay ? html`<button class="fp3d-btn" @click=${() => ((this._sideOpen = false), this.selectItem("room", null))}>${this.t("side_close")}</button>` : nothing}
+      <button class="fp3d-btn" aria-pressed=${this._sidePinned} title=${this.t("side_pin_hint")} @click=${() => this.setSidePinned(!this._sidePinned)}>
+        📌 ${this.t(this._sidePinned ? "side_pinned" : "side_pin")}
+      </button>
+    </div>`;
   }
 
   private renderSide(floor: Floor | undefined) {
@@ -2498,6 +2610,9 @@ export class Fp3dEditor extends LitElement {
         ${this.num(this.t("depth"), f.d, (v) => this.updateFurniture({ d: Math.max(0.05, v) }), 0.01, 0.05)}
         ${this.num(this.t("height_m"), f.h, (v) => this.updateFurniture({ h: Math.max(0.005, v) }), 0.01, 0)}
         ${this.num(this.t("rotation"), f.rotation, (v) => this.updateFurniture({ rotation: ((v % 360) + 360) % 360 }), 1)}
+        ${packItem(f.type)?.mount === "wall" && this.floor
+          ? this.num(this.t("mount_height"), f.mount_y ?? mountBase(this.floor, f), (v) => this.updateFurniture({ mount_y: Math.max(0, v) }), 0.01, 0)
+          : nothing}
       </div>
       ${f.type === "stairs" ? html`<p class="fp3d-sub">${this.t("stairs_hint")}</p>` : nothing}
       ${f.type === "lamp_pendant"
@@ -3127,10 +3242,67 @@ export class Fp3dEditor extends LitElement {
         height: 100%;
       }
       .fp3d-editor {
+        position: relative;
         display: grid;
         grid-template-columns: 1fr 320px;
         height: 100%;
         min-height: 0;
+      }
+      .fp3d-editor:has(> .fp3d-side-strip) {
+        grid-template-columns: 1fr 52px;
+      }
+      .fp3d-side-strip {
+        padding: 10px 6px;
+        gap: 8px;
+        align-items: center;
+      }
+      .fp3d-strip-btn {
+        width: 40px;
+        height: 40px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 12px;
+        background: var(--fp3d-chrome);
+        color: var(--fp3d-text);
+        font-size: 18px;
+        cursor: pointer;
+      }
+      .fp3d-side-overlay {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: min(340px, 60%);
+        z-index: 6;
+        box-shadow: -12px 0 32px rgba(0, 0, 0, 0.45);
+      }
+      .fp3d-pin-row {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+      .fp3d-3d-size {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--fp3d-muted);
+        font-size: 12px;
+      }
+      .fp3d-3d-size input {
+        width: 58px;
+        padding: 4px 6px;
+        font: inherit;
+        color: var(--fp3d-text);
+        background: var(--fp3d-chrome-solid);
+        border: 1px solid var(--fp3d-line);
+        border-radius: 8px;
+      }
+      .fp3d-3d-select {
+        font: inherit;
+        color: var(--fp3d-text);
+        background: var(--fp3d-chrome-solid);
+        border: 1px solid var(--fp3d-line);
+        border-radius: 999px;
+        padding: 4px 10px;
       }
       .fp3d-editor.fp3d-narrow {
         grid-template-columns: 1fr;

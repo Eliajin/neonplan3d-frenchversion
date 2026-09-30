@@ -96,6 +96,8 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("power", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # parking spots: the vehicle shown (a pack item type) while the entity reports a car, its size
         # factor, and a sensor naming the kind of vehicle with a state -> vehicle mapping
+        # wall-hung pack items: height of the bottom edge above the floor (None = the pack's default)
+        vol.Optional("mount_y", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=10))),
         vol.Optional("vehicle", default=None): vol.Any(None, vol.All(str, vol.Length(max=96))),
         vol.Optional("scale", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0.2, max=2)),
         vol.Optional("type_entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
