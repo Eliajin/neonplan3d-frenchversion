@@ -115,7 +115,7 @@ const shots = [
   { name: "card-og-single", query: "?card&floor=og&stack=single", width: 1400, height: 900 },
   { name: "view-camera", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Wohnzimmer", viewScript: "v.onDeviceTap('camera.wohnzimmer', 420, 380);" },
   { name: "view-camera-model", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Wohnzimmer", viewScript: "const c = v.viewer.controls; c.view.target.set(0.9, 1.2, 0.9); c.view.radius = 4.5; c.view.theta = 2.2; c.view.phi = 1.0; c.events.change(); v.viewer.invalidate();" },
-  { name: "view-camera-screen", query: "", width: 1280, height: 800, click: "Obergeschoss", then: "Arbeitszimmer", viewScript: "v.markerMode = 'none'; const c = v.viewer.controls; c.view.target.set(7.2, 3.9, 0.6); c.view.radius = 4; c.view.theta = 0.4; c.view.phi = 1.0; c.events.change(); v.viewer.invalidate();" },
+  { name: "view-camera-screen", query: "", width: 1280, height: 800, click: "Obergeschoss", then: "Arbeitszimmer", viewScript: "v.markerMode = 'none'; const c = v.viewer.controls; c.view.target.set(7.2, 3.7, 0.3); c.view.radius = 2.6; c.view.theta = 0.25; c.view.phi = 1.15; c.events.change(); v.viewer.invalidate();" },
   { name: "view-media-wall", query: "", width: 1280, height: 800, click: "Obergeschoss", then: "Arbeitszimmer", viewScript: "v.markerMode = 'none';" },
   { name: "view-find", query: "", width: 1280, height: 800, viewScript: "v._find = 'licht';" },
   { name: "view-find-go", query: "", width: 1280, height: 800, viewScript: "v._find = 'stehlampe'; setTimeout(() => v.renderRoot.querySelector('.fp3d-find-list button').click(), 300);" },
