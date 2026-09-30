@@ -34,6 +34,10 @@ ROOM_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
+# door looks (room door, front doors with glass and sidelights, glass and sliding door) and window looks
+_OPENING_STYLES = ["interior", "front", "front_glass", "sidelight", "sidelights", "glass", "sliding"]
+_OPENING_STYLES += ["standard", "bars"]
+
 OPENING_SCHEMA = vol.Schema(
     {
         vol.Required("id"): _ID,
@@ -51,6 +55,8 @@ OPENING_SCHEMA = vol.Schema(
         vol.Optional("leaves", default=1): vol.In([1, 2]),
         # doors: swing into the room ("in") or to the other side ("out")
         vol.Optional("swing", default="in"): vol.In(["in", "out"]),
+        # look: None = automatic (front door in an exterior wall, room door inside; plain window)
+        vol.Optional("style", default=None): vol.Any(None, vol.In(_OPENING_STYLES)),
         vol.Optional("contact2", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # windows: a plain contact, a handle sensor (open / tilted / closed), or a contact and a tilt sensor
         vol.Optional("sensor", default=None): vol.Any(None, vol.In(["contact", "handle", "contact_tilt"])),

@@ -49,6 +49,11 @@ import {
   type OpeningType,
   type Room,
   type Vec2,
+  DOOR_STYLES,
+  WINDOW_STYLES,
+  openingStyle,
+  isFrontDoor,
+  type OpeningStyle,
 } from "../model.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
@@ -1173,7 +1178,8 @@ export class Fp3dEditor extends LitElement {
     const d = OPENING_PRESETS[preset];
     this._openingPreset = preset;
     const sameWidth = openingPreset(o) === preset;
-    this.updateOpening({ type: d.type, leaves: d.leaves, sill: d.sill, height: d.height, ...(sameWidth ? {} : { width: d.width }) });
+    const style = "style" in d ? d.style : null;
+    this.updateOpening({ type: d.type, leaves: d.leaves, sill: d.sill, height: d.height, style, ...(sameWidth ? {} : { width: d.width }) });
   }
 
   private updateOpening(patch: Partial<Opening>): void {
@@ -1664,7 +1670,9 @@ export class Fp3dEditor extends LitElement {
       const q = (p: Vec2, k: number) => this.toScreen([p[0] + n[0] * k, p[1] + n[1] * k]);
       const gap = [q(p0, across[0] + 0.01), q(p1, across[0] + 0.01), q(p1, -across[1] - 0.01), q(p0, -across[1] - 0.01)];
       const sel = o.id === this._openingId;
-      const cls = `fp3d-open fp3d-open-${o.type}${sel ? " fp3d-open-sel" : ""}`;
+      const style = openingStyle(o, hit?.wall.exterior ?? false);
+      const front = o.type === "door" && isFrontDoor(style);
+      const cls = `fp3d-open fp3d-open-${o.type}${front ? " fp3d-open-front" : ""}${sel ? " fp3d-open-sel" : ""}`;
       let symbol;
       if (o.type === "garage") {
         // door panel just inside the room, with its track under the ceiling drawn dashed
@@ -1681,8 +1689,30 @@ export class Fp3dEditor extends LitElement {
         const face = out ? -across[1] : across[0];
         const hingeAtP0 = (o.hinge === "left") === sgn > 0;
         const two = o.leaves === 2;
-        const midP: Vec2 = [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2];
-        const leafW = two ? o.width / 2 : o.width;
+        // sidelights: fixed glass beside the leaf, drawn like window panes
+        let l0 = p0;
+        let l1 = p1;
+        let panes: [Vec2, Vec2][] = [];
+        if (style === "sidelight" || style === "sidelights") {
+          const both = style === "sidelights";
+          const lw0 = Math.min(1.05, Math.max(0.6, o.width - 0.04 - (both ? 0.6 : 0.3)));
+          const side = (o.width - 0.04 - lw0) / (both ? 2 : 1);
+          const at = (k: number): Vec2 => pointOnRoomEdge(room, o.edge, o.offset - o.width / 2 + k);
+          const start = both || !hingeAtP0 ? 0.02 + side : 0.02;
+          l0 = at(start);
+          l1 = at(start + lw0);
+          panes = both ? [[p0, at(0.02 + side)], [at(o.width - 0.02 - side), p1]] : hingeAtP0 ? [[at(o.width - 0.02 - side), p1]] : [[p0, at(0.02 + side)]];
+        }
+        const midP: Vec2 = [(l0[0] + l1[0]) / 2, (l0[1] + l1[1]) / 2];
+        const leafW = (two ? 0.5 : 1) * Math.hypot(l1[0] - l0[0], l1[1] - l0[1]);
+        const mid = (across[0] - across[1]) / 2;
+        const paneLines = panes.map(([a, b]) => {
+          const a0 = q(a, mid + 0.035);
+          const b0 = q(b, mid + 0.035);
+          const a1 = q(a, mid - 0.035);
+          const b1 = q(b, mid - 0.035);
+          return svg`<line class="fp3d-open-pane" x1=${a0[0]} y1=${a0[1]} x2=${b0[0]} y2=${b0[1]} /><line class="fp3d-open-pane" x1=${a1[0]} y1=${a1[1]} x2=${b1[0]} y2=${b1[1]} />`;
+        });
         const arc = (hinge: Vec2, free: Vec2) => {
           const [hx, hy] = q(hinge, face);
           const [fx, fy] = q(free, face);
@@ -1691,9 +1721,13 @@ export class Fp3dEditor extends LitElement {
           const cross = (leaf[0] - hx) * (fy - hy) - (leaf[1] - hy) * (fx - hx);
           return svg`<path d="M${hx} ${hy}L${leaf[0]} ${leaf[1]}A${r} ${r} 0 0 ${cross > 0 ? 1 : 0} ${fx} ${fy}" />`;
         };
-        symbol = two
-          ? svg`${arc(p0, midP)}${arc(p1, midP)}`
-          : arc(hingeAtP0 ? p0 : p1, hingeAtP0 ? p1 : p0);
+        symbol = svg`${paneLines}${
+          style === "sliding"
+            ? svg`<line x1=${q(l0, face)[0]} y1=${q(l0, face)[1]} x2=${q(l1, face)[0]} y2=${q(l1, face)[1]} />`
+            : two
+              ? svg`${arc(l0, midP)}${arc(l1, midP)}`
+              : arc(hingeAtP0 ? l0 : l1, hingeAtP0 ? l1 : l0)
+        }`;
       } else {
         // two panes in the middle of the wall; a double window has a post in the middle
         const mid = (across[0] - across[1]) / 2;
@@ -2137,6 +2171,29 @@ export class Fp3dEditor extends LitElement {
     >`;
   }
 
+  /** Whether an opening sits in an exterior wall (decides the automatic door style). */
+  private openingIsExterior(o: Opening): boolean {
+    const floor = this.floor;
+    const room = floor?.rooms.find((r) => r.id === o.room_id);
+    if (!floor || !room) return false;
+    const walls = generateWalls(floor.rooms, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior });
+    return locateOnWalls(walls.walls, room, o.edge, o.offset)?.wall.exterior ?? false;
+  }
+
+  /** The look of a door or window: automatic (by wall), or one of the built-in styles. */
+  private renderStyleSelect(o: Opening) {
+    const styles: readonly OpeningStyle[] = o.type === "door" ? DOOR_STYLES : WINDOW_STYLES;
+    const auto = openingStyle({ type: o.type, style: null }, this.openingIsExterior(o));
+    const current = o.style && (styles as readonly string[]).includes(o.style) ? o.style : "";
+    return html`<label class="fp3d-field fp3d-wide"
+      >${this.t("opening_style")}
+      <select ?disabled=${!this.isAdmin} @change=${(e: Event) => this.updateOpening({ style: ((e.target as HTMLSelectElement).value || null) as OpeningStyle | null })}>
+        <option value="" ?selected=${!current}>${this.t("style_auto", { style: this.t(`style_${auto}` as I18nKey) })}</option>
+        ${styles.map((s) => html`<option value=${s} ?selected=${s === current}>${this.t(`style_${s}` as I18nKey)}</option>`)}
+      </select></label
+    >`;
+  }
+
   private renderOpeningForm(o: Opening) {
     const admin = this.isAdmin;
     const window = o.type === "window";
@@ -2220,6 +2277,7 @@ export class Fp3dEditor extends LitElement {
         ${this.num(this.t("opening_position"), o.offset, (v) => this.updateOpening({ offset: Math.max(0, v) }), 0.01, 0)}
         ${window ? this.num(this.t("sill"), o.sill, (v) => this.updateOpening({ sill: Math.max(0, v) }), 0.01, 0) : nothing}
         ${this.num(this.t("opening_height"), o.height, (v) => this.updateOpening({ height: Math.max(0.3, v) }), 0.01, 0.3)}
+        ${garage ? nothing : this.renderStyleSelect(o)}
         ${garage
           ? nothing
           : html`<label class="fp3d-field fp3d-wide"
@@ -3403,6 +3461,16 @@ export class Fp3dEditor extends LitElement {
       .fp3d-open-door path {
         stroke: var(--fp3d-warm);
         stroke-dasharray: 3 3;
+      }
+      .fp3d-open-front path,
+      .fp3d-open-door line {
+        stroke: var(--fp3d-warm);
+        stroke-width: 3;
+        stroke-dasharray: none;
+      }
+      .fp3d-open-door line.fp3d-open-pane {
+        stroke: var(--fp3d-accent);
+        stroke-width: 2;
       }
       .fp3d-open-garage line {
         stroke: var(--fp3d-warm);

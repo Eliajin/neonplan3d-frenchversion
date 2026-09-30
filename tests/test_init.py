@@ -136,6 +136,7 @@ async def test_opening_fields_get_defaults(hass: HomeAssistant, hass_ws_client) 
         "sensor": None,
         "sensor2": None,
         "tilt2": None,
+        "style": None,
         "position": None,
         "position_inverted": False,
     }

@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { emptyBuilding, floorElevation, newFloor, openingPreset, normalizeBuilding, outdoorGround, resizeFurniture, roomTiles, spotGrid, surfaceHeight, type Furniture } from "./model.ts";
+import { emptyBuilding, floorElevation, newFloor, openingPreset, openingStyle, normalizeBuilding, outdoorGround, resizeFurniture, roomTiles, spotGrid, surfaceHeight, type Furniture } from "./model.ts";
+
+test("a door without a style is a front door in an exterior wall and a room door inside", () => {
+  assert.equal(openingStyle({ type: "door", style: null }, true), "front");
+  assert.equal(openingStyle({ type: "door", style: null }, false), "interior");
+  assert.equal(openingStyle({ type: "door", style: "sidelight" }, false), "sidelight");
+  assert.equal(openingStyle({ type: "window", style: null }, true), "standard");
+  // a window style on a door (or garbage) falls back to the automatic choice
+  assert.equal(openingStyle({ type: "door", style: "bars" }, true), "front");
+  assert.equal(openingPreset({ type: "door", leaves: 1, sill: 0, style: "front_glass" }), "front");
+  assert.equal(openingPreset({ type: "door", leaves: 1, sill: 0, style: null }), "door");
+});
 
 const item = (type: string, x: number, z: number, h: number, extra: Partial<Furniture> = {}): Furniture => ({
   id: `${type}_${x}`,

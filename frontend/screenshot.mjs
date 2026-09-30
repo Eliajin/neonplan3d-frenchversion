@@ -85,6 +85,7 @@ const shots = [
   { name: "editor-room", query: "", width: 1280, height: 800, editor: true, select: "Wohnzimmer" },
   { name: "editor-devices", query: "", width: 1280, height: 800, editor: true, select: "Küche", scrollSide: true },
   { name: "editor-opening", query: "", width: 1280, height: 800, editor: true, editorState: { _openingId: "o2", _roomId: "wohnen" } },
+  { name: "editor-front-door", query: "", width: 1280, height: 900, editor: true, editorScript: "const f = e._doc.floors[0]; const o = f.openings.find((x) => x.style === 'sidelight'); e._roomId = o.room_id; e._openingId = o.id;" },
   { name: "editor-opening-leaves", query: "", width: 1280, height: 800, editor: true, editorState: { _openingId: "o2", _roomId: "wohnen" }, scrollSide: true },
   { name: "editor-furniture", query: "", width: 1280, height: 800, editor: true, editorState: { _furnitureId: "m2" } },
   { name: "editor-parking", query: "", width: 1280, height: 900, editor: true, editorScript: "e._furnitureId = e._doc.floors[0].furniture.find((f) => f.type === 'parking').id;" },
@@ -151,7 +152,7 @@ for (const shot of shots.filter((s) => !only || only.includes(s.name))) {
     sessionStorage.setItem("fp3d-shot", "1");
     localStorage.clear();
   });
-  await page.goto(base + shot.query, { waitUntil: "networkidle0" });
+  await page.goto(base + shot.query, { waitUntil: "networkidle0", timeout: 120000 });
   await new Promise((r) => setTimeout(r, 1200));
   const clickText = async (text) => {
     await page.evaluate((t) => {
@@ -206,7 +207,7 @@ for (const shot of shots.filter((s) => !only || only.includes(s.name))) {
     }, shot.editRoomName);
     await new Promise((r) => setTimeout(r, 1500));
     if (shot.reload) {
-      await page.reload({ waitUntil: "networkidle0" });
+      await page.reload({ waitUntil: "networkidle0", timeout: 120000 });
       await new Promise((r) => setTimeout(r, 1200));
     }
   }

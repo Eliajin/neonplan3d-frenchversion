@@ -294,7 +294,7 @@ DEMO_BUILDING.floors[0].openings = [
   hole("window", "schlafen", 3, 1.7, 1.0, { contact: "none" }),
   hole("window", "bad", 2, 1.2, 0.8, { sill: 1.3, height: 0.8 }),
   hole("door", "bad", 1, 1.2, 0.8),
-  hole("door", "flur", 4, 0.8, 1.0, { swing: "out" }),
+  hole("door", "flur", 4, 0.8, 1.4, { swing: "out", style: "sidelight" }),
 ];
 DEMO_BUILDING.floors[1].openings = [
   hole("window", "kind", 0, 2.2, 1.2),
