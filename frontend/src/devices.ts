@@ -522,6 +522,10 @@ export function pictureRuleMatches(hass: HomeAssistant, rule: { entity: string; 
 export function isMediaFurniture(type: string): boolean {
   return MEDIA_FURNITURE.has(type) || !!packScreen(type);
 }
+/** Furniture with a screen that can show a media player or a picture rule (media furniture and the desk's monitor). */
+export function hasScreen(type: string): boolean {
+  return isMediaFurniture(type) || type === "desk";
+}
 /** Name hints for picking a lamp's light (a light that fits the name wins, otherwise any free one). */
 const LAMP_NAMES: Record<string, RegExp> = {
   lamp_ceiling: /(decke|ceiling|haupt|main)/i,

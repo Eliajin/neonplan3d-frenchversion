@@ -3,7 +3,7 @@
 import { css, html, LitElement, nothing, svg, type PropertyValues, type TemplateResult } from "lit";
 import { fetchImage, listHistory, restoreSnapshot, storeImage, takeSnapshot, type Snapshot } from "../api.ts";
 import { download, exportFile, parseExport } from "../transfer.ts";
-import { areaEntities, autoPlace, defaultHeight, entityName, furnitureEntities, groupByDevice, isMediaFurniture, isPlaceable, kindOf, openingEntities, pictureRuleMatches, windowPosition } from "../devices.ts";
+import { areaEntities, autoPlace, defaultHeight, entityName, furnitureEntities, groupByDevice, hasScreen, isMediaFurniture, isPlaceable, kindOf, openingEntities, pictureRuleMatches, windowPosition } from "../devices.ts";
 import { furnitureSymbol } from "./furniture2d.ts";
 import { closeGaps, suggestedThickness } from "../geometry/gaps.ts";
 import { snapToWall } from "../geometry/snap.ts";
@@ -2774,7 +2774,7 @@ export class Fp3dEditor extends LitElement {
         )}
         ${lamp ? nothing : this.entitySelect(this.t("furn_power"), f.power ?? null, autoPick("power"), power, (v) => this.updateFurniture({ power: v }))}
       </div>
-      ${media ? this.renderPictureRules(f) : nothing}
+      ${hasScreen(f.type) ? this.renderPictureRules(f) : nothing}
       <p class="fp3d-sub">${this.t(lamp ? (f.type === "lamp_pendant" ? "lamp_hint_pendant" : "lamp_hint") : media ? "furn_links_hint_tv" : f.type === "robot_vacuum" ? "robot_hint" : "furn_links_hint")}</p>`;
   }
 

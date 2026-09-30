@@ -252,7 +252,7 @@ DEMO_BUILDING.floors[0].placements.push(
   place("sensor.waschmaschine_leistung", 6.4, 6.9),
   place("sensor.akku_leistung", 7.3, 8.8),
 );
-DEMO_BUILDING.floors[1].placements = [place("light.kinderzimmer", 2.9, 2.8), place("light.schreibtisch", 6.2, 1.2), place("sensor.pc_leistung", 7.8, 0.9)];
+DEMO_BUILDING.floors[1].placements = [place("light.kinderzimmer", 2.9, 2.8), place("light.schreibtisch", 6.2, 1.2), place("sensor.pc_leistung", 9.0, 0.9)];
 DEMO_BUILDING.energy = {
   meter: { floor_id: "eg", x: 9.75, z: 5.0 },
   grid: "sensor.netz_leistung",
@@ -376,8 +376,8 @@ DEMO_BUILDING.floors[1].furniture = [
   item("bed", 1.0, 1.4, 1.0, 2.05, 0.8, 90),
   item("desk", 2.8, 3.8, 1.2, 0.6, 0.75, 180),
   item("rug", 2.2, 2.6, 1.6, 1.2, 0.01),
-  { ...item("desk", 7.2, 0.36, 1.6, 0.7, 0.75), pictures: [{ entity: "camera.wohnzimmer", state: "*", image: "camera:camera.wohnzimmer" }] },
-  item("chair", 7.2, 1.1, 0.46, 0.5, 0.9, 180),
+  { ...item("desk", 8.4, 0.36, 1.6, 0.7, 0.75), pictures: [{ entity: "camera.wohnzimmer", state: "*", image: "camera:camera.wohnzimmer" }] },
+  item("chair", 8.4, 1.1, 0.46, 0.5, 0.9, 180),
   item("shelf", 9.8, 2.1, 1.2, 0.35, 1.9, 90),
   { ...item("pack:mastershort.living:media_wall", 5.9, 0.3, 3.0, 0.45, 2.2), pictures: [{ entity: "media_player.fernseher", attribute: "app_name", state: "netflix", image: "pic_demo" }] },
   item("sofa", 5.4, 3.6, 1.9, 0.85, 0.8, 180),

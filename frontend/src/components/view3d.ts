@@ -14,7 +14,7 @@ import {
   openingState,
   TOGGLE_KINDS,
   type FurnitureLinks,
-  type OpeningEntities, isMediaFurniture, pictureRuleMatches,
+  type OpeningEntities, hasScreen, pictureRuleMatches,
 } from "../devices.ts";
 import { alertColor, alertEntities, alertSources, alertText, findAlerts, type Alert, type AlertSources } from "../alerts.ts";
 import { iconPath, iconSvg } from "../icons.ts";
@@ -578,7 +578,7 @@ export class Fp3dView3d extends LitElement {
         } else if ((f.type === "washer" || f.type === "dryer" || f.type === "dishwasher") && running) {
           screens.set(f.id, { color: [0.3, 0.85, 1], level: 0.8 });
         }
-        if (st && (isMediaFurniture(f.type) || f.type === "desk")) {
+        if (st && hasScreen(f.type)) {
           const color = kindOf(st.entity_id) === "media" ? appColor(st) : isActive(st) ? ([0.22, 0.88, 1] as [number, number, number]) : null;
           const picture = kindOf(st.entity_id) === "media" ? ((st.attributes.entity_picture as string | undefined) ?? null) : null;
           if (color) screens.set(f.id, { color, level: st.state === "playing" ? 1 : 0.6, picture });
@@ -608,7 +608,7 @@ export class Fp3dView3d extends LitElement {
     this.cameraScreens = 0;
     for (const floor of b.floors) {
       for (const f of floor.furniture) {
-        if (!f.pictures?.length || !isMediaFurniture(f.type)) continue;
+        if (!f.pictures?.length || !hasScreen(f.type)) continue;
         const rule = f.pictures.find((r) => pictureRuleMatches(hass, r));
         if (!rule) continue;
         const picture = this.pictureUrl(rule.image);
