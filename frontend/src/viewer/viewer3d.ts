@@ -1731,7 +1731,7 @@ export class FloorplanViewer {
     fv.screenSig = sig;
     const buf = new GeoBuffer();
     for (const f of items) {
-      const r = screenRect(f);
+      const r = screenRect(f, fv.floor);
       const st = this.screens.get(f.id)!;
       if (!r) continue;
       const a = (f.rotation * Math.PI) / 180;

@@ -24,6 +24,8 @@ export interface PackPart {
   edges?: boolean | "glow" | "faint";
   /** Lamps: shines in the colour and brightness of the linked light. */
   glow?: boolean;
+  /** A screen: shows the linked media player's app colour and picture on its front (+z). */
+  screen?: boolean;
   /** Loft: centre and extent of the top rectangle (defaults: the same as the bottom). */
   tx?: number;
   tz?: number;
@@ -103,6 +105,11 @@ const PACK_ALIASES: Record<string, string> = {
   "mastershort.bedroom_basics": "mastershort.bedroom",
   "mastershort.bath_basics": "mastershort.bath",
 };
+
+/** The screen part of a pack item (a TV or monitor), if it has one. */
+export function packScreen(type: string): PackPart | undefined {
+  return packItem(type)?.parts.find((p) => p.screen);
+}
 
 export function packItem(type: string): PackItem | undefined {
   if (!isPackType(type)) return undefined;

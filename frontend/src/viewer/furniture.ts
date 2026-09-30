@@ -5,7 +5,8 @@
 
 import { Color } from "three";
 import type { Furniture, Vec2 } from "../model.ts";
-import { packItem, type PackItem } from "../packs.ts";
+import { mountBase, packItem, packScreen, type PackItem } from "../packs.ts";
+import type { Floor } from "../model.ts";
 import { ALWAYS, EDGE_TOP, type GeoBuffer, LineBuffer, pushLoft, pushLyingCyl, pushPrism, shade } from "./geo.ts";
 
 const C = {
@@ -617,10 +618,19 @@ export const RADIATOR_Y = 0.12;
  * Screen of a TV or monitor in local coordinates (x across, y up, z = its front face), for the glow
  * shown while the linked device is on. Null for furniture without a screen.
  */
-export function screenRect(f: Furniture): { x0: number; x1: number; y0: number; y1: number; z: number } | null {
+export function screenRect(f: Furniture, floor?: Floor): { x0: number; x1: number; y0: number; y1: number; z: number } | null {
   const w = Math.max(0.05, f.w);
   const d = Math.max(0.05, f.d);
   const h = Math.max(0.005, f.h);
+  const part = packScreen(f.type);
+  if (part) {
+    // the screen part's front face, at the item's mount height
+    const base = floor ? mountBase(floor, f) : 0;
+    const x0 = (part.x - part.w / 2) * w;
+    const x1 = (part.x + part.w / 2) * w;
+    const inset = Math.min(0.02, (x1 - x0) * 0.05);
+    return { x0: x0 + inset, x1: x1 - inset, y0: base + part.y * h + inset, y1: base + (part.y + part.h) * h - inset, z: (part.z + part.d / 2) * d };
+  }
   if (f.type === "tv_board") {
     const tw = Math.min(w * 0.8, 1.45);
     const th = tw * 0.56;

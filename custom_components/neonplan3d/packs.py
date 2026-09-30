@@ -61,6 +61,8 @@ PART_SCHEMA = vol.Schema(
         vol.Optional("edges", default=False): vol.Any(bool, vol.In(["glow", "faint"])),
         # lamps: the part shines in the colour and brightness of the linked light
         vol.Optional("glow", default=False): bool,
+        # a screen (TV, monitor): shows the linked media player's app colour and picture on its front (+z)
+        vol.Optional("screen", default=False): bool,
         # loft: centre and extent of the top rectangle (default: the same as the bottom)
         vol.Optional("tx"): _FRACTION,
         vol.Optional("tz"): _FRACTION,

@@ -3,6 +3,7 @@
 
 import type { Floor, LampMount, Opening, Placement, Room, Vec2 } from "./model.ts";
 import { centroid, pointInPolygon } from "./model.ts";
+import { packScreen } from "./packs.ts";
 import type { HassEntity, HomeAssistant } from "./types.ts";
 
 export type DeviceKind =
@@ -504,6 +505,11 @@ const FURNITURE_NAMES: Record<string, RegExp> = {
   radiator: /(heiz|radiator|thermostat|climate|hk|trv)/i,
 };
 const MEDIA_FURNITURE = new Set(["tv_board", "tv_wall"]);
+
+/** Furniture with a screen that shows a media player: the built-in TVs, or a pack item with a screen part. */
+export function isMediaFurniture(type: string): boolean {
+  return MEDIA_FURNITURE.has(type) || !!packScreen(type);
+}
 /** Name hints for picking a lamp's light (a light that fits the name wins, otherwise any free one). */
 const LAMP_NAMES: Record<string, RegExp> = {
   lamp_ceiling: /(decke|ceiling|haupt|main)/i,
@@ -566,7 +572,7 @@ export function furnitureEntities(hass: HomeAssistant, floors: readonly Floor[])
         } else if (f.type === "radiator") {
           const climates = free.filter((id) => kindOf(id) === "climate");
           entity = climates.find((id) => pattern.test(name(id))) ?? climates[0] ?? null;
-        } else if (MEDIA_FURNITURE.has(f.type)) {
+        } else if (isMediaFurniture(f.type)) {
           const media = free.filter((id) => kindOf(id) === "media");
           entity = media.find((id) => hass.states[id]?.attributes.device_class === "tv") ?? media.find((id) => pattern?.test(name(id))) ?? media[0] ?? null;
         } else if (pattern) {

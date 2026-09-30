@@ -3,7 +3,7 @@
 import { css, html, LitElement, nothing, svg, type PropertyValues, type TemplateResult } from "lit";
 import { fetchImage, listHistory, restoreSnapshot, storeImage, takeSnapshot, type Snapshot } from "../api.ts";
 import { download, exportFile, parseExport } from "../transfer.ts";
-import { areaEntities, autoPlace, defaultHeight, entityName, furnitureEntities, groupByDevice, isPlaceable, kindOf, openingEntities, windowPosition } from "../devices.ts";
+import { areaEntities, autoPlace, defaultHeight, entityName, furnitureEntities, groupByDevice, isMediaFurniture, isPlaceable, kindOf, openingEntities, windowPosition } from "../devices.ts";
 import { furnitureSymbol } from "./furniture2d.ts";
 import { closeGaps, suggestedThickness } from "../geometry/gaps.ts";
 import { snapToWall } from "../geometry/snap.ts";
@@ -2741,7 +2741,7 @@ export class Fp3dEditor extends LitElement {
       for (const fl of probe) for (const x of fl.furniture) if (x.id === f.id) x[key] = null;
       return furnitureEntities(hass, probe).get(f.id)?.[key] ?? null;
     };
-    const media = f.type === "tv_board" || f.type === "tv_wall";
+    const media = isMediaFurniture(f.type);
     const lamp = isLamp(f.type);
     const entities = this.entityOptions((id) =>
       lamp
