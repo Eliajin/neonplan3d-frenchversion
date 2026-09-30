@@ -2879,10 +2879,10 @@ export class Fp3dEditor extends LitElement {
       return options.length ? options : [current(entity, attribute)];
     };
     // groups in order of first appearance: one per entity + attribute
-    const keyOf = (r: ScreenPicture) => `${r.entity}\u0000${r.attribute ?? ""}`;
+    const keyOf = (r: { entity: string; attribute?: string | null }) => `${r.entity}\u0000${r.attribute ?? ""}`;
     const groups: { entity: string; attribute: string | null; rows: number[] }[] = [];
     rules.forEach((r, i) => {
-      const g = groups.find((x) => keyOf(x as ScreenPicture) === keyOf(r));
+      const g = groups.find((x) => keyOf(x) === keyOf(r));
       if (g) g.rows.push(i);
       else groups.push({ entity: r.entity, attribute: r.attribute ?? null, rows: [i] });
     });
