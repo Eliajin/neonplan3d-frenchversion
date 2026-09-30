@@ -2854,84 +2854,110 @@ export class Fp3dEditor extends LitElement {
       ${open ? html`<div class="fp3d-library">${hits.map((it) => this.libraryButton(it.type, it.label))}</div>` : nothing}`;
   }
 
-  /** Pictures a screen shows by an entity's state (a stored image or a URL), in order; the first match wins. */
+  /**
+   * Pictures a screen shows by an entity's state: the rules are grouped by entity (and attribute), each
+   * group lists its values with a picture; in order, the first matching rule wins.
+   */
   private renderPictureRules(f: Furniture) {
     const admin = this.isAdmin;
     const rules = f.pictures ?? [];
     const set = (next: ScreenPicture[]) => this.updateFurniture({ pictures: next });
     const entities = this.entityOptions(() => true);
-    // what a rule can look at: the state, or any attribute with a simple value (text, number, boolean)
     const scalar = (v: unknown) => ["string", "number", "boolean"].includes(typeof v);
     const attributes = (id: string) =>
       Object.entries(this.hass?.states[id]?.attributes ?? {})
         .filter(([k, v]) => scalar(v) && k !== "friendly_name" && k !== "icon")
         .map(([k]) => k);
-    const values = (r: ScreenPicture) => {
-      const st = this.hass?.states[r.entity];
-      if (!st) return [];
-      if (r.attribute) return [String(st.attributes[r.attribute] ?? "")];
-      const options = Array.isArray(st.attributes.options) ? (st.attributes.options as string[]) : [];
-      return options.length ? options : [st.state];
+    const current = (entity: string, attribute: string | null) => {
+      const st = this.hass?.states[entity];
+      if (!st) return "";
+      return String((attribute ? st.attributes[attribute] : st.state) ?? "");
     };
+    const suggestions = (entity: string, attribute: string | null) => {
+      const st = this.hass?.states[entity];
+      const options = !attribute && Array.isArray(st?.attributes.options) ? (st.attributes.options as string[]) : [];
+      return options.length ? options : [current(entity, attribute)];
+    };
+    // groups in order of first appearance: one per entity + attribute
+    const keyOf = (r: ScreenPicture) => `${r.entity}\u0000${r.attribute ?? ""}`;
+    const groups: { entity: string; attribute: string | null; rows: number[] }[] = [];
+    rules.forEach((r, i) => {
+      const g = groups.find((x) => keyOf(x as ScreenPicture) === keyOf(r));
+      if (g) g.rows.push(i);
+      else groups.push({ entity: r.entity, attribute: r.attribute ?? null, rows: [i] });
+    });
+    const patchGroup = (g: (typeof groups)[number], change: Partial<ScreenPicture>) => set(rules.map((x, i) => (g.rows.includes(i) ? { ...x, ...change } : x)));
+    const patchRow = (i: number, change: Partial<ScreenPicture>) => set(rules.map((x, j) => (j === i ? { ...x, ...change } : x)));
     return html`<div class="fp3d-wide">
       <div class="fp3d-sub">${this.t("screen_pictures")}</div>
-      ${rules.map(
-        (r, i) => html`<div class="fp3d-picture-rule">
+      ${groups.map(
+        (g) => html`<div class="fp3d-picture-group">
           <fp3d-entity-picker
             .options=${entities}
-            .value=${r.entity}
+            .value=${g.entity}
             .placeholder=${this.t("entity_search")}
             ?disabled=${!admin}
             @change=${(e: CustomEvent<{ value: string }>) => {
               e.stopPropagation();
-              set(rules.map((x, j) => (j === i ? { ...x, entity: e.detail.value } : x)));
+              patchGroup(g, { entity: e.detail.value });
             }}
           ></fp3d-entity-picker>
           <select
             ?disabled=${!admin}
             title=${this.t("picture_attribute")}
             @change=${(e: Event) => {
-              // switching what is compared pre-fills the value with what the entity reports right now
               const attribute = (e.target as HTMLSelectElement).value || null;
-              const st = this.hass?.states[r.entity];
-              const now = st ? String((attribute ? st.attributes[attribute] : st.state) ?? "") : r.state;
-              set(rules.map((x, j) => (j === i ? { ...x, attribute, state: now } : x)));
+              // the values of the group start over with what the entity reports now
+              const now = current(g.entity, attribute);
+              set(rules.map((x, i) => (g.rows.includes(i) ? { ...x, attribute, state: g.rows[0] === i ? now : x.state } : x)));
             }}
           >
-            <option value="" ?selected=${!r.attribute}>${this.t("picture_state_of")}</option>
-            ${attributes(r.entity).map((a) => html`<option value=${a} ?selected=${a === r.attribute}>${a}</option>`)}
+            <option value="" ?selected=${!g.attribute}>${this.t("picture_state_of")}</option>
+            ${attributes(g.entity).map((a) => html`<option value=${a} ?selected=${a === g.attribute}>${a}</option>`)}
           </select>
-          <input
-            type="text"
-            list="fp3d-picture-states-${i}"
-            placeholder=${this.t("picture_state")}
-            .value=${r.state}
-            ?disabled=${!admin}
-            @change=${(e: Event) => set(rules.map((x, j) => (j === i ? { ...x, state: (e.target as HTMLInputElement).value } : x)))}
-          />
-          <datalist id="fp3d-picture-states-${i}"><option value="*"></option>${values(r).map((s) => html`<option value=${s}></option>`)}</datalist>
-          <span class="fp3d-sub fp3d-rule-now ${this.hass && pictureRuleMatches(this.hass, r) ? "fp3d-rule-hit" : ""}">
-            ${this.hass && pictureRuleMatches(this.hass, r) ? this.t("picture_matches") : this.t("picture_no_match", { value: values(r)[0] ?? "–" })}
-          </span>
-          ${this._images[r.image] ? html`<img class="fp3d-picture-thumb" src=${this._images[r.image].url} alt="" />` : nothing}
-          <label class="fp3d-btn fp3d-picture-pick">
-            ${r.image ? this.t("picture_change") : this.t("picture_pick")}
-            <input type="file" accept="image/*" hidden ?disabled=${!admin} @change=${(e: Event) => void this.uploadPicture(e, f, i)} />
-          </label>
-          <input
-            type="url"
-            placeholder=${this.t("picture_url")}
-            .value=${/^https?:\/\//.test(r.image) ? r.image : ""}
-            ?disabled=${!admin}
-            @change=${(e: Event) => {
-              const v = (e.target as HTMLInputElement).value.trim();
-              if (v) set(rules.map((x, j) => (j === i ? { ...x, image: v } : x)));
-            }}
-          />
-          <button class="fp3d-btn" ?disabled=${!admin} title=${this.t("delete")} @click=${() => set(rules.filter((_, j) => j !== i))}>✕</button>
+          <span class="fp3d-sub fp3d-rule-now">${this.t("picture_current", { value: current(g.entity, g.attribute) || "–" })}</span>
+          ${g.rows.map((i) => {
+            const r = rules[i];
+            const hit = !!this.hass && pictureRuleMatches(this.hass, r);
+            return html`<div class="fp3d-picture-row ${hit ? "fp3d-rule-hit" : ""}">
+              <input
+                type="text"
+                list="fp3d-picture-states-${i}"
+                placeholder=${this.t("picture_state")}
+                .value=${r.state}
+                ?disabled=${!admin}
+                @change=${(e: Event) => patchRow(i, { state: (e.target as HTMLInputElement).value })}
+              />
+              <datalist id="fp3d-picture-states-${i}"><option value="*"></option>${suggestions(g.entity, g.attribute).map((v) => html`<option value=${v}></option>`)}</datalist>
+              ${this._images[r.image] ? html`<img class="fp3d-picture-thumb" src=${this._images[r.image].url} alt="" /> ` : nothing}
+              <label class="fp3d-btn fp3d-picture-pick">
+                ${r.image ? this.t("picture_change") : this.t("picture_pick")}
+                <input type="file" accept="image/*" hidden ?disabled=${!admin} @change=${(e: Event) => void this.uploadPicture(e, f, i)} />
+              </label>
+              <input
+                type="url"
+                placeholder=${this.t("picture_url")}
+                .value=${/^https?:\/\//.test(r.image) ? r.image : ""}
+                ?disabled=${!admin}
+                @change=${(e: Event) => {
+                  const v = (e.target as HTMLInputElement).value.trim();
+                  if (v) patchRow(i, { image: v });
+                }}
+              />
+              <span class="fp3d-sub">${hit ? this.t("picture_matches") : ""}</span>
+              <button class="fp3d-btn" ?disabled=${!admin} title=${this.t("delete")} @click=${() => set(rules.filter((_, j) => j !== i))}>✕</button>
+            </div>`;
+          })}
+          ${admin
+            ? html`<button class="fp3d-btn" @click=${() => set([...rules, { entity: g.entity, attribute: g.attribute, state: current(g.entity, g.attribute), image: "" }])}>
+                ${this.t("picture_add_value")}
+              </button>`
+            : nothing}
         </div>`,
       )}
-      ${admin ? html`<button class="fp3d-btn" @click=${() => set([...rules, { entity: entities[0]?.id ?? "", state: "on", image: "" }])}>${this.t("picture_add")}</button>` : nothing}
+      ${admin
+        ? html`<button class="fp3d-btn" @click=${() => set([...rules, { entity: entities[0]?.id ?? "", attribute: null, state: "on", image: "" }])}>${this.t("picture_add_entity")}</button>`
+        : nothing}
       <p class="fp3d-sub">${this.t("screen_pictures_hint")}</p>
     </div>`;
   }
@@ -3453,23 +3479,35 @@ export class Fp3dEditor extends LitElement {
         color: var(--fp3d-warm);
         font-size: 12.5px;
       }
-      .fp3d-picture-rule {
+      .fp3d-picture-group {
         display: grid;
-        grid-template-columns: 1fr auto;
         gap: 6px;
-        align-items: center;
         margin: 6px 0 10px;
         padding: 8px;
         border: 1px solid var(--fp3d-line);
         border-radius: 10px;
       }
-      .fp3d-picture-rule select {
+      .fp3d-picture-group > select {
         min-width: 0;
       }
-      .fp3d-picture-rule fp3d-entity-picker,
-      .fp3d-picture-rule input[type="url"] {
+      .fp3d-picture-row {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 6px;
+        align-items: center;
+        padding: 6px;
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--fp3d-line) 40%, transparent);
+      }
+      .fp3d-picture-row input[type="url"] {
         grid-column: 1 / -1;
         min-width: 0;
+      }
+      .fp3d-picture-row > .fp3d-sub {
+        grid-column: 1 / -1;
+      }
+      .fp3d-picture-row.fp3d-rule-hit {
+        outline: 1px solid var(--fp3d-accent);
       }
       .fp3d-rule-now {
         grid-column: 1 / -1;
@@ -3478,7 +3516,6 @@ export class Fp3dEditor extends LitElement {
         color: var(--fp3d-accent);
       }
       .fp3d-picture-thumb {
-        grid-column: 1 / -1;
         max-height: 60px;
         max-width: 100%;
         border-radius: 6px;
