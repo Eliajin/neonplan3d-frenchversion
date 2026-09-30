@@ -54,6 +54,7 @@ import {
   openingStyle,
   isFrontDoor,
   type OpeningStyle,
+  type ScreenPicture,
 } from "../model.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
@@ -476,6 +477,10 @@ export class Fp3dEditor extends LitElement {
   protected updated(): void {
     const bg = this.floor?.background;
     if (bg && !this._images[bg.image_id] && !this.loadingImages.has(bg.image_id)) void this.loadImage(bg.image_id);
+    // thumbnails of the selected screen's stored pictures
+    for (const r of this.furnitureItem?.pictures ?? []) {
+      if (r.image && !/^https?:\/\//.test(r.image) && !this._images[r.image] && !this.loadingImages.has(r.image)) void this.loadImage(r.image);
+    }
   }
 
   // ------------------------------------------------------------------ document helpers
@@ -2762,6 +2767,7 @@ export class Fp3dEditor extends LitElement {
         )}
         ${lamp ? nothing : this.entitySelect(this.t("furn_power"), f.power ?? null, autoPick("power"), power, (v) => this.updateFurniture({ power: v }))}
       </div>
+      ${media ? this.renderPictureRules(f) : nothing}
       <p class="fp3d-sub">${this.t(lamp ? (f.type === "lamp_pendant" ? "lamp_hint_pendant" : "lamp_hint") : media ? "furn_links_hint_tv" : f.type === "robot_vacuum" ? "robot_hint" : "furn_links_hint")}</p>`;
   }
 
@@ -2842,6 +2848,76 @@ export class Fp3dEditor extends LitElement {
         <span class="fp3d-lib-caret">${open ? "▾" : "▸"}</span>${title} <span class="fp3d-lib-count">${hits.length}</span>
       </button>
       ${open ? html`<div class="fp3d-library">${hits.map((it) => this.libraryButton(it.type, it.label))}</div>` : nothing}`;
+  }
+
+  /** Pictures a screen shows by an entity's state (a stored image or a URL), in order; the first match wins. */
+  private renderPictureRules(f: Furniture) {
+    const admin = this.isAdmin;
+    const rules = f.pictures ?? [];
+    const set = (next: ScreenPicture[]) => this.updateFurniture({ pictures: next });
+    const entities = this.entityOptions(() => true);
+    const states = (id: string) => {
+      const st = this.hass?.states[id];
+      const options = Array.isArray(st?.attributes.options) ? (st.attributes.options as string[]) : [];
+      return options.length ? options : st ? [st.state] : [];
+    };
+    return html`<div class="fp3d-wide">
+      <div class="fp3d-sub">${this.t("screen_pictures")}</div>
+      ${rules.map(
+        (r, i) => html`<div class="fp3d-picture-rule">
+          <select ?disabled=${!admin} @change=${(e: Event) => set(rules.map((x, j) => (j === i ? { ...x, entity: (e.target as HTMLSelectElement).value } : x)))}>
+            ${entities.map((o) => html`<option value=${o.id} ?selected=${o.id === r.entity}>${o.label}</option>`)}
+          </select>
+          <input
+            type="text"
+            list="fp3d-picture-states-${i}"
+            placeholder=${this.t("picture_state")}
+            .value=${r.state}
+            ?disabled=${!admin}
+            @change=${(e: Event) => set(rules.map((x, j) => (j === i ? { ...x, state: (e.target as HTMLInputElement).value } : x)))}
+          />
+          <datalist id="fp3d-picture-states-${i}"><option value="*"></option>${states(r.entity).map((s) => html`<option value=${s}></option>`)}</datalist>
+          ${this._images[r.image] ? html`<img class="fp3d-picture-thumb" src=${this._images[r.image].url} alt="" />` : nothing}
+          <label class="fp3d-btn fp3d-picture-pick">
+            ${r.image ? this.t("picture_change") : this.t("picture_pick")}
+            <input type="file" accept="image/*" hidden ?disabled=${!admin} @change=${(e: Event) => void this.uploadPicture(e, f, i)} />
+          </label>
+          <input
+            type="url"
+            placeholder=${this.t("picture_url")}
+            .value=${/^https?:\/\//.test(r.image) ? r.image : ""}
+            ?disabled=${!admin}
+            @change=${(e: Event) => {
+              const v = (e.target as HTMLInputElement).value.trim();
+              if (v) set(rules.map((x, j) => (j === i ? { ...x, image: v } : x)));
+            }}
+          />
+          <button class="fp3d-btn" ?disabled=${!admin} title=${this.t("delete")} @click=${() => set(rules.filter((_, j) => j !== i))}>✕</button>
+        </div>`,
+      )}
+      ${admin ? html`<button class="fp3d-btn" @click=${() => set([...rules, { entity: entities[0]?.id ?? "", state: "on", image: "" }])}>${this.t("picture_add")}</button>` : nothing}
+      <p class="fp3d-sub">${this.t("screen_pictures_hint")}</p>
+    </div>`;
+  }
+
+  /** Stores a picture for a rule, scaled down to what a screen in 3D needs. */
+  private async uploadPicture(e: Event, f: Furniture, index: number): Promise<void> {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    const bitmap = await createImageBitmap(file);
+    const k = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * k);
+    canvas.height = Math.round(bitmap.height * k);
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const data = canvas.toDataURL(file.type === "image/png" ? "image/png" : "image/jpeg", 0.85);
+    const imageId = uid("pic");
+    await storeImage(this.hass, imageId, data);
+    this._images = { ...this._images, [imageId]: { url: data, aspect: canvas.height / canvas.width } };
+    const rules = this.furnitureItem?.id === f.id ? (this.furnitureItem.pictures ?? []) : (f.pictures ?? []);
+    this.updateFurniture({ pictures: rules.map((x, j) => (j === index ? { ...x, image: imageId } : x)) });
   }
 
   private renderFurnitureLibrary() {
@@ -3340,6 +3416,31 @@ export class Fp3dEditor extends LitElement {
       .fp3d-warn {
         color: var(--fp3d-warm);
         font-size: 12.5px;
+      }
+      .fp3d-picture-rule {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 6px;
+        align-items: center;
+        margin: 6px 0 10px;
+        padding: 8px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 10px;
+      }
+      .fp3d-picture-rule select,
+      .fp3d-picture-rule input[type="url"] {
+        grid-column: 1 / -1;
+        min-width: 0;
+      }
+      .fp3d-picture-thumb {
+        grid-column: 1 / -1;
+        max-height: 60px;
+        max-width: 100%;
+        border-radius: 6px;
+        justify-self: start;
+      }
+      .fp3d-picture-pick {
+        justify-self: start;
       }
       .fp3d-parking-row {
         display: flex;

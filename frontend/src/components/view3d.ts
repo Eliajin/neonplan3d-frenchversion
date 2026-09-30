@@ -22,6 +22,7 @@ import { energySummary, findConsumers, flowColor, flowSegments, powerSensorFor, 
 import { STAGE, type Theme } from "../themes.ts";
 import { HEAT_SCALES, heatColor, heatGradient, roomValues, type HeatMode } from "../heatmap.ts";
 import { furnitureName } from "../furniture-names.ts";
+import { fetchImage } from "../api.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { getPacks, mountBase, packItem, packsVersion } from "../packs.ts";
 import { parkedVehicles, parkingEntities } from "../parking.ts";
@@ -172,6 +173,8 @@ export class Fp3dView3d extends LitElement {
   private heatValues = new Map<string, number>();
   /** Entities whose state changes redraw markers, cables, people and floor labels. */
   private watched: string[] = [];
+  /** Stored images used as screen pictures, as data URLs (fetched once); null while loading or missing. */
+  private pictureUrls = new Map<string, string | null>();
 
   constructor() {
     super();
@@ -361,6 +364,7 @@ export class Fp3dView3d extends LitElement {
       const presence = b.presence.flatMap((p) => [p.person, p.sensor]);
       const lights = b.floors.flatMap((f) => f.rooms.flatMap((r) => areaEntities(hass, r.area_id).filter((id) => kindOf(id) === "light")));
       const furniture = [...this.furnitureLinks.values()].flatMap((l) => [l.entity, l.power]);
+      const pictureRules = b.floors.flatMap((f) => f.furniture.flatMap((m) => (m.pictures ?? []).map((r) => r.entity)));
       const heat =
         this.heatMode === "none"
           ? []
@@ -368,7 +372,7 @@ export class Fp3dView3d extends LitElement {
       this.alertSrc = this.alerts ? alertSources(hass, b) : null;
       const warn = this.alertSrc ? alertEntities(this.alertSrc) : [];
       const parking = parkingEntities(b.floors);
-      const all = [...placed, ...links, ...power, ...furniture, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights, ...heat, ...warn, ...parking, "sun.sun"];
+      const all = [...placed, ...links, ...power, ...furniture, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights, ...heat, ...warn, ...parking, "sun.sun"];
       this.watched = [...new Set(all.filter((id): id is string => !!id))];
       force = true;
     }
@@ -593,7 +597,35 @@ export class Fp3dView3d extends LitElement {
         });
       }
     }
+    // picture rules: the first rule whose entity is in its state puts its picture on the screen
+    for (const floor of b.floors) {
+      for (const f of floor.furniture) {
+        if (!f.pictures?.length || !isMediaFurniture(f.type)) continue;
+        const rule = f.pictures.find((r) => {
+          const st = hass.states[r.entity];
+          return !!st && (r.state === "*" || st.state.toLowerCase() === r.state.trim().toLowerCase());
+        });
+        if (!rule) continue;
+        const picture = this.pictureUrl(rule.image);
+        if (picture) screens.set(f.id, { color: [0.42, 0.42, 0.5], level: 1, picture });
+      }
+    }
     return { markers, consumers, screens, targets };
+  }
+
+  /** A picture rule's image as a URL: http(s) as is, a stored image as a data URL (fetched once). */
+  private pictureUrl(image: string): string | null {
+    if (/^https?:\/\//.test(image)) return image;
+    if (this.pictureUrls.has(image)) return this.pictureUrls.get(image) ?? null;
+    this.pictureUrls.set(image, null);
+    fetchImage(this.hass, image).then(
+      (url) => {
+        this.pictureUrls.set(image, url);
+        this.syncDevices(true);
+      },
+      () => undefined,
+    );
+    return null;
   }
 
   /** Robot vacuums (docks with a vacuum entity): where they rest and what they do. */

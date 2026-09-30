@@ -180,6 +180,38 @@ async def test_furniture_links_default_to_automatic(hass: HomeAssistant, hass_ws
     assert (got[1]["entity"], got[1]["power"]) == ("media_player.tv", "none")
 
 
+async def test_screen_pictures_keep_their_images(hass: HomeAssistant, hass_ws_client) -> None:
+    """Images used by screen picture rules are not dropped as unused when the building is saved."""
+    await _setup(hass)
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "neonplan3d/image/set", "image_id": "pic1", "data": IMAGE})
+    assert (await client.receive_json())["success"]
+    building = copy.deepcopy(BUILDING)
+    item = {
+        "id": "m1",
+        "type": "tv_wall",
+        "x": 1,
+        "z": 1,
+        "rotation": 0,
+        "w": 1.4,
+        "d": 0.1,
+        "h": 0.8,
+        "variant": None,
+        "pictures": [
+            {"entity": "binary_sensor.cat", "state": "on", "image": "pic1"},
+            {"entity": "sun.sun", "state": "*", "image": "https://x/y.png"},
+        ],
+    }
+    building["floors"][0]["furniture"] = [item]
+    await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": building})
+    assert (await client.receive_json())["success"]
+    await client.send_json_auto_id({"type": "neonplan3d/image/get", "image_id": "pic1"})
+    assert (await client.receive_json())["result"]["data"] == IMAGE
+    await client.send_json_auto_id({"type": "neonplan3d/building/get"})
+    got = (await client.receive_json())["result"]["building"]["floors"][0]["furniture"][0]
+    assert [r["image"] for r in got["pictures"]] == ["pic1", "https://x/y.png"]
+
+
 async def test_placement_mount_defaults_to_none(hass: HomeAssistant, hass_ws_client) -> None:
     await _setup(hass)
     client = await hass_ws_client(hass)

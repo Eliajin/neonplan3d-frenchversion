@@ -57,6 +57,14 @@ export interface Opening {
   tilt: EntityRef;
 }
 
+/** A picture rule of a screen: while `entity` is in `state`, the stored image (or a URL) is shown. */
+export interface ScreenPicture {
+  entity: string;
+  state: string;
+  /** An image id of the image store, or an http(s) URL. */
+  image: string;
+}
+
 export interface Furniture {
   id: string;
   type: string;
@@ -73,6 +81,8 @@ export interface Furniture {
   power?: EntityRef;
   /** Wall-hung pack items: height of the bottom edge above the floor (null = the pack's default). */
   mount_y?: number | null;
+  /** Screens: pictures shown while an entity is in a state (first match wins; "*" = any state). */
+  pictures?: ScreenPicture[];
   /** Parking spots: the vehicle shown (a pack item type) while `entity` reports a car. */
   vehicle?: string | null;
   /** Parking spots: size factor of the vehicle (1 = the pack item's size). */

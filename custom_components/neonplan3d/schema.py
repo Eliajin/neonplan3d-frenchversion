@@ -74,6 +74,15 @@ OPENING_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
+# screens: a picture shown while an entity is in a state (an image id of the image store, or an http URL)
+_SCREEN_PICTURE_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity"): vol.All(str, vol.Length(max=255)),
+        vol.Required("state"): vol.All(str, vol.Length(max=64)),
+        vol.Required("image"): vol.All(str, vol.Length(max=2048)),
+    }
+)
+
 # parking spots: which vehicle a state of the type sensor means
 _VEHICLE_TYPE_SCHEMA = vol.Schema(
     {vol.Required("state"): vol.All(str, vol.Length(max=64)), vol.Required("vehicle"): vol.All(str, vol.Length(max=96))}
@@ -98,6 +107,7 @@ FURNITURE_SCHEMA = vol.Schema(
         # factor, and a sensor naming the kind of vehicle with a state -> vehicle mapping
         # wall-hung pack items: height of the bottom edge above the floor (None = the pack's default)
         vol.Optional("mount_y", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=10))),
+        vol.Optional("pictures", default=[]): vol.All([_SCREEN_PICTURE_SCHEMA], vol.Length(max=20)),
         vol.Optional("vehicle", default=None): vol.Any(None, vol.All(str, vol.Length(max=96))),
         vol.Optional("scale", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0.2, max=2)),
         vol.Optional("type_entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
@@ -250,5 +260,11 @@ def empty_building() -> dict:
 
 
 def image_ids(building: dict) -> set[str]:
-    """Return the ids of all background images referenced by a building."""
-    return {floor["background"]["image_id"] for floor in building.get("floors", []) if floor.get("background")}
+    """Return the ids of all images a building refers to: floor backgrounds and screen pictures."""
+    ids = {floor["background"]["image_id"] for floor in building.get("floors", []) if floor.get("background")}
+    for floor in building.get("floors", []):
+        for item in floor.get("furniture", []):
+            for rule in item.get("pictures") or []:
+                if not rule["image"].startswith(("http://", "https://")):
+                    ids.add(rule["image"])
+    return ids
