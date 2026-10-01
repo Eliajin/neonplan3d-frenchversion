@@ -15,7 +15,7 @@ import voluptuous as vol
 
 from . import license as lic
 from .const import DOMAIN, SIGNAL_BUILDING_UPDATED
-from .packs import MAX_PACK_SIZE, PackError, signature_of, verify_pack
+from .packs import MAX_PACK_SIZE, PackError, parts_of, verify_pack
 from .schema import BUILDING_SCHEMA, IMAGE_DATA
 from .storage import FloorplanData, complete
 
@@ -213,7 +213,7 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
     except PackError as err:
         connection.send_error(msg["id"], err.code, err.detail or err.code)
         return
-    await data.async_add_pack(payload, signature_of(msg["pack"]))
+    await data.async_add_pack(payload, parts_of(msg["pack"]))
     connection.send_result(
         msg["id"],
         {
@@ -357,18 +357,18 @@ async def ws_backup_import(
     skipped: list[dict[str, str]] = []
     for entry in msg["packs"]:
         signature = entry.get("signature")
-        payload = {k: v for k, v in entry.items() if k not in ("signature", "imported_at")}
-        name = str(payload.get("id") or "?")
-        if not isinstance(signature, dict):
+        source = entry.get("source")
+        name = str(entry.get("id") or "?")
+        if not isinstance(signature, dict) or not isinstance(source, dict):
             skipped.append({"id": name, "reason": "unsigned"})
             continue
         try:
-            clean = verify_pack(json.dumps({"payload": payload, "signature": signature}), instance=instance)
-        except PackError as err:
-            skipped.append({"id": name, "reason": err.code})
+            text = json.dumps({"payload": source, "signature": signature})
+            clean = verify_pack(text, instance=instance)
+        except (PackError, TypeError, ValueError) as err:
+            skipped.append({"id": name, "reason": getattr(err, "code", "bad_signature")})
             continue
-        kept_signature = {"key": signature["key"], "sig": signature["sig"]}
-        packs.append({**clean, "signature": kept_signature, "imported_at": time.time()})
+        packs.append({**clean, "source": source, "signature": parts_of(text)[1], "imported_at": time.time()})
     revision = await data.async_restore(complete(building), packs)
     connection.send_result(
         msg["id"],

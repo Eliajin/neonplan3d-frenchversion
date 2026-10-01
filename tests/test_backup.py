@@ -69,8 +69,8 @@ async def test_backup_round_trip(hass: HomeAssistant, hass_ws_client, monkeypatc
 
     # a tampered pack and an unsigned one are skipped on restore, the good one comes back
     tampered = json.loads(json.dumps(backup["packs"][0]))
-    tampered["id"] = "test.tampered"
-    tampered["name"] = "Changed"
+    tampered["id"] = tampered["source"]["id"] = "test.tampered"
+    tampered["source"]["name"] = "Changed"
     unsigned = {k: v for k, v in backup["packs"][0].items() if k != "signature"}
     unsigned["id"] = "test.unsigned"
     backup["building"]["floors"][0]["name"] = "Restored floor"

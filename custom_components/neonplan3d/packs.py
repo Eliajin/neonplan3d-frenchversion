@@ -170,13 +170,13 @@ def fingerprint(instance_id: str) -> str:
     return hashlib.sha256(f"neonplan3d:{instance_id}".encode()).hexdigest()[:16]
 
 
-def signature_of(text: str) -> dict[str, str] | None:
-    """The signature block of a pack file that verify_pack accepted (kept with the pack for backups)."""
-    try:
-        sig = json.loads(text).get("signature")
-    except (ValueError, AttributeError):
-        return None
-    return {"key": sig["key"], "sig": sig["sig"]} if isinstance(sig, dict) else None
+def parts_of(text: str) -> tuple[dict[str, Any], dict[str, str]]:
+    """The payload exactly as signed and the signature of a pack file that verify_pack accepted; both are
+    kept with the pack so a backup can carry it and a restore can check it again (the validated payload
+    has defaults filled in, so its bytes no longer match the signature)."""
+    data = json.loads(text)
+    sig = data["signature"]
+    return data["payload"], {"key": sig["key"], "sig": sig["sig"]}
 
 
 def validate_payload(payload: Any) -> dict[str, Any]:
