@@ -13,7 +13,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.neonplan3d import packs
 from custom_components.neonplan3d.const import DOMAIN
-from custom_components.neonplan3d.schema import empty_building
+from tests.test_init import BUILDING
 
 PAYLOAD = {
     "format": "fp3dpack",
@@ -56,7 +56,7 @@ async def test_backup_round_trip(hass: HomeAssistant, hass_ws_client, monkeypatc
     # an imported pack keeps its signature
     await client.send_json_auto_id({"type": "neonplan3d/packs/import", "pack": _sign(private, keys, PAYLOAD)})
     assert (await client.receive_json())["success"]
-    building = empty_building()
+    building = json.loads(json.dumps(BUILDING))
     building["floors"][0]["name"] = "Backup floor"
     await client.send_json_auto_id({"type": "neonplan3d/building/save", "building": building})
     assert (await client.receive_json())["success"]
