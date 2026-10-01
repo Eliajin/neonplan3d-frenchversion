@@ -9,6 +9,10 @@
 - **Türen und Fenster in einzelnen Wänden:** Mit **Tür & Fenster** auf eine frei stehende Wand tippen, schon sitzt dort eine Tür oder ein Fenster, mit allen Arten, Stilen und Sensoren wie in Raumwänden. Löschst du die Wand, verschwinden ihre Türen und Fenster mit.
 - **Pfeiltasten im Editor:** Das Ausgewählte (Raum, Ecke, Möbel, Gerät, Wand, Außenfläche) rückt um einen Rasterschritt, mit **Umschalt** um 10 cm, mit **Alt** um 1 cm. Türen und Fenster wandern entlang ihrer Wand.
 
+### Behoben
+
+- **Mehrere Leuchten an einem Licht:** Hängen zwei oder mehr Leuchten an derselben Entität (z. B. zwei LED-Leisten an einem Shelly), leuchtete in 3D nur eine richtig, die anderen blieben dauerhaft grün. Jetzt folgen alle dem Licht.
+
 ### Community
 
 - **Ideen und Abstimmung:** Wünsche gehören jetzt in [Discussions → Ideas](https://github.com/Mastershort/neonplan3d/discussions/categories/ideas). Dort kann jede und jeder mit 👍 abstimmen, die beliebtesten Ideen kommen zuerst.
@@ -29,6 +33,10 @@ Nach dem Update Home Assistant neu starten und die Seite neu laden.
   - If two rooms share a wall, the lower height applies. Windows and doors in a low wall end at the wall height. Low walls look lighter in the plan and get a glowing top edge in 3D.
 - **Doors and windows in single walls:** tap a free-standing wall with **Doors & windows** to put a door or window into it, with all types, styles and sensors as in room walls. Deleting the wall removes its doors and windows as well.
 - **Arrow keys in the editor:** the selection (room, corner, furniture, device, wall, outdoor area) moves by one grid step, with **Shift** by 10 cm, with **Alt** by 1 cm. Doors and windows slide along their wall.
+
+### Fixed
+
+- **Several lamps on one light:** when two or more lamps share one entity (e.g. two LED strips on one Shelly), only one lit up correctly in 3D, the others stayed green. Now they all follow the light.
 
 ### Community
 

@@ -11,6 +11,13 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 - **Wall height per wall:** parapets, counters and half-height dividers. Rooms get a *Wall heights* box with every wall, free walls a height field.
 - **Doors and windows in free walls:** the *Door & window* tool now also works on free-standing walls.
 - **Arrow keys** nudge the selection in the plan editor: one grid step, Shift 10 cm, Alt 1 cm.
+
+### Fixes
+
+- Several lamps linked to the same light no longer stay green in 3D; all follow the light.
+
+### Community
+
 - Issue templates, this changelog and an Ideas section for feature requests with voting.
 
 ## 1.1.1

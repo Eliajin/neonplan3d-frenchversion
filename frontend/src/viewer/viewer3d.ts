@@ -1795,7 +1795,8 @@ export class FloorplanViewer {
         if (d.model) pushCameraModel(buf, d.model, d.x, d.model === "camera_ceiling" ? H : d.y, d.z, d.rotation ?? 0);
         else if (packed) pushPackLamp(buf, packed, { x: d.x, z: d.z, rotation: d.rotation ?? 0, w: pw, d: pd, h: ph }, d.base ?? 0, SHADE_SENTINEL);
         else pushLampModel(buf, { ...d, lamp: d.lamp! }, H, SHADE_SENTINEL);
-        ranges.set(d.id, { start, end: buf.count });
+        // keyed by the furniture: two lamps may share one light (one switch for two strips)
+        ranges.set(d.furnitureId ?? d.id, { start, end: buf.count });
         if (d.pickable !== false) tris.push({ id: d.id, start, end: buf.count });
         if (d.furnitureId) furnTris.push({ id: d.furnitureId, start, end: buf.count });
       }
@@ -1812,7 +1813,7 @@ export class FloorplanViewer {
     const attr = fv.lampMesh.geometry.getAttribute("color") as Float32BufferAttribute;
     const colors = attr.array as Float32Array;
     lamps.forEach((d, i) => {
-      const range = fv.lampRanges.get(d.id);
+      const range = fv.lampRanges.get(d.furnitureId ?? d.id);
       if (!range) return;
       const glow = glows[i];
       // a lit shade glows in the light's colour, brighter with more brightness; a tap flashes it white
