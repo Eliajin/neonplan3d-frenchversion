@@ -21,7 +21,11 @@ REPOS = ["neonplan3d", "cyd-studio", "zigbee-health"]
 
 def report(repo: str) -> int:
     out = subprocess.run(
-        ["gh", "api", f"repos/{OWNER}/{repo}/releases", "--paginate"], check=True, capture_output=True, text=True
+        ["gh", "api", f"repos/{OWNER}/{repo}/releases", "--paginate"],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     ).stdout
     total = 0
     print()
