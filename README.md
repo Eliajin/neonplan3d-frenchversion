@@ -2,6 +2,8 @@
 
 **by Mastershort** – draw your home right inside Home Assistant and control it in a neon 3D view: lights glow in their colours, blinds move, doors and windows open, cameras watch, and the TV shows what is playing. No external tools, no cloud, made for wall tablets.
 
+[![Open your Home Assistant instance and open the NeonPlan 3D repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Mastershort&repository=neonplan3d&category=integration)
+
 ![The house in the neon 3D view](docs/images/view-house.jpg)
 
 📖 **Manual:** [English](docs/manual.md) · [Deutsch](docs/anleitung.md) · online at [mastershort.de/neonplan3d](https://mastershort.de/neonplan3d/)
@@ -32,9 +34,15 @@ Bought packs are signed for your installation and update by themselves once a da
 
 ### HACS
 
-1. HACS → ⋮ → *Custom repositories* → add `https://github.com/Mastershort/neonplan3d` as **Integration**.
+[![Open your Home Assistant instance and open the NeonPlan 3D repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Mastershort&repository=neonplan3d&category=integration)
+
+1. Click the button above, or in HACS: ⋮ → *Custom repositories* → add `https://github.com/Mastershort/neonplan3d` as **Integration**.
 2. Install **NeonPlan 3D** and restart Home Assistant.
-3. *Settings → Devices & services → Add integration → NeonPlan 3D*.
+3. Add the integration:
+
+   [![Open your Home Assistant instance and start setting up NeonPlan 3D.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=neonplan3d)
+
+   or *Settings → Devices & services → Add integration → NeonPlan 3D*.
 4. Open **NeonPlan 3D** in the sidebar, switch to **Editor** and draw your first floor.
 
 ### Manual

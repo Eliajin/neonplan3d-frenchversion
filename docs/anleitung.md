@@ -37,11 +37,17 @@ Diese Anleitung beschreibt jede Funktion der Version 1.0. Die Bilder stammen aus
 
 ### Über HACS
 
+[![NeonPlan 3D in HACS öffnen](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Mastershort&repository=neonplan3d&category=integration)
+
+Der Knopf öffnet NeonPlan 3D direkt in HACS deiner Installation. Von Hand geht es so:
+
 1. In Home Assistant **HACS** öffnen.
 2. Oben rechts **⋮ → Benutzerdefinierte Repositories** wählen.
 3. `https://github.com/Mastershort/neonplan3d` eintragen, Typ **Integration**, hinzufügen.
 4. **NeonPlan 3D** suchen, installieren und Home Assistant neu starten.
-5. **Einstellungen → Geräte & Dienste → Integration hinzufügen → NeonPlan 3D**.
+5. **Einstellungen → Geräte & Dienste → Integration hinzufügen → NeonPlan 3D**, oder direkt über diesen Knopf:
+
+   [![NeonPlan 3D einrichten](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=neonplan3d)
 
 Danach steht **NeonPlan 3D** in der Seitenleiste. Die Dashboard-Karte ist ebenfalls sofort verfügbar, eine Ressource musst du nicht eintragen.
 
