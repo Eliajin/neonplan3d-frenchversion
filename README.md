@@ -14,7 +14,7 @@
 
 | | |
 |---|---|
-| ![Editor](docs/images/editor-split-3d.jpg) | **Plan editor in Home Assistant** – floors, rooms as rectangles or free shapes, automatic walls, doors, windows, garage doors, stairs and floor openings, outdoor areas and a roof. The 3D view runs next to the plan while you draw. |
+| ![Editor](docs/images/editor-split-3d.jpg) | **Plan editor in Home Assistant** – floors, rooms as rectangles or free shapes, automatic walls and free-standing partitions, doors, windows, garage doors, stairs and floor openings, outdoor areas and a roof. The 3D view runs next to the plan while you draw. |
 | ![Room](docs/images/view-room-panel.jpg) | **Live 3D view** – tap a lamp to switch it, swipe to dim, long press for colours; blinds follow their position, windows tilt and open, doors swing. A room panel lists everything of the room's area. |
 | ![Library](docs/images/editor-library.jpg) | **Furniture and lamps** – 40 built-in models plus furniture packs. Lamps light their room in their own colour, TVs, washing machines and radiators glow while they run. |
 | ![Camera](docs/images/view-camera-model.jpg) | **Cameras** – mounted on walls or ceilings with their field of view on the floor, red while they see motion; a tap shows the snapshot. |

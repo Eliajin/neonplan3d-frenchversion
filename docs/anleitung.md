@@ -102,6 +102,7 @@ Der Editor besteht aus dem Grundriss in der Mitte, der Werkzeugleiste oben und d
 | **Auswählen** | Räume, Möbel, Türen, Fenster und Geräte antippen, verschieben, Ecken ziehen |
 | **Rechteck** | Einen rechteckigen Raum aufziehen |
 | **Freie Form** | Einen Raum Punkt für Punkt zeichnen |
+| **Wand** | Eine einzelne, frei stehende Wand ziehen, etwa einen Raumteiler |
 | **Tür & Fenster** | Auf eine Wand tippen, um eine Öffnung einzusetzen |
 | **Möbel** | Die Möbelbibliothek öffnen |
 | **Außen** | Außenflächen wie Rasen, Terrasse oder Pool aufziehen |
@@ -145,6 +146,8 @@ Ein ausgewählter Raum zeigt rechts:
 ### 4.4 Wände
 
 Wände entstehen automatisch: Jede gemeinsame Kante zweier Räume wird eine Innenwand, jede Außenkante eine Außenwand. Ecken und T-Stöße werden sauber verschnitten. Die Stärken stellst du unter **Einstellungen** ein.
+
+**Einzelne Wände:** Mit dem Werkzeug **Wand** ziehst du eine frei stehende Wand, zum Beispiel einen Raumteiler, der nur durch den halben Raum geht. **Umschalt** hält sie gerade, **Alt** zeichnet ohne Fangen. Trifft sie auf eine Raumwand, wird die Ecke verschnitten. Ausgewählt ziehst du die Endpunkte an den Griffen oder die ganze Wand an der Linie. Rechts stellst du **Länge** und **Wandstärke** ein. In 3D verhält sie sich wie jede Innenwand.
 
 ### 4.5 Einstellungen
 

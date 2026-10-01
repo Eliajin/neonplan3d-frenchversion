@@ -143,8 +143,19 @@ export interface Floor {
   placements: Placement[];
   background: Background | null;
   outdoor: OutdoorArea[];
+  /** Free-standing walls (a partition through half a room); room walls come from the room edges. */
+  walls?: FreeWall[];
   /** Linked floor of Home Assistant's floor registry. */
   ha_floor: string | null;
+}
+
+/** A wall drawn on its own, from a to b along its centre line. */
+export interface FreeWall {
+  id: string;
+  a: Vec2;
+  b: Vec2;
+  /** Thickness in metres (null = the interior wall thickness of the settings). */
+  thickness?: number | null;
 }
 
 export type RoofType = "none" | "flat" | "gable";
@@ -268,6 +279,7 @@ export function newFloor(id: string, name: string, elevation: number): Floor {
     placements: [],
     background: null,
     outdoor: [],
+    walls: [],
     ha_floor: null,
   };
 }
@@ -609,6 +621,7 @@ export function normalizeBuilding(b: Building): Building {
   b.settings = { ...DEFAULT_SETTINGS, ...b.settings, roof: { ...DEFAULT_ROOF, ...(b.settings?.roof ?? {}) } };
   for (const f of b.floors) {
     f.outdoor = f.outdoor ?? [];
+    f.walls = f.walls ?? [];
     f.rooms = f.rooms.map((r) => ({ ...r, panel: r.panel ?? [] }));
     f.ha_floor = f.ha_floor ?? null;
     f.placements = f.placements.map((p) => ({ ...p, mount: p.mount ?? null, rotation: p.rotation ?? 0 }));

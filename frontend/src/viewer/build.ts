@@ -97,7 +97,7 @@ interface Span {
 }
 
 export function buildFloorGeometry(floor: Floor, wallExterior: number, wallInterior: number, holes: Vec2[][] = []): FloorGeometry {
-  const { walls } = generateWalls(floor.rooms, { exterior: wallExterior, interior: wallInterior });
+  const { walls } = generateWalls(floor.rooms, { exterior: wallExterior, interior: wallInterior }, floor.walls ?? []);
 
   // ---------------------------------------------------------------- floors (with stair holes)
   const floorBuf = new GeoBuffer(true, true);

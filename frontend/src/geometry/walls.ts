@@ -6,8 +6,8 @@
 // edges and T-junctions work. Wall ends are mitred at every node by intersecting the face lines of
 // neighbouring walls.
 
-import type { Room, Vec2 } from "../model.ts";
-import { signedArea } from "../model.ts";
+import type { FreeWall, Room, Vec2 } from "../model.ts";
+import { pointInPolygon, signedArea } from "../model.ts";
 
 export interface WallSource {
   room_id: string;
@@ -33,6 +33,8 @@ export interface Wall {
   sources: WallSource[];
   /** Footprint polygon, counter-clockwise, mitred at both ends. */
   footprint: Vec2[];
+  /** A free-standing wall drawn on its own (its id). */
+  free?: string;
 }
 
 export interface WallOptions {
@@ -58,6 +60,7 @@ interface Segment {
 }
 
 interface Draft {
+  free?: string;
   a: number;
   b: number;
   left: number;
@@ -81,9 +84,10 @@ const unit = (p: Vec2): Vec2 => {
 const leftNormal = (d: Vec2): Vec2 => [-d[1], d[0]];
 const rightNormal = (d: Vec2): Vec2 => [d[1], -d[0]];
 
-export function generateWalls(rooms: readonly Room[], options: WallOptions): WallResult {
+export function generateWalls(rooms: readonly Room[], options: WallOptions, free: readonly FreeWall[] = []): WallResult {
   const eps = options.eps ?? 0.005;
   const warnings: string[] = [];
+  const freeWalls = free.filter((w) => Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) > 0.05);
 
   // 1. canonical vertices (merge points closer than eps)
   const verts: Vec2[] = [];
@@ -117,6 +121,9 @@ export function generateWalls(rooms: readonly Room[], options: WallOptions): Wal
       edges.push(ccw ? { u: s, v: e, room: room.id, edge: i, forward: true } : { u: e, v: s, room: room.id, edge: i, forward: false });
     }
   }
+
+  // free walls: their ends are vertices too, so a room edge they touch is split there (T-junction)
+  const freeIds = freeWalls.map((w) => [vertexId(w.a), vertexId(w.b)] as const);
 
   // 3. split edges at vertices lying on them
   const segments: Segment[] = [];
@@ -187,6 +194,16 @@ export function generateWalls(rooms: readonly Room[], options: WallOptions): Wal
     }
   }
 
+  // free walls: interior walls of the room they stand in (the same room on both sides)
+  freeWalls.forEach((w, i) => {
+    const [ia, ib] = freeIds[i];
+    if (ia === ib) return;
+    const mid: Vec2 = [(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2];
+    const room = rooms.find((r) => r.points.length >= 3 && pointInPolygon(mid, r.points))?.id ?? null;
+    const half = (w.thickness ?? options.interior) / 2;
+    drafts.push({ free: w.id, a: ia, b: ib, left: half, right: half, exterior: false, roomLeft: room, roomRight: room, sources: [] });
+  });
+
   // 5. merge collinear runs through nodes where nothing else meets
   drafts = mergeCollinear(drafts, verts);
 
@@ -210,6 +227,7 @@ export function generateWalls(rooms: readonly Room[], options: WallOptions): Wal
       roomRight: w.roomRight,
       sources: w.sources,
       footprint,
+      ...(w.free ? { free: w.free } : {}),
     };
   });
   return { walls, warnings: [...new Set(warnings)] };
@@ -249,6 +267,8 @@ function mergeCollinear(drafts: Draft[], verts: Vec2[]): Draft[] {
       const d2 = unit(sub(verts[w2.b], verts[w2.a]));
       if (Math.abs(cross(d1, d2)) > 1e-6 || dot(d1, d2) <= 0) continue;
       if (
+        w1.free ||
+        w2.free ||
         w1.exterior !== w2.exterior ||
         w1.roomLeft !== w2.roomLeft ||
         w1.roomRight !== w2.roomRight ||

@@ -176,6 +176,16 @@ ROOF_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
+FREE_WALL_SCHEMA = vol.Schema(
+    {
+        vol.Required("id"): _ID,
+        vol.Required("a"): _POINT,
+        vol.Required("b"): _POINT,
+        vol.Optional("thickness", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.02, max=1))),
+    },
+    extra=vol.ALLOW_EXTRA,
+)
+
 FLOOR_SCHEMA = vol.Schema(
     {
         vol.Required("id"): _ID,
@@ -189,6 +199,8 @@ FLOOR_SCHEMA = vol.Schema(
         vol.Required("placements"): vol.All([PLACEMENT_SCHEMA], vol.Length(max=MAX_ITEMS)),
         vol.Required("background"): vol.Any(None, BACKGROUND_SCHEMA),
         vol.Optional("outdoor", default=list): vol.All([OUTDOOR_SCHEMA], vol.Length(max=MAX_ITEMS)),
+        # free-standing walls (partitions); room walls come from the room edges
+        vol.Optional("walls", default=list): vol.All([FREE_WALL_SCHEMA], vol.Length(max=MAX_ITEMS)),
         # floor of Home Assistant's floor registry this floor stands for
         vol.Optional("ha_floor", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
     },

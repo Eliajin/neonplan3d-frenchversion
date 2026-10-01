@@ -102,6 +102,7 @@ The editor has the floor plan in the middle, the toolbar at the top and the side
 | **Select** | Tap rooms, furniture, doors, windows and devices, move them, drag corners |
 | **Rectangle** | Draw a rectangular room |
 | **Free shape** | Draw a room corner by corner |
+| **Wall** | Draw a single free-standing wall, e.g. a partition |
 | **Doors & windows** | Tap a wall to add an opening |
 | **Furniture** | Open the furniture library |
 | **Outdoor** | Draw outdoor areas such as lawn, terrace or pool |
@@ -145,6 +146,8 @@ A selected room shows on the right:
 ### 4.4 Walls
 
 Walls are created automatically: every shared edge of two rooms becomes an interior wall, every outer edge an exterior wall. Corners and T-junctions are mitred. You set the thicknesses under **Settings**.
+
+**Single walls:** The **Wall** tool draws a free-standing wall, e.g. a partition that runs through half a room. **Shift** keeps it straight, **Alt** draws without snapping. Where it meets a room wall, the corner is mitred. When selected, drag the handles to move its ends or the line to move the whole wall. On the right you set **Length** and **Wall thickness**. In 3D it behaves like any interior wall.
 
 ### 4.5 Settings
 

@@ -59,7 +59,7 @@ function copyFonts() {
   }
 }
 
-const BUDGET = { "neonplan3d.js": 250 * 1024, "neonplan3d-3d.js": 680 * 1024, "neonplan3d-editor.js": 270 * 1024, "neonplan3d-card-editor.js": 96 * 1024 };
+const BUDGET = { "neonplan3d.js": 250 * 1024, "neonplan3d-3d.js": 680 * 1024, "neonplan3d-editor.js": 290 * 1024, "neonplan3d-card-editor.js": 96 * 1024 };
 
 copyFonts();
 if (watch) {

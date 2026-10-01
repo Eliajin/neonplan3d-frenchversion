@@ -163,7 +163,7 @@ function ccwRoom(room: Room): { pts: Vec2[]; flipped: boolean } {
 
 function buildGraph(floor: Floor, exterior: number, interior: number): Graph {
   const g: Graph = { pos: [], adj: [], rings: new Map() };
-  const { walls } = generateWalls(floor.rooms, { exterior, interior });
+  const { walls } = generateWalls(floor.rooms, { exterior, interior }, floor.walls ?? []);
   for (const room of floor.rooms) {
     if (room.points.length < 3) continue;
     const { pts, flipped } = ccwRoom(room);
@@ -379,7 +379,7 @@ export function flowSegments({ building, consumers, summary, battery }: FlowInpu
 
   // grid feed: from outside through the nearest exterior wall to the meter
   if (summary.grid !== null) {
-    const { walls } = generateWalls(meterFloor.rooms, { exterior: ext, interior: int });
+    const { walls } = generateWalls(meterFloor.rooms, { exterior: ext, interior: int }, meterFloor.walls ?? []);
     let best: { q: Vec2; out: Vec2; d: number } | null = null;
     for (const w of walls) {
       if (!w.exterior) continue;

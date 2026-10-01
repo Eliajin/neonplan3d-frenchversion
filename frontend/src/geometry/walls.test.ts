@@ -124,3 +124,20 @@ test("positions on room edges are located on the walls", () => {
   near(p[0], 4);
   near(p[1], 2);
 });
+
+test("a free-standing wall becomes an interior wall of its room and splits the room edge it touches", () => {
+  const room = { id: "r", name: "R", area_id: null, points: [[0, 0], [6, 0], [6, 4], [0, 4]] as [number, number][], floor_material: "wood" };
+  const free = [{ id: "fw", a: [3, 0] as [number, number], b: [3, 2.5] as [number, number], thickness: 0.1 }];
+  const { walls } = generateWalls([room], { exterior: 0.24, interior: 0.12 }, free);
+  const fw = walls.find((w) => w.free === "fw")!;
+  assert.ok(fw, "free wall generated");
+  assert.equal(fw.exterior, false);
+  assert.equal(fw.roomLeft, "r");
+  assert.equal(fw.roomRight, "r");
+  assert.equal(fw.left + fw.right, 0.1);
+  // the outer wall along z = 0 is split at x = 3 into two pieces
+  const top = walls.filter((w) => !w.free && Math.abs(w.a[1]) < 1e-9 && Math.abs(w.b[1]) < 1e-9);
+  assert.equal(top.length, 2);
+  // too short walls are ignored
+  assert.equal(generateWalls([room], { exterior: 0.24, interior: 0.12 }, [{ id: "x", a: [1, 1], b: [1, 1.01] }]).walls.some((w) => w.free), false);
+});
