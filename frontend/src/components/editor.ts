@@ -3191,7 +3191,8 @@ export class Fp3dEditor extends LitElement {
         this.librarySection(
           `group:${group}`,
           this.t(`furn_group_${group}` as I18nKey),
-          types.map((t) => ({ type: t, label: this.t(`furn_${t}` as I18nKey) })),
+          // the smart fridge is exclusive: only an installed pack with the feature "fridge_smart" offers it
+          [...types, ...(group === "kitchen" && hasFeature("fridge_smart") ? ["fridge_smart"] : [])].map((t) => ({ type: t, label: this.t(`furn_${t}` as I18nKey) })),
           q,
         ),
       )}

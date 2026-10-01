@@ -1,0 +1,660 @@
+# NeonPlan 3D – Anleitung
+
+NeonPlan 3D zeichnet dein Zuhause direkt in Home Assistant und zeigt es als 3D-Modell im Neon-Look. Lichter leuchten in ihrer Farbe, Rollläden fahren, Fenster kippen, Türen schwingen auf, Kameras schauen in den Raum und der Fernseher zeigt, was läuft. Alles läuft lokal in Home Assistant, ohne Cloud und ohne externe Programme, und ist für Wandtablets gebaut.
+
+Diese Anleitung beschreibt jede Funktion der Version 1.0. Die Bilder stammen aus der Demo mit erfundenen Daten.
+
+![Das Haus in der 3D-Ansicht](images/view-house.jpg)
+
+---
+
+## Inhalt
+
+1. [Installation](#1-installation)
+2. [In zehn Minuten zum ersten 3D-Plan](#2-in-zehn-minuten-zum-ersten-3d-plan)
+3. [Die Oberfläche im Überblick](#3-die-oberfläche-im-überblick)
+4. [Der Editor](#4-der-editor)
+5. [Die 3D-Ansicht](#5-die-3d-ansicht)
+6. [Pro-Erweiterungen](#6-pro-erweiterungen)
+7. [Erweiterungen, Shop und Möbel-Packs](#7-erweiterungen-shop-und-möbel-packs)
+8. [Die Dashboard-Karte](#8-die-dashboard-karte)
+9. [NeonPlan 3D auf dem Wandtablet](#9-neonplan-3d-auf-dem-wandtablet)
+10. [Sicherung und Umzug](#10-sicherung-und-umzug)
+11. [Daten und Datenschutz](#11-daten-und-datenschutz)
+12. [Häufige Fragen und Fehlerbehebung](#12-häufige-fragen-und-fehlerbehebung)
+
+---
+
+## 1. Installation
+
+### Voraussetzungen
+
+- Home Assistant 2025.1 oder neuer.
+- Ein Browser mit WebGL. Das sind alle aktuellen Browser, die Home-Assistant-App und auch Amazon-Fire-Tablets.
+- Für das Bearbeiten ein Benutzer mit Administratorrechten. Alle anderen Benutzer sehen und bedienen den Plan, ändern ihn aber nicht.
+
+### Über HACS
+
+1. In Home Assistant **HACS** öffnen.
+2. Oben rechts **⋮ → Benutzerdefinierte Repositories** wählen.
+3. `https://github.com/Mastershort/neonplan3d` eintragen, Typ **Integration**, hinzufügen.
+4. **NeonPlan 3D** suchen, installieren und Home Assistant neu starten.
+5. **Einstellungen → Geräte & Dienste → Integration hinzufügen → NeonPlan 3D**.
+
+Danach steht **NeonPlan 3D** in der Seitenleiste. Die Dashboard-Karte ist ebenfalls sofort verfügbar, eine Ressource musst du nicht eintragen.
+
+### Von Hand
+
+Den Ordner `custom_components/neonplan3d` aus dem Repository nach `config/custom_components/` kopieren, Home Assistant neu starten und die Integration wie oben hinzufügen.
+
+### Updates
+
+HACS meldet neue Versionen von selbst. Nach jedem Update Home Assistant neu starten. Bis dahin zeigt NeonPlan 3D oben einen Hinweis, dass ein Neustart aussteht. Dein Plan bleibt bei Updates immer erhalten, auch wenn du die Integration entfernst und neu hinzufügst.
+
+---
+
+## 2. In zehn Minuten zum ersten 3D-Plan
+
+1. **NeonPlan 3D** in der Seitenleiste öffnen und oben auf **Editor** wechseln.
+2. Rechts **Etage hinzufügen** wählen. Hast du in Home Assistant Etagen angelegt, bietet NeonPlan 3D sie direkt an.
+3. Gibt es Bereiche auf der Etage, legt **„… Räume aus HA-Bereichen anlegen“** für jeden Bereich einen Raum an. Ziehe die Räume dann an die richtige Stelle und passe die Ecken an. Alternativ zeichnest du mit **Rechteck** oder **Freie Form**.
+4. Mit **Tür & Fenster** auf eine Wand tippen, um Türen und Fenster einzusetzen.
+5. Einen Raum antippen und rechts unter **Geräte** auf **Alle automatisch platzieren** tippen. Lichter, Rollläden, Thermostate, Media Player und Sensoren des Bereichs stehen dann im Raum.
+6. Mit **Möbel** und **Einrichten …** den Raum möblieren.
+7. Oben auf **3D** wechseln. Fertig: Tippe auf eine Lampe, und sie schaltet.
+
+Der Plan speichert sich beim Bearbeiten von selbst.
+
+---
+
+## 3. Die Oberfläche im Überblick
+
+Oben gibt es drei Reiter:
+
+| Reiter | Wofür | Wer sieht ihn |
+|---|---|---|
+| **3D** | Das Haus ansehen und bedienen | alle |
+| **Editor** | Grundriss zeichnen, Möbel und Geräte platzieren | Administratoren |
+| **✦ Erweiterungen** | Shop-Verbindung, Pro-Erweiterungen, Möbel-Packs | Administratoren |
+
+Zusätzlich gibt es die Dashboard-Karte, die dieselbe 3D-Ansicht in jedes Dashboard bringt. Mehr dazu in [Kapitel 8](#8-die-dashboard-karte).
+
+---
+
+## 4. Der Editor
+
+![Der Editor mit der 3D-Ansicht daneben](images/editor-split-3d.jpg)
+
+Der Editor besteht aus dem Grundriss in der Mitte, der Werkzeugleiste oben und der Seitenleiste rechts. Die Seitenleiste zeigt immer, was gerade ausgewählt ist: die Etage, einen Raum, ein Möbel, eine Tür oder ein Gerät.
+
+### 4.1 Werkzeuge
+
+| Werkzeug | Was es tut |
+|---|---|
+| **Auswählen** | Räume, Möbel, Türen, Fenster und Geräte antippen, verschieben, Ecken ziehen |
+| **Rechteck** | Einen rechteckigen Raum aufziehen |
+| **Freie Form** | Einen Raum Punkt für Punkt zeichnen |
+| **Tür & Fenster** | Auf eine Wand tippen, um eine Öffnung einzusetzen |
+| **Möbel** | Die Möbelbibliothek öffnen |
+| **Außen** | Außenflächen wie Rasen, Terrasse oder Pool aufziehen |
+| **Bodenöffnung** | Ein Loch in den Boden der Etage aufziehen, etwa über dem Treppenaufgang |
+
+Daneben stehen **Rückgängig**, **Wiederholen**, **Alles zeigen** und **3D daneben**. Unten im Plan steht immer ein kurzer Hinweis zum aktiven Werkzeug.
+
+**Maus und Touch:** Mit zwei Fingern ziehst du die Ansicht, mit zwei Fingern zoomst du. Mit der Maus zoomt das Mausrad, die Ansicht ziehst du auf einer leeren Stelle. **Strg+Z** macht rückgängig, **Strg+Y** oder **Strg+Umschalt+Z** wiederholt, **Entf** löscht das Ausgewählte, **Esc** bricht ab.
+
+### 4.2 Etagen
+
+![Etagen-Einstellungen](images/editor-ha-floors.jpg)
+
+Ohne Auswahl zeigt die Seitenleiste die Etagen:
+
+- **Etage hinzufügen** legt eine neue Etage an. Gibt es in Home Assistant Etagen, die noch fehlen, erscheinen sie zur Auswahl.
+- **Name**, **Höhe über Boden** und **Raumhöhe** bestimmen, wo die Etage im 3D-Haus liegt und wie hoch ihre Wände sind.
+- **Etage in Home Assistant** verknüpft die Etage mit einer HA-Etage. Dann bietet **„… Räume aus HA-Bereichen anlegen“** die Bereiche dieser Etage als Räume an.
+- **Nach oben** und **Nach unten** ändern die Reihenfolge, **Etage löschen** entfernt sie samt Räumen.
+- **Lücken schließen** führt Räume zusammen, die bis zu 60 cm auseinanderliegen. Das ist praktisch, wenn du Innenmaße gemessen hast. Der Abstand wird zur Innenwandstärke.
+
+![Räume aus Bereichen](images/editor-area-rooms.jpg)
+
+### 4.3 Räume zeichnen
+
+- **Rechteck:** In den Plan tippen und ziehen.
+- **Freie Form:** Punkt für Punkt setzen. Ein Tipp auf den ersten Punkt oder **Enter** schließt den Raum, **Esc** bricht ab.
+- **Ecken verschieben:** Mit **Auswählen** einen Raum antippen und die Ecken ziehen. Das **+** auf einer Kante fügt einen neuen Punkt ein.
+- **Fangen:** Ecken rasten am Raster, an Ecken und Kanten anderer Räume und an Fluchtlinien ein. Mit gedrückter **Alt**-Taste bewegst du frei.
+
+![Ein Raum ausgewählt](images/editor-room.jpg)
+
+Ein ausgewählter Raum zeigt rechts:
+
+- **Name** und **Bereich**: Die Verknüpfung mit einem Home-Assistant-Bereich ist das Wichtigste. Darüber findet NeonPlan 3D Lichter, Rollläden, Sensoren und Szenen des Raums.
+- **Bodenbelag**: Holz, Eiche, Fliesen, Teppich, Stein oder Beton erscheinen in 3D als dezentes Muster.
+- Die Liste **Geräte** des Bereichs, siehe [4.10](#410-geräte).
+- **Einrichten …** für fertige Möbelpakete, siehe [4.9](#49-räume-einrichten).
+- **Duplizieren** und **Löschen**.
+
+### 4.4 Wände
+
+Wände entstehen automatisch: Jede gemeinsame Kante zweier Räume wird eine Innenwand, jede Außenkante eine Außenwand. Ecken und T-Stöße werden sauber verschnitten. Die Stärken stellst du unter **Einstellungen** ein.
+
+### 4.5 Einstellungen
+
+Unten in der Seitenleiste klappt **Einstellungen** auf:
+
+| Einstellung | Bedeutung |
+|---|---|
+| **Außenwand (m)**, **Innenwand (m)** | Wandstärken |
+| **Raster (m)** | Schrittweite beim Zeichnen |
+| **Nordrichtung** | Grad im Uhrzeigersinn von oben. Wird für das Sonnenlicht gebraucht |
+| **Dach** | Kein Dach, Flachdach oder Satteldach, mit Dachneigung und Dachüberstand |
+| **Wetter-Entität** | Welche Wetter-Entität das Wetter draußen liefert, siehe [6.2](#62-wetter-draußen) |
+| **Wetter-Effekte in 3D** | Welche Effekte gezeigt werden |
+
+### 4.6 Grundriss-Bild als Vorlage
+
+Unter **Vorlage (Grundriss-Bild)** lädst du ein Foto oder einen Scan deines Grundrisses unter die Zeichnung. **Breite im Plan (m)** bringt das Bild auf den richtigen Maßstab, **Deckkraft** macht es dezenter. So zeichnest du die Räume einfach nach.
+
+### 4.7 Türen, Fenster und Garagentore
+
+![Tür ausgewählt](images/editor-opening.jpg)
+
+Mit **Tür & Fenster** tippst du auf eine Wand. Danach wählst du rechts die **Art**: Tür, Fenster oder Garagentor. Ein Fenster mit Brüstung 0 ist eine Terrassentür.
+
+![Arten von Öffnungen](images/editor-opening-kinds.jpg)
+
+Jede Öffnung hat:
+
+- **Breite**, **Brüstung** und **Höhe**, dazu die Anschlagseite. Mit **Auswählen** schiebst du sie entlang der Wand.
+- **Stil:** Zimmertür, Haustür, Haustür mit Glasausschnitt, mit einem oder zwei Seitenteilen, Glastür, Schiebetür. Fenster gibt es als Standard oder mit Sprossen. „Automatisch“ wählt eine Haustür für Außentüren.
+- **Flügel:** einflügelig oder zweiflügelig, mit eigenem Kontakt für den zweiten Flügel.
+
+![Haustür](images/editor-front-door.jpg)
+
+**Sensoren:**
+
+| Feld | Wirkung in 3D |
+|---|---|
+| **Rollladen** | Der Rollladen fährt vor dem Fenster mit der Position der Cover-Entität |
+| **Positions-Sensor** | Für Rollläden, deren Position über einen eigenen Sensor kommt, etwa bei Homematic. Bei Bedarf umkehrbar |
+| **Kontakt** | Die Tür schwingt auf, das Fenster öffnet sich |
+| **Kippkontakt** | Ein zweiter Sensor, der „gekippt“ meldet |
+| **Kontakt zweiter Flügel** | Für zweiflügelige Fenster und Türen |
+| **Garagentor** | Ein Garagentor folgt einer Cover-Entität oder einem Kontakt. Der offene Teil liegt dann unter der Decke |
+
+Rollläden und Kontakte ordnet NeonPlan 3D über den Bereich automatisch zu. Du kannst sie jederzeit von Hand ändern.
+
+### 4.8 Möbel
+
+![Die Möbelbibliothek](images/editor-library.jpg)
+
+Das Werkzeug **Möbel** öffnet rechts die Bibliothek mit 40 eingebauten Modellen in den Abschnitten Leuchten, Wohnen, Essen, Küche, Schlafen, Bad & Hauswirtschaft und Arbeiten & Sonstiges. Darunter folgen deine installierten Möbel-Packs. Das Suchfeld oben filtert alle Abschnitte, die Abschnitte klappen auf und zu. Fährst du mit der Maus über einen Eintrag, zeigt eine kleine 3D-Vorschau das Möbel.
+
+**Symbole an den Einträgen:**
+
+- 💡 Eine **Leuchte**: Sie lässt sich mit einem Licht verknüpfen und in 3D schalten.
+- ⚡ Ein **elektrisches Möbel**: Es nimmt eine Entität und einen Leistungssensor, etwa ein Fernseher, eine Waschmaschine oder ein Thermostat.
+
+**Platzieren und bearbeiten:**
+
+- Einen Raum antippen, dann einen Eintrag wählen. Das Möbel erscheint im Raum.
+- **Ziehen** verschiebt es. In der Nähe einer Wand dreht es sich mit dem Rücken zur Wand und rastet bündig ein. **Alt** schiebt frei.
+- Der **Griff vor dem Möbel** dreht es in 15°-Schritten, die **Ecken** ändern die Größe.
+- Rechts stellst du Breite, Tiefe, Höhe, Drehung und **Höhe über Boden** ein. Mit der Höhe über Boden hängst du einen Netzwerkschrank oder ein Regal an die Wand. **Höhe automatisch** setzt sie zurück.
+- **Duplizieren** und **Löschen** stehen ebenfalls dort.
+
+![Ein Möbel ausgewählt](images/editor-furniture.jpg)
+
+### 4.9 Räume einrichten
+
+![Ein Raum mit Paket](images/editor-package.jpg)
+
+**Einrichten …** an einem Raum stellt ein ganzes Möbelpaket an die Wände: Küchenzeile, Küche in L-Form, Bad, Schlafzimmer, Wohnzimmer, Esszimmer, Büro, Kinderzimmer oder Flur. Leuchten verbinden sich dabei mit den Lichtern des Bereichs. Danach passt du einzelne Möbel an. **Strg+Z** nimmt das ganze Paket zurück.
+
+### 4.10 Geräte
+
+![Geräte eines Raums](images/editor-devices.jpg)
+
+Ein Raum mit Bereich listet rechts alle Geräte dieses Bereichs, nach Gerät gruppiert. Die Hauptentität steht vorn, weitere wie LED-Anzeigen oder Effekte stehen hinter **„+n mehr“**. Ein Suchfeld hilft bei großen Bereichen.
+
+- **Platzieren** setzt ein Gerät in den Raum, **Alle automatisch platzieren** setzt alle Hauptgeräte.
+- Lichter werden dabei als Leuchten aus der Bibliothek gesetzt, damit sie in 3D leuchten.
+- **☆** nimmt ein Gerät ins Raumfenster der 3D-Ansicht auf, ohne es in den Plan zu setzen.
+- Ein platziertes Gerät ziehst du im Plan an seinen Platz.
+
+![Ein Gerät ausgewählt](images/editor-device.jpg)
+
+Ein ausgewähltes Gerät hat:
+
+- **Höhe des Symbols**, **Drehung** und bei Lichtern die **Montage**: Decke, Boden, Tisch oder Wand.
+- **Vor dem Schalten nachfragen:** Beim Antippen in 3D, im Schnellmenü und im Raumfenster erscheint erst eine Rückfrage. Das schützt etwa den Server-Schalter vor einem versehentlichen Tipp. Ein Doppeltipp auf den Raum lässt dieses Gerät aus.
+- **In Raummitte** und **Entfernen**.
+
+### 4.11 Leuchten
+
+Leuchten sind Möbel mit einem verknüpften Licht. Es gibt Deckenleuchte, Einbauspot, Aufbau-Spot, LED-Panel, Pendelleuchte, Stehlampe, Deckenfluter, Tischlampe, Wandleuchte, LED-Streifen, Wegleuchte und Garten-Spot.
+
+- Das 3D-Modell leuchtet in Farbe und Helligkeit des Lichts. Boden und Wände des Raums werden mit beleuchtet, zwei farbige Deckenleuchten mischen sich dazwischen. In den Nachbarraum fällt das Licht nur durch Türen.
+- Farbeffekte wie ein Farbwechsel werden in 3D animiert.
+- Tischlampen stehen auf dem Möbel darunter, Wandleuchten und LED-Streifen rasten an der Wand ein, bei Pendelleuchten ist die Höhe die Abhängung unter der Decke.
+- Statt eines Lichts geht auch ein Schalter, etwa ein Relais für das Deckenlicht.
+- Mehrere Leuchten dürfen demselben Licht folgen.
+
+![Spots setzen](images/editor-spots.jpg)
+
+**Spots setzen** an einem Raum legt ein Raster aus Leuchten an, die alle einem Licht folgen, etwa sechs Einbauspots an einem Dimmer. Spalten und Reihen wählst du vorher.
+
+### 4.12 Elektrische Möbel
+
+Fernseher, Medienwand, Schreibtisch mit Monitor, Waschmaschine, Trockner, Spülmaschine, Heizkörper, Saugroboter und viele Pack-Möbel lassen sich mit Entitäten verknüpfen:
+
+- **Gerät** oder **Fernseher (Media-Player)**: Ein Fernseher leuchtet, solange er läuft. Waschmaschine, Trockner und Spülmaschine leuchten, solange sie arbeiten. Ein Heizkörper mit Thermostat glüht beim Heizen.
+- **Leistungssensor (W)**: Das Möbel zeigt seine Watt.
+- **Vor dem Schalten nachfragen** wie bei Geräten.
+- **Bilder nach Zustand** bei Bildschirmen: eine Pro-Erweiterung, siehe [6.3](#63-bildschirme-live).
+
+Steht dort „automatisch“, sucht NeonPlan 3D die passende Entität im Bereich selbst.
+
+### 4.13 Kameras
+
+![Kamera im Plan mit Sichtkegel](images/editor-camera-wedge.jpg)
+
+Kameras platzierst du wie jedes Gerät. Danach:
+
+- **Montage:** Wand mit Blickrichtung oder Decke als Dome, der rundum schaut.
+- Im Plan zeigt ein **Kegel**, wohin die Kamera schaut. Der **Griff an der Spitze** dreht die Kamera und setzt zugleich die Reichweite.
+- **Sichtwinkel (°)**, **Reichweite (m)** und **Neigung nach unten (°)** stellst du auch als Zahl ein.
+
+In 3D hängt die Kamera als kleines Modell an der Wand oder Decke, ihr Sichtfeld liegt als Kegel auf dem Boden. Meldet ein Bewegungs- oder Präsenzsensor der Kamera Bewegung, wird der Kegel rot.
+
+### 4.14 Stellplätze und Fahrzeuge
+
+![Stellplatz](images/editor-parking.jpg)
+
+Das Möbel **Stellplatz** in der Gruppe Stellplätze markiert, wo ein Auto steht: in der Garage, in der Einfahrt oder irgendwo auf dem Grundstück.
+
+- **Sensor „Auto anwesend“:** ein `binary_sensor`, `device_tracker` oder ähnliches. Solange er ein Auto meldet, steht das Fahrzeug da.
+- **Fahrzeug:** das Modell aus dem Pack „Fahrzeuge“.
+- **Fahrzeugtyp-Sensor** (optional): Liefert ein Sensor, welches Auto da ist, etwa aus einer KI-Kameraauswertung, ordnest du jedem Zustand ein Modell zu.
+- **Größe (%)** passt das Modell an den Platz an. Ist das Fahrzeug höher als der Raum, warnt der Editor.
+
+![Fahrzeug in der Garage](images/view-garage.jpg)
+
+### 4.15 Saugroboter
+
+Das Möbel Saugroboter wird mit der `vacuum`-Entität verknüpft. Saugt der Roboter, fährt er in 3D in Bahnen durch den Raum seiner Station und kehrt danach zurück. Die Bahn ist simuliert, weil Home Assistant die echte Position meist nicht kennt.
+
+### 4.16 Treppen und Bodenöffnungen
+
+- Die **Treppe** aus der Bibliothek steigt von der markierten Vorderkante nach hinten an. Reicht sie bis zur Etage darüber, schneidet sie dort die Treppenöffnung in die Decke.
+- Mit dem Werkzeug **Bodenöffnung** ziehst du ein Loch direkt in den Boden einer Etage auf, etwa über dem Treppenaufgang oder für eine Galerie. Von oben sieht man hindurch. Die Öffnung muss ganz in einem Raum liegen.
+- Weitere Treppen und Geländer bringt das Pack **Treppen & Geländer**.
+
+![Werkzeug Bodenöffnung](images/editor-hole-tool.jpg)
+
+### 4.17 Außenflächen und Außenleuchten
+
+Mit **Außen** ziehst du Rasen, Terrasse, Weg, Einfahrt, Pool, Beet, Hecke oder Zaun auf. Wegleuchten, Garten-Spots und Außen-Wandleuchten beleuchten die Außenflächen und die Fassade.
+
+![Garten bei Nacht](images/view-garden.jpg)
+
+### 4.18 3D daneben
+
+**3D daneben** zeigt die 3D-Ansicht rechts neben dem Plan. Jede Änderung erscheint dort nach einem Augenblick.
+
+- Die **Leiste zwischen Plan und 3D** ziehst du, um das Verhältnis zu ändern. Der Browser merkt sich die Einstellung.
+- Oben in der 3D-Hälfte schaltest du zwischen **Wände hoch** und **Schnitt**.
+- Ein Möbel oder Gerät kannst du auch in der 3D-Hälfte antippen und ziehen. Unten erscheint dann eine Leiste mit Breite, Tiefe, Höhe, Höhe über Boden, Drehung und Löschen.
+- Die Seitenleiste klappt neben der 3D-Ansicht ein. Am rechten Rand öffnen kleine Knöpfe sie wieder, das Stecknadel-Symbol hält sie offen.
+
+---
+
+## 5. Die 3D-Ansicht
+
+![Eine Etage](images/view-floor-eg.jpg)
+
+### 5.1 Haus, Etage, Raum
+
+Die 3D-Ansicht hat drei Ebenen:
+
+1. **Das ganze Haus** mit einer Beschriftung je Etage: Räume, Lichter an, offene Fenster.
+2. **Eine Etage:** Die Etagen darüber fliegen weg, die darunter bleiben je nach Einstellung abgedunkelt, gestapelt oder ausgeblendet.
+3. **Ein Raum:** Die Kamera fliegt hinein, das Raumfenster öffnet sich.
+
+**Navigieren:**
+
+- Eine Etagenbeschriftung oder einen Raum antippen geht eine Ebene tiefer.
+- **Doppeltipp** auf eine freie Stelle, **Esc** oder **Zurück** geht eine Ebene höher.
+- Ziehen dreht die Ansicht, zwei Finger oder das Mausrad zoomen.
+- Links wechseln die **Etagen-Miniaturen** direkt zu einer Etage.
+- Oben stehen Knöpfe für alle Etagen und für die Räume der offenen Etage.
+
+### 5.2 Die Schalter unten
+
+| Schalter | Wirkung |
+|---|---|
+| **Wände hoch** / **Schnitt** | Wände in voller Höhe, die vorderen als getöntes Glas, oder alle Wände in Hüfthöhe geschnitten |
+| **Auseinander** / **Gestapelt** | In der Hausansicht: Etagen auseinandergezogen oder aufeinander |
+| **Abgedunkelt** / **Gestapelt** / **Einzeln** | Bei einer offenen Etage: Was mit den Etagen darunter passiert |
+| **Normal** / **Temp.** / **Feuchte** / **CO₂** | Heatmap: Böden in der Farbe des Raumwerts |
+| **Raumnamen** | Namen der Räume ein- oder ausblenden |
+| **Spur** | Bewegungsspur, Pro, siehe [6.1](#61-kamera-cockpit) |
+| **Wetter** | Wetter draußen, Pro, siehe [6.2](#62-wetter-draußen) |
+
+![Schnittansicht](images/view-cut.jpg)
+
+Oben rechts stehen:
+
+| Schalter | Wirkung |
+|---|---|
+| **Auto** / **Tablet** / **Hoch** | Qualitätsstufe. Tablet lässt Muster, Schatten und Halos weg und wird auf Fire-Tablets automatisch gewählt. Hoch zeigt zusätzlich Lichtkegel unter Spots |
+| **Neon** / **Blueprint** / **Tag** | Der Look |
+| **Keine** / **Wichtige** / **Alle** | Welche Gerätesymbole erscheinen. Wichtige zeigt nur Geräte ohne eigenes 3D-Modell und Werte wie Watt oder die laufende App |
+| **FPS** | Bildrate, langsamstes Bild und Grund für jedes gezeichnete Bild. Im Ruhezustand steht dort 0 B/s |
+
+Alle Schalter merkt sich das jeweilige Gerät.
+
+![Blueprint](images/view-blueprint.jpg)
+
+![Tag](images/view-day.jpg)
+
+### 5.3 Bedienen
+
+![Lampe antippen](images/view-tap-lamp.jpg)
+
+- **Antippen** schaltet Lampen und Schalter. Die Lampe blinkt kurz zur Bestätigung.
+- **Senkrecht wischen** auf einer Lampe dimmt, auf einem Rollladen oder Fenster fährt der Rollladen. Der Wert erscheint am Finger.
+- **Lange drücken** öffnet das Schnellmenü: bei Lichtern Helligkeit, Farbtemperatur und Farben, bei Rollläden Auf, Stopp, Zu und feste Positionen.
+- Ein **Fenster** antippen, egal ob Rahmen, Glas oder Rollladen, öffnet das Rollladen-Menü oder zeigt den Kontakt.
+- **Doppeltipp auf einen Raum** schaltet alle Lichter des Raums ein oder aus. Geräte mit „Vor dem Schalten nachfragen“ bleiben außen vor.
+- Fernseher, Türen und Garagentore lassen sich ebenfalls direkt antippen.
+
+![Schnellmenü Licht](images/view-quickmenu.jpg)
+
+![Schnellmenü Rollladen](images/view-quickmenu-cover.jpg)
+
+![Wischen zum Dimmen](images/view-swipe.jpg)
+
+### 5.4 Das Raumfenster
+
+![Raumfenster](images/view-room-panel.jpg)
+
+In einem Raum öffnet sich rechts das Raumfenster, auf Handys und hochkant unten. Es zeigt die Geräte des Raums nach Art: Licht mit Helligkeit, Farbtemperatur und Farben, **Alle aus**, Rollläden, Heizung, Medien, Schalter, Kameras mit Standbild, Sensoren sowie Szenen & Skripte.
+
+Es zeigt die Geräte, die im Plan im Raum stehen, und alles, was du im Editor mit ☆ hinzugefügt hast. **Weitere Geräte des Bereichs** blendet den Rest ein.
+
+Bei einem ausgewählten Raum ohne offenes Raumfenster erscheinen unten die **Szenen und Skripte** des Bereichs als Knöpfe.
+
+### 5.5 Suchen
+
+![Suche](images/view-find.jpg)
+
+Die Lupe unten links öffnet **„Wo ist …?“**. Tippe einen Gerätenamen oder Raum. Ein Treffer fliegt die Kamera dorthin, das Gerät blinkt.
+
+### 5.6 Heatmap
+
+![Heatmap Temperatur](images/view-heat.jpg)
+
+**Temp.**, **Feuchte** und **CO₂** färben die Böden nach den Sensoren des Bereichs, mit einer Farbskala am Rand.
+
+### 5.7 Sonne und Tageslicht
+
+![Sonnenlicht](images/view-sun.jpg)
+
+Ist die Nordrichtung eingestellt, fällt das Sonnenlicht aus `sun.sun` durch die Fenster, die zur Sonne zeigen, als weiche Flecken auf den Boden. Heruntergelassene Rollläden verkleinern die Flecken. Tagsüber wird der Himmel hinter dem Haus heller.
+
+### 5.8 Warnungen
+
+![Warnung](images/view-alert-banner.jpg)
+
+NeonPlan 3D warnt kostenlos und ohne Einrichtung:
+
+| Warnung | Auslöser |
+|---|---|
+| Rauch, Gas, Kohlenmonoxid, Wasser | `binary_sensor` dieser Geräteklasse im Bereich meldet „an“ |
+| Alarm | Ein `alarm_control_panel` ist ausgelöst oder löst gleich aus |
+| Fenster offen bei Regen | Ein Fenster ist offen oder gekippt, und die Wetter-Entität meldet Regen, Gewitterregen, Hagel oder Schneeregen |
+
+Der betroffene Raum pulsiert rot, oben erscheint ein Banner. Ein Tipp auf die Warnung springt in den Raum.
+
+### 5.9 Kameras in 3D
+
+![Kamera in 3D](images/view-camera-model.jpg)
+
+Ein Tipp auf die Kamera oder auf ihren Sichtkegel öffnet das Standbild, das sich alle paar Sekunden erneuert. Ein Tipp auf das Bild öffnet das Livebild von Home Assistant. Der Kegel ist eine viel größere Tippfläche als die kleine Kamera.
+
+![Kamera-Standbild](images/view-camera.jpg)
+
+---
+
+## 6. Pro-Erweiterungen
+
+Pro-Erweiterungen sind kostenpflichtige Zusatzfunktionen, einzeln im Shop erhältlich. Ohne Erweiterung zeigen die Schalter ein 🔒, und ein Hinweis führt zum Shop. Wie du sie installierst, steht in [Kapitel 7](#7-erweiterungen-shop-und-möbel-packs).
+
+![Gesperrte Pro-Funktion](images/view-pro-locked.jpg)
+
+### 6.1 Kamera-Cockpit
+
+**Durch die Kamera schauen:** Im Standbild-Menü einer Kamera und im Raumfenster steht „Durch die Kamera schauen“. Die 3D-Ansicht fliegt an die Stelle der Kamera und blickt in ihre Richtung, das Livebild liegt halbtransparent über der Szene. Mit dem Regler unten stellst du die Überblendung ein, „Zurück zur Ansicht“ fliegt zurück. Passt das Bild nicht genau, korrigierst du Drehung und Neigung der Kamera im Editor.
+
+![Durch die Kamera schauen](images/view-camera-through.jpg)
+
+**Bewegungsspur:** Der Schalter **Spur** zeigt, wo in den letzten 30 Minuten Bewegung gemeldet wurde: leuchtende Punkte mit Uhrzeit, in zeitlicher Folge verbunden, ältere verblassen. Quellen sind Bewegungs-, Präsenz- und Belegungssensoren. Im Plan platzierte Sensoren liegen an ihrem Platz, Kamerasensoren an der Kamera, alle anderen in der Raummitte. Die Daten kommen aus dem Verlauf von Home Assistant und werden jede Minute neu geladen.
+
+![Bewegungsspur](images/view-trail.jpg)
+
+### 6.2 Wetter draußen
+
+![Regen](images/view-weather-rain.jpg)
+
+Das Wetter rund ums Haus folgt deiner Wetter-Entität:
+
+| Zustand | In 3D |
+|---|---|
+| rainy, pouring, hail | Regen, dazu Wolken |
+| snowy, snowy-rainy | Schnee, bei Schneeregen beides |
+| lightning, lightning-rainy | Blitze, beim Gewitterregen auch Regen |
+| fog | Nebel, nur wenn eingeschaltet |
+| cloudy, partlycloudy | Wolken dunkeln Himmel und Sonnenlicht |
+| windy | Wind treibt Regen und Schnee schräg |
+| sunny, clear-night | Sonne am Tag, Mond in der Nacht |
+
+Liefert die Entität `cloud_coverage` und `wind_speed`, nutzt NeonPlan 3D diese Werte.
+
+![Schnee](images/view-weather-snow.jpg)
+
+**Einstellungen** im Editor: Unter **Wetter-Entität** wählst du die Entität, unter **Wetter-Effekte in 3D** schaltest du einzelne Effekte ab. Nebel ist anfangs aus, weil er die ganze Szene eingraut. Auf der Qualitätsstufe Tablet bleibt nur die Abdunkelung durch Wolken.
+
+### 6.3 Bildschirme live
+
+Ohne diese Erweiterung leuchtet ein Fernseher nur, solange er an ist. Mit ihr:
+
+- Fernseher und Monitore zeigen die **Farbe der laufenden App** und das **Cover** des Media Players.
+- **Bilder nach Zustand:** Am Bildschirm-Möbel legst du Regeln an. Ist eine Entität in einem bestimmten Zustand oder hat ein Attribut einen Wert, zeigt der Bildschirm ein Bild. Beispiel: Attribut `app_name` des Fernsehers enthält „netflix“, dann erscheint das Netflix-Logo. Der Wert passt, wenn er gleich ist oder im Text vorkommt, `*` passt immer. Die erste passende Regel gewinnt.
+- Als Bild geht ein Upload, der auf 512 Pixel verkleinert wird, eine Bild-URL oder eine **Kamera**. Ein Kamerabild erneuert sich alle 5 Sekunden, solange es zu sehen ist.
+- **Bildschirm hinter dem Bild:** dunkel oder weiß, je nachdem, ob das Logo hell oder dunkel ist.
+- „✓ passt gerade“ an einer Regel zeigt, welches Bild im Moment zu sehen ist. Hochgeladene Bilder lassen sich an anderen Bildschirmen wiederverwenden.
+
+![Bildregeln](images/editor-picture-rules.jpg)
+
+![Medienwand mit Logo](images/view-media-wall.jpg)
+
+![Kamerabild auf dem Monitor](images/view-camera-screen.jpg)
+
+---
+
+## 7. Erweiterungen, Shop und Möbel-Packs
+
+![Erweiterungen](images/extensions.jpg)
+
+Der Reiter **✦ Erweiterungen** bündelt alles, was du zu NeonPlan 3D dazubekommen kannst.
+
+### 7.1 Shop-Verbindung
+
+Mit dem ersten Kauf bei mastershort.de bekommst du einen **Lizenzschlüssel** der Form `NP-XXXX-XXXX-XXXX-XXXX`. Er steht in der Bestell-Mail und im Kundenkonto.
+
+1. **Erweiterungen** öffnen.
+2. Unter **Shop-Verbindung** den Schlüssel eintragen und **Aktivieren** drücken.
+3. Deine Käufe erscheinen mit **Installieren**. Ein Tipp holt das Pack vom Shop, signiert für genau diese Installation.
+
+Danach:
+
+- **Updates kommen von selbst.** Einmal täglich fragt NeonPlan 3D, ob es neue Käufe oder neuere Versionen gibt, und installiert sie. **Jetzt prüfen** fragt sofort.
+- **Ohne Internet läuft alles weiter.** Installierte Packs werden lokal geprüft, der Shop wird dafür nie gebraucht.
+- **Trennen** entfernt den Schlüssel. Installierte Packs bleiben.
+
+**Mehrere Installationen:** Ein Schlüssel ist mit höchstens drei Installationen gleichzeitig verbunden. Ziehst du auf neue Hardware um, verbindest du einfach die neue Installation, die älteste fällt dann heraus. Bis zu fünf neue Verbindungen sind pro Jahr möglich. Die **Installations-Kennung** oben ist ein anonymer Fingerabdruck deiner Installation.
+
+### 7.2 Pro-Erweiterungen
+
+Die mittlere Kachelreihe zeigt die drei Pro-Erweiterungen. Aktive tragen ein ✓, gesperrte ein 🔒 und den Link „Im Shop ansehen“.
+
+### 7.3 Möbel-Packs
+
+| Pack | Inhalt |
+|---|---|
+| Wohnzimmer | Sofas, Wohnwände, Kamine, Medienmöbel und mehr |
+| Küche | Unterschränke, Hochschränke, Inseln, Geräte |
+| Schlafzimmer | Betten, Schränke, Kommoden, Nachttische |
+| Bad | Waschtische, Duschen, Wannen, WCs |
+| Kinderzimmer, Büro & Gaming, Garten & Terrasse, Garage & Werkstatt, Fitness, Smart-Home & Technik | Möbel und Geräte für den jeweiligen Bereich |
+| Fahrzeuge | Autos, Transporter, Motorräder und mehr für Stellplätze |
+| Treppen & Geländer | Gerade, L- und U-Treppen, Wendeltreppe, Raumspartreppe, Außentreppe, Podest, Geländer aus Metall, Glas und Holz |
+
+Unten auf der Seite stehen deine installierten Packs mit **Entfernen**. Darunter liegt **Möbel-Packs importieren …** für Pack-Dateien: Schnupper-Packs aus dem Newsletter, Downloads von der Website oder Installationen ohne Internet. Mehrere Dateien lassen sich auf einmal wählen.
+
+**Gut zu wissen:**
+
+- Packs sind digital signiert. Nur Packs vom Herausgeber lassen sich importieren, veränderte Dateien werden abgelehnt.
+- Entfernst du ein Pack, bleiben seine Möbel als einfache Kästen im Plan stehen. Importierst du es wieder, sind sie zurück, mit allen Verknüpfungen.
+- Eine neuere Version eines Packs ersetzt die alte, ohne dass im Plan etwas verloren geht.
+
+---
+
+## 8. Die Dashboard-Karte
+
+![Karte im Dashboard](images/card-og-dim.jpg)
+
+Die Karte `custom:neonplan3d-card` bringt die 3D-Ansicht in jedes Dashboard. Sie wird automatisch geladen.
+
+**Anlegen:** Dashboard bearbeiten, **Karte hinzufügen**, nach „NeonPlan“ suchen. Alle Optionen stellst du im visuellen Editor der Karte ein:
+
+| Abschnitt | Optionen |
+|---|---|
+| **Ansicht** | Etage oder ganzes Haus, Größe fest oder bildschirmfüllend, Höhe, Look, Wände, Qualität, Etagen darunter |
+| **Anzeigen** | Symbole, Heatmap, Schalter in der Karte, Etagen-Miniaturen, Raumnamen, Raumfenster, Vollbild-Knopf, Etagen auseinander, Leistungsanzeige |
+| **Funktionen** | Warnungen, Sprung zur Warnung, Szenen-Knöpfe, Bewegungsspur, Wetter mit Wetter-Entität |
+| **Wandtablet (Kiosk)** | Rückkehr zur Startansicht, Nachtdimmung, Kamerafahrt als Bildschirmschoner |
+
+![Karte mit Szenen](images/card-scenes.jpg)
+
+In YAML sieht eine Karte so aus. Alle Zeilen außer der ersten sind optional:
+
+```yaml
+type: custom:neonplan3d-card
+floor: floor_ab12cd34   # eine Etage zeigen (ID aus dem Editor)
+height: 420             # Höhe in Pixeln
+fill: false             # den Bildschirm unter der Kopfzeile füllen
+walls: auto             # auto | cut
+explode: true           # Etagen in der Hausansicht auseinanderziehen
+floor_stack: dim        # Etagen darunter: dim | stacked | single
+quality: auto           # auto | low | high
+theme: neon             # neon | blueprint | day
+markers: important      # none | important | all
+heatmap: none           # none | temperature | humidity | co2
+room_panel: true        # Raum antippen öffnet das Raumfenster
+room_names: true
+controls: true          # Schalter in der Karte, oder eine Liste: walls, floors, temperature, humidity, co2
+floor_thumbs: true
+fullscreen_button: false
+stats: false
+alerts: true
+alert_jump: false       # bei einer neuen Warnung in den Raum springen
+scenes: true
+motion_trail: false     # Pro: Kamera-Cockpit
+weather: true           # Pro: Wetter draußen
+weather_entity: weather.home
+idle_return: 0          # Sekunden ohne Berührung bis zur Startansicht
+night: "off"            # off | sun | "22:00-06:00"
+idle_orbit: false
+```
+
+---
+
+## 9. NeonPlan 3D auf dem Wandtablet
+
+![Tablet](images/tablet.jpg)
+
+NeonPlan 3D ist für Wandtablets wie das Amazon Fire gebaut:
+
+- **Kein Rechnen im Leerlauf.** Ändert sich nichts, zeichnet die Ansicht kein einziges Bild. Die FPS-Anzeige zeigt dann „Ruhe (0 B/s)“.
+- **Qualitätsstufe Tablet:** Auf Fire-Tablets wählt „Auto“ sie von selbst. Muster, Schatten, Halos und Partikel fallen weg, Animationen laufen mit halber Rate.
+- **Kiosk-Optionen der Karte:** Nach einigen Minuten ohne Berührung kehrt die Karte zur Startansicht zurück. Nachts dimmt sie nach Sonnenstand oder Uhrzeit. Als Bildschirmschoner dreht sich das Haus langsam.
+- **Warnungen** springen auf Wunsch von selbst in den betroffenen Raum.
+- Hochkant erscheint das Raumfenster unten.
+
+![Tablet hochkant](images/tablet-portrait-room.jpg)
+
+![Handy](images/phone-floor.jpg)
+
+**Tipps für Fire-Tablets:** Fully Kiosk Browser mit Hardwarebeschleunigung nutzen, die Karte mit `fill: true` bildschirmfüllend zeigen und `quality: auto` lassen.
+
+---
+
+## 10. Sicherung und Umzug
+
+![Sicherung](images/editor-backup.jpg)
+
+Unter **Sicherung** im Editor:
+
+- **Wiederherstellungspunkte** entstehen beim Bearbeiten höchstens alle 10 Minuten, die letzten 20 bleiben. **Wiederherstellen** holt einen Stand zurück, der aktuelle bleibt dabei selbst als Punkt erhalten.
+- **Exportieren** speichert den Plan als Datei, **Importieren …** lädt eine solche Datei.
+- **Als Vorlage teilen** exportiert ohne Bereiche, Geräte, Sensoren und Bilder. Das ist gut, um einen Grundriss weiterzugeben.
+- **Komplett-Backup:** **Alles sichern (Plan, Bilder, Packs)** speichert eine Datei mit dem Plan, allen Hintergrund- und Bildschirmbildern und den installierten Packs. **Komplett-Backup wiederherstellen …** spielt sie in dieselbe oder eine andere Installation zurück. Jedes Pack wird dabei erneut geprüft. Packs, die für eine andere Installation signiert sind, holst du dort über die Shop-Verbindung neu. Der Lizenzschlüssel ist nicht in der Datei.
+
+Das normale Backup von Home Assistant sichert NeonPlan 3D ebenfalls vollständig mit.
+
+---
+
+## 11. Daten und Datenschutz
+
+- Plan, Bilder und Packs liegen in Home Assistant unter `.storage`. Nichts davon verlässt deine Installation.
+- NeonPlan 3D verbindet sich nur dann mit dem Internet, wenn du einen Lizenzschlüssel einträgst. Dann fragt es einmal am Tag bei mastershort.de nach Updates und sendet dabei den Schlüssel und die anonyme Installations-Kennung.
+- Kamerabilder, Verlaufsdaten und Zustände bleiben in Home Assistant und werden nur im Browser angezeigt.
+
+---
+
+## 12. Häufige Fragen und Fehlerbehebung
+
+**Oben steht „Neustart nötig“.**
+Nach einem Update läuft im Hintergrund noch die alte Version. Home Assistant neu starten.
+
+**Ein Gerät fehlt in der Geräteliste eines Raums.**
+Der Raum braucht einen Bereich, und das Gerät muss diesem Bereich zugeordnet sein, entweder das Gerät oder die Entität selbst. Steckt die Entität unter einem Gerät mit mehreren Entitäten, steht sie hinter „+n mehr“. Das Suchfeld findet sie direkt.
+
+**Eine Kamera ist schwer zu treffen.**
+Tippe auf ihren Sichtkegel am Boden, er zählt wie die Kamera.
+
+**Möbel erscheinen als graue Kästen.**
+Das Pack, aus dem sie stammen, ist nicht installiert. Importiere es wieder oder installiere es über die Shop-Verbindung.
+
+**Beim Verschieben in 3D rutscht ein Möbel nicht durch die Wand.**
+Das ist Absicht: In der 3D-Ansicht bleiben Möbel und Geräte beim Ziehen in ihrem Raum und gleiten an der Wand entlang. In einen anderen Raum ziehst du sie im Grundriss, dort geht das frei.
+
+**Ein Tipp trifft das Gerät im Nachbarraum.**
+Wände fangen Tipps ab. In der Raumansicht zählen nur Dinge im Raum. Trifft es trotzdem das Falsche, hilft der Schalter **Schnitt**.
+
+**Die Ansicht ruckelt auf dem Tablet.**
+Qualität auf **Tablet** stellen und mit **FPS** prüfen, was zeichnet. Im Leerlauf sollte dort 0 B/s stehen. Läuft dauerhaft etwas, steht der Grund daneben, etwa ein Farbeffekt einer Lampe.
+
+**Das Sonnenlicht fällt durch die falschen Fenster.**
+Unter Einstellungen die **Nordrichtung** prüfen: Grad im Uhrzeigersinn von „oben“ im Plan.
+
+**Die Shop-Verbindung meldet „Limit erreicht“.**
+Der Schlüssel war in den letzten zwölf Monaten mit mehr als fünf neuen Installationen verbunden. Melde dich bei uns, wir helfen.
+
+**Der Shop ist nicht erreichbar.**
+Installierte Packs und Pro-Erweiterungen funktionieren weiter. Updates kommen, sobald der Shop wieder antwortet.
+
+**Wo melde ich Fehler?**
+Im Issue-Tracker auf GitHub: https://github.com/Mastershort/neonplan3d/issues

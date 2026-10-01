@@ -384,7 +384,7 @@ export const FURNITURE_GROUPS: Record<string, FurnitureType[]> = {
   lights: ["lamp_ceiling", "lamp_downlight", "lamp_spot", "lamp_panel", "lamp_pendant", "lamp_floor", "lamp_uplight", "lamp_table", "lamp_wall", "led_strip", "lamp_bollard", "lamp_garden"],
   living: ["sofa", "armchair", "stool", "coffee_table", "tv_board", "tv_wall", "sideboard", "shelf", "plant", "rug"],
   dining: ["table", "table_round", "chair", "bench", "corner_bench", "bar_stool"],
-  kitchen: ["kitchen", "kitchen_wall", "kitchen_tall", "island", "sink", "stove", "dishwasher", "fridge", "fridge_smart"],
+  kitchen: ["kitchen", "kitchen_wall", "kitchen_tall", "island", "sink", "stove", "dishwasher", "fridge"],
   sleeping: ["bed", "bunk_bed", "nightstand", "wardrobe", "dresser"],
   bath: ["bathtub", "shower", "wc", "washbasin", "washer", "dryer"],
   work: ["desk", "office_chair", "tall_cabinet", "coat_rack", "radiator", "stairs", "robot_vacuum"],
