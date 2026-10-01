@@ -61,6 +61,7 @@
   - Glowing cables run from the meter along the wall bases and through the walls to every placed device that reports power (its own sensor or a power sensor of the same device); cables shared by several devices carry their sum.
   - Stripes move with the power (still at 0 W); grid import is cyan, solar and export yellow, battery green. The animation runs at about 30 fps and stops when nothing flows or the page is hidden.
   - Watt labels at the devices and an energy bar with consumption, grid, solar, battery and tariff.
+- **Shop connection**: a customer key from the publisher's shop lists the bought furniture packs, installs them signed for this installation and checks once a day for updates. Everything installed keeps working offline.
 - **Smart fridge**: a side-by-side fridge whose two doors swing open in 3D while their door sensors report open; the screen on its right door shows pictures by rules like a TV.
 - **Motion trail**: the "Trail" switch shows where motion, occupancy and presence sensors (including a camera's) reported motion in the last 30 minutes: glowing spots with the time, joined in order and fading with age. Sensors placed in the plan sit at their spot, a camera's at the camera, others at the centre of their room.
 - **Presence**: per person a room sensor (e.g. ESPresense, Bermuda) whose state names the room or area; people at home show as pink markers in their room. Floor labels count rooms, lights on, open windows and people.

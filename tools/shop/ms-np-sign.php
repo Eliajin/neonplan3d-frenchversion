@@ -13,6 +13,9 @@
  *   3. Products carry the meta _ms_np_key = pack key (living, kitchen, …). The bundle lists the packs.
  *   4. Drop this file into wp-content/novamira-sandbox/ (auto-loaded) or a plugin.
  * Without seed or template the download falls through to WooCommerce's normal delivery.
+ *
+ * With ms-np-license.php next to this file, a download from the website is also bound to the
+ * installation the buyer's key was activated on last (none activated yet: the file stays unbound).
  */
 
 if (!defined('ABSPATH')) {
@@ -56,6 +59,13 @@ function ms_np_sign_download(string $email, string $order_key, int $product_id, 
     $signed = ms_np_put_licensee($canonical, $name);
     if ($signed === null) {
         return;
+    }
+    if (function_exists('ms_np_ensure_license') && function_exists('ms_np_latest_instance_of_key')) {
+        $key = ms_np_ensure_license($order);
+        $instance = $key !== '' ? ms_np_latest_instance_of_key($key) : null;
+        if ($instance !== null) {
+            $signed = ms_np_put_instance($signed, $instance) ?? $signed;
+        }
     }
     $seed = base64_decode(MS_NP_SIGNING_SEED, true);
     if ($seed === false || strlen($seed) !== SODIUM_CRYPTO_SIGN_SEEDBYTES) {

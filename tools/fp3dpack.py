@@ -55,10 +55,12 @@ def keygen(path: Path) -> None:
     print(f'    "{packs.key_id(raw)}": "{base64.b64encode(raw).decode()}",')
 
 
-def sign(source: Path, key: Path, licensee: str | None, out: Path | None) -> None:
+def sign(source: Path, key: Path, licensee: str | None, out: Path | None, instance: str | None = None) -> None:
     payload = json.loads(source.read_text(encoding="utf-8"))
     # the licensee is always present, so a shop can put a buyer's name into the canonical form later
     payload["licensee"] = licensee
+    # a pack bound to one installation (its fingerprint, shown in NeonPlan 3D under the shop connection)
+    payload["instance"] = instance
     packs.validate_payload(payload)
     private = serialization.load_pem_private_key(key.read_bytes(), password=None)
     if not isinstance(private, Ed25519PrivateKey):
@@ -79,6 +81,9 @@ def canonical(source: Path, out: Path | None) -> None:
     (see tools/shop/ms-np-sign.php), which replaces the last "licensee":null with the buyer's name."""
     payload = json.loads(source.read_text(encoding="utf-8"))
     payload["licensee"] = None
+    # the shop replaces the last "instance":null with the buyer's installation fingerprint
+    payload["instance"] = None
+    payload.setdefault("release", 1)
     packs.validate_payload(payload)
     target = out or source.with_suffix(".canonical.json")
     target.write_bytes(packs.canonical(payload))
@@ -104,6 +109,8 @@ def verify(path: Path) -> None:
     print(
         f"ok: {payload['name']} by {payload['publisher']}, {len(payload['items'])} items"
         + (f", for {payload['licensee']}" if payload["licensee"] else "")
+        + f", release {payload['release']}"
+        + (f", bound to installation {payload['instance']}" if payload["instance"] else "")
     )
 
 
@@ -116,6 +123,7 @@ def main() -> None:
     p.add_argument("source", type=Path)
     p.add_argument("--key", type=Path, required=True)
     p.add_argument("--licensee")
+    p.add_argument("--instance", help="bind the pack to one installation (its 16-character fingerprint)")
     p.add_argument("--out", type=Path)
     p = sub.add_parser("verify")
     p.add_argument("pack", type=Path)
@@ -128,7 +136,7 @@ def main() -> None:
     if args.command == "keygen":
         keygen(args.keyfile)
     elif args.command == "sign":
-        sign(args.source, args.key, args.licensee, args.out)
+        sign(args.source, args.key, args.licensee, args.out, args.instance)
     elif args.command == "canonical":
         canonical(args.source, args.out)
     elif args.command == "seed":

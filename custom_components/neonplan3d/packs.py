@@ -135,6 +135,10 @@ PAYLOAD_SCHEMA = vol.Schema(
         vol.Required("publisher"): _TEXT,
         # buyer the pack was signed for (shown on import)
         vol.Optional("licensee", default=None): vol.Any(None, _TEXT),
+        # release number of the pack (a newer release of the same id replaces an installed one)
+        vol.Optional("release", default=1): vol.All(int, vol.Range(min=1, max=100000)),
+        # fingerprint of the installation the pack is bound to (None = any installation)
+        vol.Optional("instance", default=None): vol.Any(None, vol.Match(r"^[0-9a-f]{16}$")),
         vol.Optional("description", default=""): vol.All(str, vol.Length(max=400)),
         vol.Required("items"): vol.All([ITEM_SCHEMA], vol.Length(min=1, max=200)),
     }
@@ -161,6 +165,11 @@ def key_id(public_raw: bytes) -> str:
     return hashlib.sha256(public_raw).hexdigest()[:12]
 
 
+def fingerprint(instance_id: str) -> str:
+    """An installation's fingerprint, as bound packs carry it: a hash, so the file does not reveal the id."""
+    return hashlib.sha256(f"neonplan3d:{instance_id}".encode()).hexdigest()[:16]
+
+
 def validate_payload(payload: Any) -> dict[str, Any]:
     """Check the content of a pack (without its signature); raises PackError."""
     try:
@@ -173,8 +182,11 @@ def validate_payload(payload: Any) -> dict[str, Any]:
     return clean
 
 
-def verify_pack(text: str, keys: dict[str, str] | None = None) -> dict[str, Any]:
-    """Parse a pack file, check its signature against the publisher keys and return its payload."""
+def verify_pack(text: str, keys: dict[str, str] | None = None, instance: str | None = None) -> dict[str, Any]:
+    """Parse a pack file, check its signature against the publisher keys and return its payload.
+
+    A pack bound to an installation (payload "instance") is only accepted when `instance` is that
+    fingerprint; with instance=None the binding is not checked (tools)."""
     keys = PACK_PUBLIC_KEYS if keys is None else keys
     if len(text) > MAX_PACK_SIZE:
         raise PackError("too_large")
@@ -204,4 +216,7 @@ def verify_pack(text: str, keys: dict[str, str] | None = None) -> dict[str, Any]
         )
     except (InvalidSignature, ValueError) as err:
         raise PackError("bad_signature") from err
-    return validate_payload(data["payload"])
+    payload = validate_payload(data["payload"])
+    if instance is not None and payload["instance"] is not None and payload["instance"] != instance:
+        raise PackError("wrong_instance", "the pack is bound to another installation")
+    return payload

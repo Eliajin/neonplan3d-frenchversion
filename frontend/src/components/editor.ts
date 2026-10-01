@@ -60,7 +60,7 @@ import {
 import { controls, tokens } from "../styles.ts";
 import "./entity-picker.ts";
 import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
-import { importPack, removePack } from "../api.ts";
+import { activateLicense, getLicense, importPack, installPack, refreshLicense, removeLicense, removePack, type CatalogPack, type LicenseStatus } from "../api.ts";
 import { load3d } from "../load3d.ts";
 import type { WallMode } from "../viewer/viewer3d.ts";
 import { furnitureName } from "../furniture-names.ts";
@@ -102,6 +102,10 @@ export class Fp3dEditor extends LitElement {
     narrow: { type: Boolean },
     packs: { attribute: false },
     _packMsg: { state: true },
+    _license: { state: true },
+    _licenseKey: { state: true },
+    _licenseBusy: { state: true },
+    _licenseMsg: { state: true },
     _preview: { state: true },
     _doc: { state: true },
     _doc3d: { state: true },
@@ -146,6 +150,13 @@ export class Fp3dEditor extends LitElement {
   declare packs: FurniturePack[] | undefined;
   /** Result of the last pack import. */
   private declare _packMsg: { ok: boolean; text: string } | null;
+  /** The shop connection (loaded when the packs section opens); null until then. */
+  private declare _license: LicenseStatus | null;
+  private declare _licenseKey: string;
+  /** What runs right now: "activate", "refresh" or a pack id being installed. */
+  private declare _licenseBusy: string | null;
+  private declare _licenseMsg: { ok: boolean; text: string } | null;
+  private licenseLoading = false;
   /** Picture of the furniture under the pointer in the library. */
   private declare _preview: { type: string; url: string | null; left: number; top: number } | null;
   private declare _doc: Building;
@@ -232,6 +243,10 @@ export class Fp3dEditor extends LitElement {
     this._floorMenu = false;
     this._openingPreset = "door";
     this._packMsg = null;
+    this._license = null;
+    this._licenseKey = "";
+    this._licenseBusy = null;
+    this._licenseMsg = null;
     let split = false;
     try {
       split = localStorage.getItem("neonplan3d.editor3d") === "1";
@@ -3166,6 +3181,126 @@ export class Fp3dEditor extends LitElement {
     </div>`;
   }
 
+  private async loadLicense(): Promise<void> {
+    if (!this.hass || this.licenseLoading) return;
+    this.licenseLoading = true;
+    try {
+      this._license = await getLicense(this.hass);
+    } catch {
+      this._license = null;
+    } finally {
+      this.licenseLoading = false;
+    }
+  }
+
+  /** Runs a shop call, shows its result or the shop's error. */
+  private async shopCall(busy: string, call: () => Promise<LicenseStatus>, ok?: string): Promise<void> {
+    this._licenseBusy = busy;
+    this._licenseMsg = null;
+    try {
+      this._license = await call();
+      if (ok) this._licenseMsg = { ok: true, text: ok };
+    } catch (err) {
+      const { code, message } = (err ?? {}) as { code?: string; message?: string };
+      const key = `license_error_${code}` as I18nKey;
+      const text = this.t(key);
+      this._licenseMsg = { ok: false, text: text === key ? this.t("license_error_other", { detail: message ?? String(err) }) : text };
+    } finally {
+      this._licenseBusy = null;
+    }
+  }
+
+  private async installFromShop(pack: CatalogPack): Promise<void> {
+    if (!this.hass) return;
+    const hass = this.hass;
+    await this.shopCall(pack.id, async () => {
+      const res = await installPack(hass, pack.id);
+      this._packMsg = { ok: true, text: this.t("pack_imported", { name: res.name, publisher: res.publisher, n: res.items }) };
+      this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
+      return getLicense(hass);
+    });
+  }
+
+  /** The shop connection: fingerprint, key and the bought packs with install and update buttons. */
+  private renderShop() {
+    const lic = this._license;
+    if (!this.isAdmin || !this.hass) return nothing;
+    if (!lic) {
+      void this.loadLicense();
+      return nothing;
+    }
+    const hass = this.hass;
+    const busy = this._licenseBusy;
+    const checked = lic.checked_at ? new Date(lic.checked_at * 1000).toLocaleString(hass.language) : null;
+    return html`<div class="fp3d-shop">
+      <div class="fp3d-sub">${this.t("license_title")}</div>
+      <div class="fp3d-shop-row">
+        <span>${this.t("license_instance")}</span>
+        <code>${lic.instance}</code>
+        <button
+          class="fp3d-btn"
+          @click=${async () => {
+            try {
+              await navigator.clipboard.writeText(lic.instance);
+              this._licenseMsg = { ok: true, text: this.t("license_copied") };
+            } catch {
+              /* no clipboard: the code stays readable */
+            }
+          }}
+        >
+          ${this.t("license_copy")}
+        </button>
+      </div>
+      ${lic.active
+        ? html`<div class="fp3d-shop-row">
+              <span>${this.t("license_active", { name: lic.licensee ?? "", key: lic.key_hint ?? "" })}</span>
+              ${checked ? html`<span class="fp3d-sub">${this.t("license_checked", { time: checked })}</span>` : nothing}
+              <button class="fp3d-btn" ?disabled=${!!busy} @click=${() => this.shopCall("refresh", () => refreshLicense(hass), this.t("license_refreshed"))}>
+                ${busy === "refresh" ? "…" : this.t("license_refresh")}
+              </button>
+              <button class="fp3d-btn fp3d-danger" ?disabled=${!!busy} @click=${() => confirm(this.t("license_remove_confirm")) && this.shopCall("remove", () => removeLicense(hass))}>
+                ${this.t("license_remove")}
+              </button>
+            </div>
+            ${lic.error ? html`<p class="fp3d-sub fp3d-pack-error">${this.t(`license_error_${lic.error}` as I18nKey)}</p>` : nothing}
+            ${lic.packs.length
+              ? lic.packs.map((p) => {
+                  const state = p.installed === null ? "install" : p.installed < p.release ? "update" : "installed";
+                  return html`<div class="fp3d-pack">
+                    <div>
+                      <b>${p.name}</b>
+                      <span class="fp3d-sub">${state === "installed" ? this.t("license_installed", { release: p.release }) : state === "update" ? this.t("license_update_available", { release: p.release }) : this.t("license_not_installed")}</span>
+                    </div>
+                    ${state === "installed"
+                      ? nothing
+                      : html`<button class="fp3d-btn fp3d-primary" ?disabled=${!!busy} @click=${() => this.installFromShop(p)}>
+                          ${busy === p.id ? "…" : this.t(state === "update" ? "license_update" : "license_install")}
+                        </button>`}
+                  </div>`;
+                })
+              : html`<p class="fp3d-sub">${this.t("license_none")}</p>`}`
+        : html`<div class="fp3d-shop-row">
+            <input
+              type="text"
+              class="fp3d-shop-key"
+              placeholder="NP-XXXX-XXXX-XXXX-XXXX"
+              autocomplete="off"
+              spellcheck="false"
+              .value=${this._licenseKey}
+              @input=${(e: Event) => (this._licenseKey = (e.target as HTMLInputElement).value)}
+              @keydown=${(e: KeyboardEvent) => {
+                if (e.key === "Enter" && this._licenseKey.trim()) void this.shopCall("activate", () => activateLicense(hass, this._licenseKey), this.t("license_activated"));
+              }}
+            />
+            <button class="fp3d-btn fp3d-primary" ?disabled=${!!busy || !this._licenseKey.trim()} @click=${() => this.shopCall("activate", () => activateLicense(hass, this._licenseKey), this.t("license_activated"))}>
+              ${busy === "activate" ? "…" : this.t("license_activate")}
+            </button>
+          </div>`}
+      ${this._licenseMsg ? html`<p class="fp3d-sub ${this._licenseMsg.ok ? "fp3d-notice" : "fp3d-pack-error"}">${this._licenseMsg.text}</p>` : nothing}
+      <p class="fp3d-sub">${this.t("license_hint")} <a href=${lic.shop_url} target="_blank" rel="noopener">${this.t("license_shop")}</a></p>
+    </div>`;
+  }
+
   private renderPacks() {
     const packs = this.packs ?? [];
     return html`<section>
@@ -3175,11 +3310,12 @@ export class Fp3dEditor extends LitElement {
           <div>
             <b>${p.name}</b>
             <span class="fp3d-sub">${this.t("pack_by", { publisher: p.publisher, n: p.items.length })}</span>
-            ${p.licensee ? html`<span class="fp3d-sub">${this.t("pack_licensed", { name: p.licensee })}</span>` : nothing}
+            ${p.licensee ? html`<span class="fp3d-sub">${this.t("pack_licensed", { name: p.licensee })}${p.release && p.release > 1 ? ` · v${p.release}` : ""}</span>` : nothing}
           </div>
           <button class="fp3d-btn fp3d-danger" @click=${() => this.deletePack(p)}>${this.t("pack_remove")}</button>
         </div>`,
       )}
+      ${this.renderShop()}
       <label class="fp3d-btn fp3d-primary fp3d-pack-import">
         ${this.t("pack_import")}
         <input type="file" accept=".fp3dpack,.json,application/json" multiple hidden @change=${(e: Event) => this.importPackFile(e)} />
@@ -4116,6 +4252,37 @@ export class Fp3dEditor extends LitElement {
         margin-top: 2px;
         font-size: 13px;
         color: #e8eeff;
+      }
+      .fp3d-shop {
+        margin: 10px 0;
+        padding: 10px 12px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 12px;
+      }
+      .fp3d-shop-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin: 6px 0;
+      }
+      .fp3d-shop code {
+        padding: 2px 8px;
+        border-radius: 6px;
+        background: var(--fp3d-chrome-solid);
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        user-select: all;
+      }
+      .fp3d-shop-key {
+        flex: 1;
+        min-width: 180px;
+        font-family: ui-monospace, monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .fp3d-shop a {
+        color: var(--fp3d-accent);
       }
       .fp3d-pack {
         display: flex;

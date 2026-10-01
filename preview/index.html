@@ -19,6 +19,21 @@
       import { DEMO_AREAS, DEMO_BUILDING, DEMO_FLOORS, DEMO_PACK, DEMO_ENTITIES, DEMO_STATES, DEMO_PICTURES } from "./demo-data.js";
 
       const params = new URLSearchParams(location.search);
+      // the shop connection of the demo: connected when ?shop is given, with one pack to install and one update
+      let license = {
+        instance: "3f9c2a7b1e4d8c05",
+        active: params.has("shop"),
+        key_hint: params.has("shop") ? "…7K2M" : null,
+        licensee: params.has("shop") ? "Demo Kunde" : null,
+        checked_at: params.has("shop") ? Date.now() / 1000 - 3600 : null,
+        error: null,
+        shop_url: "https://mastershort.de/neonplan3d/",
+        packs: [
+          { id: "mastershort.living", name: "Wohnzimmer", release: 2, url: "https://mastershort.de/neonplan3d/", installed: 1 },
+          { id: "mastershort.kitchen", name: "Küche", release: 1, url: "https://mastershort.de/neonplan3d/", installed: 1 },
+          { id: "mastershort.vehicles", name: "Fahrzeuge", release: 1, url: "https://mastershort.de/neonplan3d/", installed: null },
+        ],
+      };
       let building = params.has("empty") ? { version: 1, floors: [], settings: { wall_exterior: 0.24, wall_interior: 0.12, grid: 0.05 } } : DEMO_BUILDING;
       let revision = 1;
       const images = { ...DEMO_PICTURES };
@@ -140,6 +155,21 @@
             case "neonplan3d/packs/remove":
               importedPacks = importedPacks.filter((p) => p.id !== msg.pack_id);
               return null;
+            case "neonplan3d/license/get":
+              return license;
+            case "neonplan3d/license/activate":
+              if (!/^NP(-[A-Z0-9]{4}){4}$/i.test(msg.key)) throw { code: "invalid_key", message: "unknown" };
+              license = { ...license, active: true, key_hint: "…" + msg.key.slice(-4), licensee: "Demo Kunde", checked_at: Date.now() / 1000 };
+              return license;
+            case "neonplan3d/license/remove":
+              license = { ...license, active: false, key_hint: null, licensee: null, checked_at: null };
+              return license;
+            case "neonplan3d/license/refresh":
+              license = { ...license, checked_at: Date.now() / 1000 };
+              return license;
+            case "neonplan3d/packs/install":
+              license.packs = license.packs.map((p) => (p.id === msg.pack_id ? { ...p, installed: p.release } : p));
+              return { id: msg.pack_id, name: msg.pack_id, publisher: "Mastershort", licensee: "Demo Kunde", release: 1, items: 0 };
             case "history/history_during_period": {
               // invented motion of the last half hour: hall, kitchen, then the living-room camera
               const now = Date.now() / 1000;

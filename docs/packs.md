@@ -106,3 +106,37 @@ Fehlt Seed oder Vorlage, liefert WooCommerce die unpersonalisierte Datei wie bis
 
 Möbel eines entfernten Packs bleiben im Plan als einfache Kästen stehen und erscheinen wieder, wenn das
 Pack erneut importiert wird.
+
+## Lizenzschlüssel, Gerätebindung und Updates
+
+Jeder Kunde bekommt mit dem ersten Pack-Kauf **einen Schlüssel** (`NP-XXXX-XXXX-XXXX-XXXX`), der in
+der Bestell-Mail, auf der Danke-Seite und im Kundenkonto steht. In NeonPlan 3D wird er einmal unter
+*Editor › Packs › Shop-Verbindung* eingetragen. Danach:
+
+- listet die Integration die gekauften Packs (Knopf „Installieren“ beziehungsweise „Aktualisieren“),
+- holt sie **signiert für diese Installation**: das Payload-Feld `instance` trägt den Fingerabdruck
+  (`sha256("neonplan3d:" + Instanz-ID)[:16]`, in der Oberfläche als „Installations-Kennung“ zu
+  sehen); ein so signiertes Pack lehnt jede andere Installation mit `wrong_instance` ab,
+- prüft **einmal täglich** beim Shop nach neuen Käufen und neueren Releases (Payload-Feld `release`,
+  Standard 1; ein höheres Release derselben Pack-ID ersetzt das installierte Pack).
+
+Installierte Packs brauchen den Shop nie wieder: die Signatur wird lokal geprüft. Fällt der Shop aus
+oder wird die Verbindung getrennt, bleibt alles, nur Updates kommen nicht mehr von selbst.
+
+Ein Schlüssel darf mit bis zu drei Installationen verbunden sein und dreimal im Jahr neu gebunden
+werden (Umzug auf neue Hardware); darüber antwortet der Shop mit `activation_limit`. Downloads von
+der Website sind an die zuletzt aktivierte Installation gebunden; wer noch nie aktiviert hat, bekommt
+die Datei nur mit Namen signiert.
+
+Serverseite (`tools/shop/ms-np-license.php`, neben `ms-np-sign.php`):
+
+1. WooCommerce-Hooks legen den Schlüssel beim ersten Pack-Kauf an (Nutzer-Meta `_ms_np_license`,
+   bei Gastbestellungen Bestell-Meta) und zeigen ihn in Mail, Bestellung und Konto.
+2. `POST /wp-json/neonplan/v1/catalog` `{key, instance}` bindet die Installation und liefert
+   `{licensee, packs: [{id, name, release, url}]}`; `POST /wp-json/neonplan/v1/pack`
+   `{key, instance, pack}` liefert die signierte Datei. Fehler sind `{code, message}` mit HTTP 4xx.
+3. `release` und `instance` stehen in den Vorlagen `<pack>.canonical.json` (neu erzeugen mit
+   `python tools/fp3dpack.py canonical`); der Shop ersetzt das letzte `"instance":null`.
+
+Signieren von Hand: `python tools/fp3dpack.py sign PACK.json --key … --licensee "Name" --instance <Kennung>`.
+

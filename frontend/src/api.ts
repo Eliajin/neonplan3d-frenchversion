@@ -73,3 +73,46 @@ export async function importPack(hass: HomeAssistant, text: string): Promise<Imp
 export async function removePack(hass: HomeAssistant, packId: string): Promise<void> {
   await hass.callWS({ type: "neonplan3d/packs/remove", pack_id: packId });
 }
+
+/** A bought pack as the shop lists it, with the release installed here (null = not installed). */
+export interface CatalogPack {
+  id: string;
+  name: string;
+  release: number;
+  url: string;
+  installed: number | null;
+}
+
+/** The shop connection: this installation's fingerprint, the key's state and the bought packs. */
+export interface LicenseStatus {
+  instance: string;
+  active: boolean;
+  key_hint: string | null;
+  licensee: string | null;
+  checked_at: number | null;
+  error: string | null;
+  shop_url: string;
+  packs: CatalogPack[];
+}
+
+export function getLicense(hass: HomeAssistant): Promise<LicenseStatus> {
+  return hass.callWS<LicenseStatus>({ type: "neonplan3d/license/get" });
+}
+
+/** Bind this installation to a customer key (errors carry the shop's code, e.g. "invalid_key"). */
+export function activateLicense(hass: HomeAssistant, key: string): Promise<LicenseStatus> {
+  return hass.callWS<LicenseStatus>({ type: "neonplan3d/license/activate", key });
+}
+
+export function removeLicense(hass: HomeAssistant): Promise<LicenseStatus> {
+  return hass.callWS<LicenseStatus>({ type: "neonplan3d/license/remove" });
+}
+
+export function refreshLicense(hass: HomeAssistant): Promise<LicenseStatus> {
+  return hass.callWS<LicenseStatus>({ type: "neonplan3d/license/refresh" });
+}
+
+/** Fetch a bought pack from the shop, signed for this installation (also updates it). */
+export function installPack(hass: HomeAssistant, packId: string): Promise<ImportedPack & { release: number }> {
+  return hass.callWS<ImportedPack & { release: number }>({ type: "neonplan3d/packs/install", pack_id: packId });
+}

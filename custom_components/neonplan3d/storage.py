@@ -25,6 +25,7 @@ from .const import (
     STORAGE_KEY_BUILDING,
     STORAGE_KEY_HISTORY,
     STORAGE_KEY_IMAGES,
+    STORAGE_KEY_LICENSE,
     STORAGE_KEY_PACKS,
     STORAGE_MINOR_VERSION,
     STORAGE_VERSION,
@@ -103,12 +104,15 @@ class FloorplanData:
         """Initialise the stores."""
         self.hass = hass
         self._building_store, self._image_store, self._history_store, self._pack_store = _stores(hass)
+        self._license_store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, STORAGE_KEY_LICENSE)
         self.building: dict[str, Any] = empty_building()
         self.revision = 0
         self._images: dict[str, str] = {}
         self._history: list[dict[str, Any]] = []
         # imported furniture packs (checked payloads, see packs.py)
         self.packs: list[dict[str, Any]] = []
+        # the shop connection (see license.py): key, licensee, catalog of bought packs, last check
+        self.license: dict[str, Any] = {"key": None, "licensee": None, "catalog": [], "checked_at": None, "error": None}
 
     async def async_load(self) -> None:
         """Load both stores and drop images no floor refers to any more."""
@@ -119,6 +123,9 @@ class FloorplanData:
             self.revision = int(stored.get("revision", 0))
         packs = await self._pack_store.async_load()
         self.packs = list((packs or {}).get("packs", []))
+        stored_license = await self._license_store.async_load()
+        if stored_license:
+            self.license = {**self.license, **stored_license}
         history = await self._history_store.async_load()
         self._history = list((history or {}).get("snapshots", []))
         images = await self._image_store.async_load()
@@ -173,6 +180,10 @@ class FloorplanData:
         """Keep an imported pack; a newer file of the same pack replaces the old one."""
         self.packs = [p for p in self.packs if p["id"] != payload["id"]] + [{**payload, "imported_at": time.time()}]
         await self._pack_store.async_save({"packs": self.packs})
+
+    async def async_save_license(self) -> None:
+        """Keep the shop connection."""
+        await self._license_store.async_save(self.license)
 
     async def async_remove_pack(self, pack_id: str) -> bool:
         """Remove a pack (furniture using it stays in the plan as plain boxes)."""

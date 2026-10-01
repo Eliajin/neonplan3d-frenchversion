@@ -9,6 +9,7 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 
@@ -21,6 +22,7 @@ from .const import (
     PANEL_URL_PATH,
     URL_BASE,
 )
+from .license import FIRST_CHECK_DELAY, REFRESH_INTERVAL, async_refresh_quietly
 from .storage import FloorplanData
 from .websocket import async_register_commands
 
@@ -45,6 +47,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data = FloorplanData(hass)
     await data.async_load()
     hass.data[DOMAIN] = data
+
+    # with a shop key, bought packs are checked for updates once a day (never needed for what is installed)
+    async def _check(_now) -> None:
+        await async_refresh_quietly(hass, data)
+
+    entry.async_on_unload(async_track_time_interval(hass, _check, REFRESH_INTERVAL))
+    entry.async_on_unload(async_call_later(hass, FIRST_CHECK_DELAY, _check))
 
     # static paths cannot be unregistered, so they are registered once per run
     if not hass.data.get(_STATIC_REGISTERED):

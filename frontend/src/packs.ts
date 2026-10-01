@@ -66,6 +66,10 @@ export interface FurniturePack {
   publisher: string;
   licensee: string | null;
   description?: string;
+  /** Release number; a newer release of the same id replaces the installed one. */
+  release?: number;
+  /** Fingerprint of the installation the pack is bound to (null = any). */
+  instance?: string | null;
   items: PackItem[];
   imported_at?: number;
 }
