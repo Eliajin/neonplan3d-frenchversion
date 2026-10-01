@@ -426,9 +426,12 @@ export const LAMP_TYPES = new Set<string>([
   "lamp_garden",
 ]);
 
-/** Items that can be lifted off the floor (a wall cabinet, a shelf): everything but lamps hung from the ceiling and the ceiling-mounted pack items. */
+/** Default height of the bottom of a wall light above the floor (metres). */
+export const WALL_LAMP_Y = 1.75;
+
+/** Items that can be lifted off the floor (a wall cabinet, a shelf, a wall light, an LED strip): everything but lamps hung from the ceiling and the ceiling-mounted pack items. */
 export function canLift(f: Pick<Furniture, "type">): boolean {
-  if (["lamp_ceiling", "lamp_downlight", "lamp_spot", "lamp_panel", "lamp_pendant", "led_strip", "stairs", "stairwell", "parking"].includes(f.type)) return false;
+  if (["lamp_ceiling", "lamp_downlight", "lamp_spot", "lamp_panel", "lamp_pendant", "stairs", "stairwell", "parking"].includes(f.type)) return false;
   return packItem(f.type)?.mount !== "ceiling";
 }
 

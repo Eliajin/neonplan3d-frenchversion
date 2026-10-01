@@ -819,7 +819,7 @@ export class Fp3dView3d extends LitElement {
     const st = entity ? hass.states[entity] : undefined;
     const item = packItem(f.type);
     const model = LAMP_MODEL[f.type] ?? item?.light ?? "floor";
-    const base = item
+    const base = item || model === "wall" || model === "strip"
       ? mountBase(floor, f)
       : model === "table"
         ? surfaceHeight(floor, f.x, f.z)
@@ -842,8 +842,8 @@ export class Fp3dView3d extends LitElement {
       floor: f.h + 0.25,
       uplight: f.h + 0.25,
       table: base + f.h + 0.2,
-      wall: 2.1,
-      strip: H - 0.25,
+      wall: base + f.h + 0.2,
+      strip: Math.max(0.3, base - 0.2),
       bollard: base + f.h + 0.25,
       garden: base + f.h + 0.25,
     }[model];

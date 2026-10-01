@@ -44,7 +44,7 @@ import {
 } from "three";
 import type { Building, Floor, Furniture, Room } from "../model.ts";
 import { recolorLamps, SHADE_SENTINEL, shadeFactors } from "./lamp-colors.ts";
-import { centroid, pointInPolygon, openingStyle } from "../model.ts";
+import { centroid, pointInPolygon, openingStyle, WALL_LAMP_Y } from "../model.ts";
 import { buildFloorGeometry, SLAB, stairHoles, type FloorGeometry } from "./build.ts";
 import { OrbitControls, type OrbitView } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
@@ -247,7 +247,6 @@ const CABLE_WIDTH = 0.035;
 const CABLE_HALO = 0.14;
 const LAMP_BODY = 0x2a3a60;
 const LAMP_SHADE = 0x1d2946;
-const WALL_LAMP_Y = 1.75;
 /** Lamps that hang from the ceiling (hidden in the cut view). */
 const HANGING = new Set<LampModel>(["ceiling", "downlight", "spot", "panel", "pendant", "strip"]);
 const FLASH_MS = 450;
@@ -1238,8 +1237,8 @@ export class FloorplanViewer {
         floor: [h - 0.15, "omni"],
         uplight: [h, "up"],
         table: [base + h - 0.1, "omni"],
-        wall: [WALL_LAMP_Y + 0.1, "wall"],
-        strip: [H - 0.05, "ceiling"],
+        wall: [base + 0.1, "wall"],
+        strip: [base + Math.max(0.02, h) - 0.01, "ceiling"],
         bollard: [base + h - 0.08, "ceiling"],
         garden: [base + h, "up"],
       };
@@ -1786,7 +1785,7 @@ export class FloorplanViewer {
       const H = fv.floor.height;
       for (const d of lamps) {
         // hanging lamps (and ceiling cameras) would float above cut walls
-        const hanging = d.lamp ? HANGING.has(d.lamp) : d.model === "camera_ceiling";
+        const hanging = d.lamp === "strip" ? (d.base ?? H) > Math.min(fv.floor.cut_height, H) : d.lamp ? HANGING.has(d.lamp) : d.model === "camera_ceiling";
         if ((!d.lamp && !d.model) || (hanging && this.wallMode === "cut")) continue;
         const start = buf.count;
         const packed = d.pack ? packItem(d.pack) : undefined;
@@ -1947,8 +1946,8 @@ export class FloorplanViewer {
         floor: h - 0.15,
         uplight: h,
         table: base + h - 0.09,
-        wall: WALL_LAMP_Y + h / 2,
-        strip: H - 0.05,
+        wall: base + h / 2,
+        strip: base + Math.max(0.02, h) - 0.01,
         bollard: base + h - 0.08,
         garden: base + h - 0.03,
       }[d.lamp];
@@ -2491,9 +2490,9 @@ export class FloorplanViewer {
     const x = this.grab?.id === f.id ? this.grab.x : f.x;
     const z = this.grab?.id === f.id ? this.grab.z : f.z;
     const H = fv.floor.height;
-    const hanging = ["lamp_ceiling", "lamp_downlight", "lamp_spot", "lamp_panel", "lamp_pendant", "led_strip"].includes(f.type);
+    const hanging = ["lamp_ceiling", "lamp_downlight", "lamp_spot", "lamp_panel", "lamp_pendant"].includes(f.type);
     const h = Math.max(0.1, f.type === "lamp_pendant" ? 0.3 : f.h);
-    const y0 = packItem(f.type)
+    const y0 = packItem(f.type) || f.type === "lamp_wall" || f.type === "led_strip"
       ? mountBase(fv.floor, f)
       : hanging
         ? f.type === "lamp_pendant"
@@ -3380,14 +3379,14 @@ export function pushLampModel(
       break;
     case "wall": {
       // plate on the wall (back at -z) and a glowing shade in front of it
-      const y0 = WALL_LAMP_Y;
+      const y0 = d.base ?? WALL_LAMP_Y;
       box(-w / 2 + 0.03, w / 2 - 0.03, -dd / 2, -dd / 2 + 0.02, y0, y0 + h, LAMP_BODY);
       box(-w / 2, w / 2, -dd / 2 + 0.02, dd / 2, y0 + h * 0.15, y0 + h * 0.85, shadeCol);
       break;
     }
     case "strip": {
-      // cove light: a thin bar just under the ceiling along the wall
-      const y1 = H - 0.04;
+      // a thin bar along the wall: under the ceiling (cove light) or at its mount height
+      const y1 = d.base != null ? d.base + Math.max(0.02, h) : H - 0.04;
       box(-w / 2, w / 2, -dd / 2, dd / 2, y1 - Math.max(0.02, h), y1, shadeCol);
       break;
     }
