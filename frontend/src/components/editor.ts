@@ -8,7 +8,11 @@ import { furnitureSymbol } from "./furniture2d.ts";
 import { closeGaps, suggestedThickness } from "../geometry/gaps.ts";
 import { keepInRoom, snapToWall } from "../geometry/snap.ts";
 import { weatherEntity } from "../weather.ts";
-import { DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS } from "../model.ts";
+import { TOGGLE_KINDS } from "../devices.ts";
+import { storedImageIds } from "../transfer.ts";
+import { DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS,
+  normalizeBuilding,
+} from "../model.ts";
 import { furnishRoom, PACKAGES, type PackageId } from "../packages.ts";
 import { generateWalls, locateOnWalls, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
@@ -62,7 +66,7 @@ import {
 import { controls, tokens } from "../styles.ts";
 import "./entity-picker.ts";
 import type { HassArea, HassFloor, HomeAssistant } from "../types.ts";
-import { activateLicense, getLicense, importPack, installPack, refreshLicense, removeLicense, removePack, type CatalogPack, type LicenseStatus } from "../api.ts";
+import { activateLicense, fetchBackup, getLicense, importPack, installPack, refreshLicense, removeLicense, removePack, restoreBackup, type BackupFile, type CatalogPack, type LicenseStatus } from "../api.ts";
 import { load3d } from "../load3d.ts";
 import type { WallMode } from "../viewer/viewer3d.ts";
 import { furnitureName } from "../furniture-names.ts";
@@ -112,6 +116,8 @@ export class Fp3dEditor extends LitElement {
     _doc: { state: true },
     _doc3d: { state: true },
     _split: { state: true },
+    _splitRatio: { state: true },
+    _backupBusy: { state: true },
     _wall3d: { state: true },
     _sidePinned: { state: true },
     _sideOpen: { state: true },
@@ -167,6 +173,9 @@ export class Fp3dEditor extends LitElement {
   private doc3dTimer: ReturnType<typeof setTimeout> | undefined;
   /** The live 3D pane next to the plan (remembered per browser). */
   private declare _split: boolean;
+  /** Share of the width the plan takes next to the 3D pane (0.2 … 0.8). */
+  private declare _splitRatio: number;
+  private declare _backupBusy: boolean;
   /** Walls in the 3D pane: full height ("auto") or cut at the cut height (shows wall units and shelves). */
   private declare _wall3d: WallMode;
   /** Sidebar beside the 3D pane: pinned open always, or folded to a strip while nothing is selected. */
@@ -256,6 +265,14 @@ export class Fp3dEditor extends LitElement {
       // no storage
     }
     this._split = split;
+    this._splitRatio = 0.55;
+    try {
+      const saved = Number(localStorage.getItem("neonplan3d.editorSplit"));
+      if (saved >= 20 && saved <= 80) this._splitRatio = saved / 100;
+    } catch {
+      /* no storage */
+    }
+    this._backupBusy = false;
     this._wall3d = "cut";
     this._doc3d = this._doc;
     this._sideOpen = false;
@@ -327,6 +344,31 @@ export class Fp3dEditor extends LitElement {
   private queue3d(): void {
     clearTimeout(this.doc3dTimer);
     this.doc3dTimer = setTimeout(() => (this._doc3d = this._doc), 150);
+  }
+
+  /** Dragging the divider between the plan and the 3D pane changes their share of the width. */
+  private onSplitDown(e: PointerEvent): void {
+    const pair = (e.currentTarget as HTMLElement).parentElement!;
+    const handle = e.currentTarget as HTMLElement;
+    handle.setPointerCapture(e.pointerId);
+    const rect = pair.getBoundingClientRect();
+    const move = (ev: PointerEvent) => {
+      this._splitRatio = Math.min(0.8, Math.max(0.2, (ev.clientX - rect.left) / rect.width));
+    };
+    const up = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
+      try {
+        localStorage.setItem("neonplan3d.editorSplit", String(Math.round(this._splitRatio * 100)));
+      } catch {
+        /* no storage */
+      }
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
+    e.preventDefault();
   }
 
   private toggleSplit(): void {
@@ -1729,7 +1771,7 @@ export class Fp3dEditor extends LitElement {
             </div>
             ${walls?.warnings.length ? html`<span class="fp3d-warn">${this.t("overlap_warning")}</span>` : nothing}
           </div>
-          <div class="fp3d-stage-pair ${this._split ? "fp3d-split" : ""}">
+          <div class="fp3d-stage-pair ${this._split ? "fp3d-split" : ""}" style=${this._split && !this.narrow ? `--fp3d-split:${Math.round(this._splitRatio * 100)}%` : ""}>
           <div class="fp3d-canvas-wrap">
             <svg
               class="fp3d-plan fp3d-tool-${this._tool}"
@@ -1752,6 +1794,9 @@ export class Fp3dEditor extends LitElement {
             </svg>
             <p class="fp3d-hint">${!floor ? this.t("hint_empty") : this.t(`hint_${this._tool}` as I18nKey)}</p>
           </div>
+          ${this._split && !this.narrow
+            ? html`<div class="fp3d-split-handle" title=${this.t("split_handle_hint")} @pointerdown=${this.onSplitDown}></div>`
+            : nothing}
           ${this._split ? this.render3d() : nothing}
           </div>
         </div>
@@ -2845,6 +2890,12 @@ export class Fp3dEditor extends LitElement {
         )}
         ${lamp ? nothing : this.entitySelect(this.t("furn_power"), f.power ?? null, autoPick("power"), power, (v) => this.updateFurniture({ power: v }))}
       </div>
+      ${!lamp || f.entity
+        ? html`<label class="fp3d-check fp3d-wide" title=${this.t("device_confirm_hint")}
+            ><input type="checkbox" .checked=${!!f.confirm} ?disabled=${!this.isAdmin} @change=${(ev: Event) => this.updateFurniture({ confirm: (ev.target as HTMLInputElement).checked })} />
+            ${this.t("device_confirm")}</label
+          >`
+        : nothing}
       ${f.type === "fridge_smart"
         ? html`<div class="fp3d-form fp3d-links">
               ${this.entitySelect(this.t("furn_door_left"), f.door_left ?? null, undefined, doorSensors, (v) => this.updateFurniture({ door_left: v }))}
@@ -3406,6 +3457,12 @@ export class Fp3dEditor extends LitElement {
             ${this.num(this.t("camera_tilt"), pl.tilt ?? (pl.mount === "ceiling" ? 65 : 20), (v) => this.updateDevice({ tilt: Math.min(90, Math.max(0, v)) }), 5, 0)}
             <p class="fp3d-sub fp3d-wide">${this.t("camera_aim_hint")}</p>`
           : nothing}
+        ${kind && TOGGLE_KINDS.has(kind)
+          ? html`<label class="fp3d-check fp3d-wide" title=${this.t("device_confirm_hint")}
+              ><input type="checkbox" .checked=${!!pl.confirm} ?disabled=${!admin} @change=${(ev: Event) => this.updateDevice({ confirm: (ev.target as HTMLInputElement).checked })} />
+              ${this.t("device_confirm")}</label
+            >`
+          : nothing}
       </div>
       ${admin
         ? html`<div class="fp3d-actions">
@@ -3562,6 +3619,73 @@ export class Fp3dEditor extends LitElement {
     await this.loadHistory();
   }
 
+  /** Everything in one file: the plan, every stored picture and the packs (with their signatures). */
+  private async exportBackup(): Promise<void> {
+    if (!this.hass) return;
+    this._backupBusy = true;
+    try {
+      const base = await fetchBackup(this.hass);
+      const images: Record<string, string> = {};
+      for (const id of storedImageIds(base.building)) {
+        try {
+          images[id] = await fetchImage(this.hass, id);
+        } catch {
+          /* a missing picture is left out */
+        }
+      }
+      const day = new Date().toISOString().slice(0, 10);
+      download(`neonplan3d-${this.t("export_name_full")}-${day}.json`, JSON.stringify({ ...base, exported_at: new Date().toISOString(), images }));
+    } catch (err) {
+      alert(this.t("backup_import_error", { error: String((err as { message?: string })?.message ?? err) }));
+    } finally {
+      this._backupBusy = false;
+    }
+  }
+
+  private async importBackup(e: Event): Promise<void> {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file || !this.hass) return;
+    let data: BackupFile;
+    try {
+      data = JSON.parse(await file.text()) as BackupFile;
+    } catch {
+      alert(this.t("import_error_not_json"));
+      return;
+    }
+    if (data?.format !== "neonplan3d-backup" || !data.building) {
+      alert(this.t("backup_full_not_backup"));
+      return;
+    }
+    if (!confirm(this.t("backup_full_confirm"))) return;
+    this._backupBusy = true;
+    try {
+      const res = await restoreBackup(this.hass, data.building, data.packs ?? []);
+      let pictures = 0;
+      for (const [id, picture] of Object.entries(data.images ?? {})) {
+        try {
+          await storeImage(this.hass, id, picture);
+          pictures++;
+        } catch {
+          /* an unreadable picture is skipped */
+        }
+      }
+      this.setDoc(normalizeBuilding(res.building));
+      this._floorId = res.building.floors[0]?.id ?? null;
+      this.selectItem("room", null);
+      this.fit();
+      this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
+      const skipped = res.skipped.length ? ` ${this.t("backup_full_skipped", { packs: res.skipped.map((s) => s.id).join(", ") })}` : "";
+      this._notice = this.t("backup_full_restored", { packs: res.packs, pictures }) + skipped;
+    } catch (err) {
+      const { code, message } = (err ?? {}) as { code?: string; message?: string };
+      alert(this.t("backup_import_error", { error: message ?? code ?? String(err) }));
+    } finally {
+      this._backupBusy = false;
+    }
+  }
+
   private exportPlan(shareable: boolean): void {
     const day = new Date().toISOString().slice(0, 10);
     download(`neonplan3d-${this.t(shareable ? "export_name_template" : "export_name_backup")}-${day}.json`, JSON.stringify(exportFile(this._doc, shareable), null, 2));
@@ -3624,6 +3748,14 @@ export class Fp3dEditor extends LitElement {
         /></label>
       </div>
       <p class="fp3d-sub">${this.t("backup_hint")}</p>
+      <h4 class="fp3d-lib-head">${this.t("backup_full")}</h4>
+      <div class="fp3d-actions">
+        <button class="fp3d-btn" ?disabled=${this._backupBusy} @click=${() => this.exportBackup()}>${this._backupBusy ? "…" : this.t("backup_full_export")}</button>
+        <label class="fp3d-btn fp3d-upload"
+          >${this.t("backup_full_import")}<input type="file" accept="application/json,.json" @change=${this.importBackup}
+        /></label>
+      </div>
+      <p class="fp3d-sub">${this.t("backup_full_hint")}</p>
     </details>`;
   }
 
@@ -3854,13 +3986,25 @@ export class Fp3dEditor extends LitElement {
         min-width: 0;
       }
       .fp3d-stage-pair > .fp3d-canvas-wrap {
-        flex: 1 1 55%;
+        flex: 1 1 var(--fp3d-split, 55%);
         min-width: 0;
+      }
+      .fp3d-split > .fp3d-canvas-wrap {
+        flex: 0 0 var(--fp3d-split, 55%);
+      }
+      .fp3d-split-handle {
+        flex: 0 0 8px;
+        cursor: col-resize;
+        background: var(--fp3d-line);
+        touch-action: none;
+      }
+      .fp3d-split-handle:hover {
+        background: var(--fp3d-accent);
       }
       .fp3d-editor-3d {
         position: relative;
-        flex: 1 1 45%;
-        min-width: 280px;
+        flex: 1 1 0;
+        min-width: 240px;
         min-height: 0;
         border-left: 1px solid var(--fp3d-line);
         container-type: size;
@@ -3899,6 +4043,9 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-narrow .fp3d-stage-pair.fp3d-split {
         flex-direction: column;
+      }
+      .fp3d-narrow .fp3d-split > .fp3d-canvas-wrap {
+        flex: 1 1 auto;
       }
       .fp3d-narrow .fp3d-editor-3d {
         flex: 0 0 42%;

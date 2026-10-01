@@ -1,5 +1,6 @@
 // Lovelace card (loaded automatically by the integration, no resource needed).
 
+import { confirmEntities } from "./devices.ts";
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
 import { BuildingController } from "./building-controller.ts";
 import "./components/room-panel.ts";
@@ -233,6 +234,7 @@ export class Floorplan3dCard extends LitElement {
               .hass=${this.hass}
               .room=${b.floors.flatMap((f) => f.rooms).find((r) => r.id === this._roomId) ?? null}
               .floor=${b.floors.find((f) => f.rooms.some((r) => r.id === this._roomId)) ?? null}
+              .confirmEntities=${confirmEntities(this.hass, b.floors)}
               @close=${() => (this._roomId = null)}
             ></fp3d-room-panel>`
           : nothing}

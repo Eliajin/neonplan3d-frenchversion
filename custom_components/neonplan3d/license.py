@@ -21,7 +21,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import instance_id
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .packs import PackError, fingerprint, verify_pack
+from .packs import PackError, fingerprint, signature_of, verify_pack
 from .storage import FloorplanData
 
 _LOGGER = logging.getLogger(__name__)
@@ -161,7 +161,7 @@ async def async_install(hass: HomeAssistant, data: FloorplanData, pack_id: str) 
         payload = verify_pack(text, instance=instance)
     except PackError as err:
         raise LicenseError(err.code, err.detail) from err
-    await data.async_add_pack(payload)
+    await data.async_add_pack(payload, signature_of(text))
     return {
         "id": payload["id"],
         "name": payload["name"],

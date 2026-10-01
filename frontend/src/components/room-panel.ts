@@ -44,6 +44,7 @@ export class Fp3dRoomPanel extends LitElement {
     hass: { attribute: false },
     room: { attribute: false },
     floor: { attribute: false },
+    confirmEntities: { attribute: false },
     _showAll: { state: true },
     _tick: { state: true },
   };
@@ -52,6 +53,8 @@ export class Fp3dRoomPanel extends LitElement {
   declare room: Room | null;
   /** Floor of the room: the panel shows what the plan shows in the room. */
   declare floor: Floor | null;
+  /** Entities that ask before they are switched. */
+  declare confirmEntities: Set<string> | null;
   /** Show the other devices of the area as well (their main entities). */
   private declare _showAll: boolean;
   /** Bumped every few seconds while the panel is open, so camera snapshots refresh. */
@@ -102,13 +105,17 @@ export class Fp3dRoomPanel extends LitElement {
   }
 
   private toggle(st: HassEntity, on: boolean, onToggle: () => void) {
+    const guarded = () => {
+      if (this.confirmEntities?.has(st.entity_id) && !confirm(this.t("confirm_switch", { name: this.name(st.entity_id) }))) return;
+      onToggle();
+    };
     return html`<button
       class="fp3d-switch"
       role="switch"
       aria-checked=${on ? "true" : "false"}
       aria-label=${this.name(st.entity_id)}
       ?disabled=${isUnavailable(st)}
-      @click=${onToggle}
+      @click=${guarded}
     ></button>`;
   }
 

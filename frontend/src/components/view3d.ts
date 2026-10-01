@@ -14,7 +14,7 @@ import {
   openingState,
   TOGGLE_KINDS,
   type FurnitureLinks,
-  type OpeningEntities, fridgeDoors, hasScreen, pictureRuleMatches,
+  type OpeningEntities, confirmEntities, fridgeDoors, hasScreen, pictureRuleMatches,
 } from "../devices.ts";
 import { alertColor, alertEntities, alertSources, alertText, findAlerts, type Alert, type AlertSources } from "../alerts.ts";
 import { iconPath, iconSvg } from "../icons.ts";
@@ -119,6 +119,8 @@ export class Fp3dView3d extends LitElement {
   private declare _flash: boolean;
   private flashTimer: ReturnType<typeof setTimeout> | undefined;
   private cloud = 0;
+  /** Entities that ask before a tap switches them. */
+  private confirmSet = new Set<string>();
   /** History rows of the trail's sensors (fetched while the trail is shown, again every minute). */
   private trailRows: Record<string, HistoryRow[]> = {};
   private trailTimer: ReturnType<typeof setInterval> | undefined;
@@ -441,6 +443,7 @@ export class Fp3dView3d extends LitElement {
     const summary = energySummary(hass, b, consumers);
     // a placed power sensor shows its value as state text already, so only devices get a watt badge
     const byDevice = new Map(consumers.filter((c) => c.id !== c.powerEntity).map((c) => [c.id, c.power]));
+    this.confirmSet = confirmEntities(hass, b.floors);
     const trail = this.trail ? this.trailNow(hass, b) : [];
     v.setDevices([
       ...[...deviceMarkers, ...furniture.markers].map((m) => {
@@ -558,7 +561,8 @@ export class Fp3dView3d extends LitElement {
       const e = this.furnitureLinks.get(f.id)?.entity;
       if (e && isLamp(f.type) && pointInPolygon([f.x, f.z], room.points)) ids.add(e);
     }
-    const lights = [...ids];
+    // devices that ask before switching stay out of the all-at-once toggle
+    const lights = [...ids].filter((id) => !this.confirmSet.has(id));
     if (!lights.length) return;
     const anyOn = lights.some((id) => hass.states[id]?.state === "on");
     void hass.callService("homeassistant", anyOn ? "turn_off" : "turn_on", { entity_id: lights });
@@ -1137,6 +1141,7 @@ export class Fp3dView3d extends LitElement {
         ?low=${this._low}
         .hass=${this.hass}
         .entity=${m.entity}
+        ?confirmSwitch=${this.confirmSet.has(m.entity)}
         @close=${() => (this._menu = null)}
         @camera-look=${(e: CustomEvent<{ entity: string }>) => this.lookThrough(e.detail.entity)}
       ></fp3d-quick-menu>`;
@@ -1150,8 +1155,10 @@ export class Fp3dView3d extends LitElement {
       this._menu = { entity: entityId, x, y };
       return;
     }
-    if (kind && TOGGLE_KINDS.has(kind)) void toggleEntity(this.hass, entityId);
-    else openMoreInfo(this, entityId);
+    if (kind && TOGGLE_KINDS.has(kind)) {
+      if (this.confirmSet.has(entityId) && !confirm(translate(this.hass, "confirm_switch", { name: entityName(this.hass, entityId) }))) return;
+      void toggleEntity(this.hass, entityId);
+    } else openMoreInfo(this, entityId);
   }
 
   resetView(): void {

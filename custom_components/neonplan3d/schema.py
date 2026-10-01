@@ -108,6 +108,8 @@ FURNITURE_SCHEMA = vol.Schema(
         # smart fridge: door sensors of the left and the right door
         vol.Optional("door_left", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Optional("door_right", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        # ask before switching the linked entity
+        vol.Optional("confirm", default=False): bool,
         # parking spots: the vehicle shown (a pack item type) while the entity reports a car, its size
         # factor, and a sensor naming the kind of vehicle with a state -> vehicle mapping
         # height of the bottom edge above the floor (None = default: the floor, a pack item's mount)
@@ -137,6 +139,8 @@ PLACEMENT_SCHEMA = vol.Schema(
         vol.Optional("fov", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=10, max=360))),
         vol.Optional("reach", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.5, max=50))),
         vol.Optional("tilt", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=90))),
+        # ask before switching this device from the 3D view, the quick menu or the room panel
+        vol.Optional("confirm", default=False): bool,
     },
     extra=vol.ALLOW_EXTRA,
 )

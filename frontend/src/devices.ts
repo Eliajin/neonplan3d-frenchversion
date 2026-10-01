@@ -528,6 +528,20 @@ export function hasScreen(type: string): boolean {
   return isMediaFurniture(type) || type === "desk" || type === "fridge_smart";
 }
 
+/** Entities that ask before they are switched: placed devices and furniture links marked "confirm". */
+export function confirmEntities(hass: HomeAssistant, floors: readonly Floor[]): Set<string> {
+  const out = new Set<string>();
+  const links = furnitureEntities(hass, floors);
+  for (const floor of floors) {
+    for (const p of floor.placements) if (p.confirm) out.add(p.entity_id);
+    for (const f of floor.furniture) {
+      const e = f.confirm ? links.get(f.id)?.entity : null;
+      if (e && e !== "none") out.add(e);
+    }
+  }
+  return out;
+}
+
 /** Smart fridges: which of their doors stand open now (a door sensor reporting "on" or "open"). */
 export function fridgeDoors(hass: HomeAssistant, floors: readonly Floor[]): Map<string, { left: boolean; right: boolean }> {
   const open = (id: EntityRef | undefined) => {

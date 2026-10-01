@@ -14,7 +14,7 @@ import type { HeatMode } from "./heatmap.ts";
 import { THEMES, type Theme } from "./themes.ts";
 import { keepInRoom, snapToWall } from "./geometry/snap.ts";
 import { furnitureName } from "./furniture-names.ts";
-import { defaultHeight, entityName, kindOf } from "./devices.ts";
+import { confirmEntities, defaultHeight, entityName, kindOf } from "./devices.ts";
 import { canLift, type LampMount } from "./model.ts";
 import { mountBase } from "./packs.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
@@ -576,6 +576,7 @@ export class Floorplan3dPanel extends LitElement {
               .hass=${this.hass}
               .room=${b.floors.flatMap((f) => f.rooms).find((r) => r.id === this._roomId) ?? null}
               .floor=${b.floors.find((f) => f.rooms.some((r) => r.id === this._roomId)) ?? null}
+              .confirmEntities=${confirmEntities(this.hass, b.floors)}
               @close=${() => (this._roomId = null)}
             ></fp3d-room-panel>`
           : nothing}

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+import json
+import time
 from typing import Any
 
 from homeassistant.components import websocket_api
@@ -13,7 +15,7 @@ import voluptuous as vol
 
 from . import license as lic
 from .const import DOMAIN, SIGNAL_BUILDING_UPDATED
-from .packs import MAX_PACK_SIZE, PackError, verify_pack
+from .packs import MAX_PACK_SIZE, PackError, signature_of, verify_pack
 from .schema import BUILDING_SCHEMA, IMAGE_DATA
 from .storage import FloorplanData, complete
 
@@ -41,6 +43,8 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_license_activate,
         ws_license_remove,
         ws_license_refresh,
+        ws_backup_export,
+        ws_backup_import,
     ):
         websocket_api.async_register_command(hass, command)
 
@@ -209,7 +213,7 @@ async def ws_packs_import(hass: HomeAssistant, connection: websocket_api.ActiveC
     except PackError as err:
         connection.send_error(msg["id"], err.code, err.detail or err.code)
         return
-    await data.async_add_pack(payload)
+    await data.async_add_pack(payload, signature_of(msg["pack"]))
     connection.send_result(
         msg["id"],
         {
@@ -307,3 +311,71 @@ async def ws_packs_install(
 ) -> None:
     """Fetch a bought pack from the shop, signed for this installation, and keep it."""
     await _license_call(hass, connection, msg, lambda data: lic.async_install(hass, data, msg["pack_id"]))
+
+
+# ---------------------------------------------------------------------------- backup
+
+BACKUP_FORMAT = "neonplan3d-backup"
+
+
+@websocket_api.websocket_command({vol.Required("type"): "neonplan3d/backup/export"})
+@websocket_api.require_admin
+@callback
+def ws_backup_export(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """The plan and the packs for a backup file (the frontend adds the images one by one)."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    connection.send_result(
+        msg["id"], {"format": BACKUP_FORMAT, "version": 1, "building": data.building, "packs": data.packs}
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "neonplan3d/backup/import",
+        vol.Required("building"): dict,
+        vol.Optional("packs", default=[]): [dict],
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_backup_import(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Replace the plan and the packs from a backup. Packs are checked again: only ones whose
+    signature verifies (and that are not bound to another installation) come back; the rest are
+    reported as skipped. The state before becomes a restore point."""
+    if (data := _data(hass, connection, msg)) is None:
+        return
+    try:
+        building = BUILDING_SCHEMA(msg["building"])
+    except vol.Invalid as err:
+        connection.send_error(msg["id"], "invalid_format", str(err))
+        return
+    instance = await lic.async_instance_fingerprint(hass)
+    packs: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
+    for entry in msg["packs"]:
+        signature = entry.get("signature")
+        payload = {k: v for k, v in entry.items() if k not in ("signature", "imported_at")}
+        name = str(payload.get("id") or "?")
+        if not isinstance(signature, dict):
+            skipped.append({"id": name, "reason": "unsigned"})
+            continue
+        try:
+            clean = verify_pack(json.dumps({"payload": payload, "signature": signature}), instance=instance)
+        except PackError as err:
+            skipped.append({"id": name, "reason": err.code})
+            continue
+        kept_signature = {"key": signature["key"], "sig": signature["sig"]}
+        packs.append({**clean, "signature": kept_signature, "imported_at": time.time()})
+    revision = await data.async_restore(complete(building), packs)
+    connection.send_result(
+        msg["id"],
+        {
+            "revision": revision,
+            "building": data.building,
+            "packs": len(packs),
+            "skipped": skipped,
+        },
+    )

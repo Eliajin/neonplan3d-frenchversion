@@ -47,6 +47,16 @@ export function parseExport(text: string): Building {
   return normalizeBuilding(b);
 }
 
+/** Ids of the stored pictures a plan uses: floor backgrounds and screen pictures (not URLs or cameras). */
+export function storedImageIds(b: Building): string[] {
+  const ids = new Set<string>();
+  for (const f of b.floors) {
+    if (f.background?.image_id) ids.add(f.background.image_id);
+    for (const m of f.furniture) for (const r of m.pictures ?? []) if (r.image && !/^https?:\/\//.test(r.image) && !r.image.startsWith("camera:")) ids.add(r.image);
+  }
+  return [...ids];
+}
+
 /** Starts a download of a text file in the browser. */
 export function download(name: string, text: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));

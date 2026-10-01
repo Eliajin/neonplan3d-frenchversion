@@ -85,6 +85,8 @@ export interface Furniture {
   /** Smart fridge: door sensors of the left (freezer) and right (fridge) door; the doors open in 3D while they report open. */
   door_left?: EntityRef;
   door_right?: EntityRef;
+  /** Ask before switching the linked entity. */
+  confirm?: boolean;
   /** Height of the bottom edge above the floor (null = default: the floor, a pack item's mount, a surface below). */
   mount_y?: number | null;
   /** Screens: pictures shown while an entity is in a state (first match wins; "*" = any state). */
@@ -117,6 +119,8 @@ export interface Placement {
   reach?: number | null;
   /** Cameras: how far it looks down (degrees below the horizon; null = 20° on a wall, 65° as a dome). */
   tilt?: number | null;
+  /** Ask before switching this device (3D tap, quick menu, room panel). */
+  confirm?: boolean;
 }
 
 export interface Background {

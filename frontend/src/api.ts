@@ -112,6 +112,29 @@ export function refreshLicense(hass: HomeAssistant): Promise<LicenseStatus> {
   return hass.callWS<LicenseStatus>({ type: "neonplan3d/license/refresh" });
 }
 
+/** A full backup file: the plan, the packs with their signatures and every stored picture. */
+export interface BackupFile {
+  format: "neonplan3d-backup";
+  version: 1;
+  exported_at?: string;
+  building: Building;
+  packs?: FurniturePack[];
+  images?: Record<string, string>;
+}
+
+export function fetchBackup(hass: HomeAssistant): Promise<Pick<BackupFile, "format" | "version" | "building" | "packs">> {
+  return hass.callWS({ type: "neonplan3d/backup/export" });
+}
+
+/** Replace plan and packs from a backup (pictures follow one by one); packs that fail their check are skipped. */
+export function restoreBackup(
+  hass: HomeAssistant,
+  building: Building,
+  packs: FurniturePack[],
+): Promise<{ revision: number; building: Building; packs: number; skipped: { id: string; reason: string }[] }> {
+  return hass.callWS({ type: "neonplan3d/backup/import", building, packs });
+}
+
 /** Fetch a bought pack from the shop, signed for this installation (also updates it). */
 export function installPack(hass: HomeAssistant, packId: string): Promise<ImportedPack & { release: number }> {
   return hass.callWS<ImportedPack & { release: number }>({ type: "neonplan3d/packs/install", pack_id: packId });

@@ -38,12 +38,15 @@ export class Fp3dQuickMenu extends LitElement {
   static properties = {
     hass: { attribute: false },
     entity: { attribute: false },
+    confirmSwitch: { type: Boolean },
     low: { type: Boolean, reflect: true },
     _tick: { state: true },
   };
 
   declare hass: HomeAssistant;
   declare entity: string;
+  /** Ask before the power button switches. */
+  declare confirmSwitch: boolean;
   /** Tablet level: no blur behind the menu. */
   declare low: boolean;
   /** Bumped every few seconds while a camera menu is open, so its snapshot refreshes. */
@@ -77,6 +80,11 @@ export class Fp3dQuickMenu extends LitElement {
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
     return translate(this.hass, key, vars);
+  }
+
+  /** Ask before switching when the device is marked so (power and lock buttons; sliders and colours never ask). */
+  private ask(): boolean {
+    return !this.confirmSwitch || confirm(this.t("confirm_switch", { name: entityName(this.hass, this.entity) }));
   }
 
   private call(domain: string, service: string, data: Record<string, unknown> = {}): void {
@@ -116,7 +124,7 @@ export class Fp3dQuickMenu extends LitElement {
         : [];
     return html`<div class="qm-ring ${swatches.length ? "" : "qm-ring-small"}">
         ${this.ring(swatches)}
-        <button class="qm-power ${on ? "qm-on" : ""}" aria-pressed=${on} @click=${() => this.call("light", "toggle")}>
+        <button class="qm-power ${on ? "qm-on" : ""}" aria-pressed=${on} @click=${() => this.ask() && this.call("light", "toggle")}>
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v8M6.3 6.8a8 8 0 1 0 11.4 0" /></svg>
           <b>${on ? `${pct} %` : this.t("qm_off")}</b>
         </button>
@@ -183,7 +191,7 @@ export class Fp3dQuickMenu extends LitElement {
       <button
         class="qm-power ${on ? "qm-on" : ""}"
         aria-pressed=${on}
-        @click=${() => (domain === "lock" ? this.call("lock", on ? "lock" : "unlock") : this.call("homeassistant", "toggle"))}
+        @click=${() => this.ask() && (domain === "lock" ? this.call("lock", on ? "lock" : "unlock") : this.call("homeassistant", "toggle"))}
       >
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v8M6.3 6.8a8 8 0 1 0 11.4 0" /></svg>
         <b>${stateText(this.hass, st)}</b>

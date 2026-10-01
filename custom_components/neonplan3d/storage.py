@@ -176,10 +176,26 @@ class FloorplanData:
         """Building of a restore point."""
         return next((h["building"] for h in self._history if h["id"] == snapshot_id), None)
 
-    async def async_add_pack(self, payload: dict[str, Any]) -> None:
-        """Keep an imported pack; a newer file of the same pack replaces the old one."""
-        self.packs = [p for p in self.packs if p["id"] != payload["id"]] + [{**payload, "imported_at": time.time()}]
+    async def async_add_pack(self, payload: dict[str, Any], signature: dict[str, str] | None = None) -> None:
+        """Keep an imported pack; a newer file of the same pack replaces the old one. The signature stays
+        with it, so a backup can carry the pack and a restore can check it again."""
+        entry = {**payload, "imported_at": time.time()}
+        if signature:
+            entry["signature"] = signature
+        self.packs = [p for p in self.packs if p["id"] != payload["id"]] + [entry]
         await self._pack_store.async_save({"packs": self.packs})
+
+    @property
+    def images(self) -> dict[str, str]:
+        """All stored images (id -> data URL)."""
+        return dict(self._images)
+
+    async def async_restore(self, building: dict[str, Any], packs: list[dict[str, Any]]) -> int:
+        """Replace the plan and the packs from a backup; the state before becomes a restore point."""
+        await self.async_snapshot()
+        self.packs = packs
+        await self._pack_store.async_save({"packs": self.packs})
+        return await self.async_save_building(building)
 
     async def async_save_license(self) -> None:
         """Keep the shop connection."""

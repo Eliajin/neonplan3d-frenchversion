@@ -170,6 +170,15 @@ def fingerprint(instance_id: str) -> str:
     return hashlib.sha256(f"neonplan3d:{instance_id}".encode()).hexdigest()[:16]
 
 
+def signature_of(text: str) -> dict[str, str] | None:
+    """The signature block of a pack file that verify_pack accepted (kept with the pack for backups)."""
+    try:
+        sig = json.loads(text).get("signature")
+    except (ValueError, AttributeError):
+        return None
+    return {"key": sig["key"], "sig": sig["sig"]} if isinstance(sig, dict) else None
+
+
 def validate_payload(payload: Any) -> dict[str, Any]:
     """Check the content of a pack (without its signature); raises PackError."""
     try:
