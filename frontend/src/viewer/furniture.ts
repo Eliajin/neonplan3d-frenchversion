@@ -45,6 +45,15 @@ class Builder {
     this.tf = tf;
   }
 
+  /** The same buffers with the local coordinates turned by `deg` around (cx, cz): turned parts of pack items. */
+  rotated(cx: number, cz: number, deg: number): Builder {
+    const a = deg * DEG;
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    const tf = this.tf;
+    return new Builder(this.buf, this.lines, (x, z) => tf(cx + (x - cx) * c - (z - cz) * s, cz + (x - cx) * s + (z - cz) * c));
+  }
+
   /** Axis-aligned box in local coordinates; `edges` draws its outline. */
   box(x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, side: number, top = side, edges: Color | null = null): void {
     if (x1 - x0 < 1e-4 || z1 - z0 < 1e-4 || y1 - y0 < 1e-4) return;
@@ -929,16 +938,18 @@ function packModel(b: Builder, item: PackItem, w: number, d: number, h: number, 
     const y1 = base + Math.min(h, (p.y + p.h) * h);
     // "glow" lines are as bright as the wall lines, so a pack item can be drawn like the walls
     const edges = p.edges === "glow" ? EDGE_TOP : p.edges === "faint" ? EDGE_FAINT : p.edges ? EDGE_FURN : null;
+    // a turned part draws through a builder whose coordinates turn around the part's centre
+    const bb = p.rot ? b.rotated(p.x * w, p.z * d, p.rot) : b;
     if (p.shape === "cyl" && (p.axis === "x" || p.axis === "z")) {
-      b.lyingCyl(p.axis, p.x * w, p.z * d, y0, y1, p.axis === "x" ? p.w * w : p.d * d, p.axis === "x" ? p.d * d : p.w * w, side, top, 14, edges);
-    } else if (p.shape === "cyl") b.cyl(p.x * w, p.z * d, (Math.min(p.w * w, p.d * d)) / 2, y0, y1, side, top, 14, edges);
+      bb.lyingCyl(p.axis, p.x * w, p.z * d, y0, y1, p.axis === "x" ? p.w * w : p.d * d, p.axis === "x" ? p.d * d : p.w * w, side, top, 14, edges);
+    } else if (p.shape === "cyl") bb.cyl(p.x * w, p.z * d, (Math.min(p.w * w, p.d * d)) / 2, y0, y1, side, top, 14, edges);
     else if (p.shape === "loft") {
       const tx = p.tx ?? p.x;
       const tz = p.tz ?? p.z;
       const tw = p.tw ?? p.w;
       const td = p.td ?? p.d;
-      b.loft([(p.x - p.w / 2) * w, (p.x + p.w / 2) * w, (p.z - p.d / 2) * d, (p.z + p.d / 2) * d], [(tx - tw / 2) * w, (tx + tw / 2) * w, (tz - td / 2) * d, (tz + td / 2) * d], y0, y1, side, top, edges);
-    } else b.box((p.x - p.w / 2) * w, (p.x + p.w / 2) * w, y0, y1, (p.z - p.d / 2) * d, (p.z + p.d / 2) * d, side, top, edges);
+      bb.loft([(p.x - p.w / 2) * w, (p.x + p.w / 2) * w, (p.z - p.d / 2) * d, (p.z + p.d / 2) * d], [(tx - tw / 2) * w, (tx + tw / 2) * w, (tz - td / 2) * d, (tz + td / 2) * d], y0, y1, side, top, edges);
+    } else bb.box((p.x - p.w / 2) * w, (p.x + p.w / 2) * w, y0, y1, (p.z - p.d / 2) * d, (p.z + p.d / 2) * d, side, top, edges);
   }
 }
 

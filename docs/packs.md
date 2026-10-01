@@ -58,6 +58,9 @@ dessen öffentlicher Schlüssel zusätzlich in `PACK_PUBLIC_KEYS` eingetragen un
   kleinere Wert aus Querausdehnung und `h`). Ein `loft` ist ein Quader, dessen Oberseite ein anderes
   Rechteck ist (`tx`/`tz` Mitte, `tw`/`td` Größe; Standard wie unten) – für schräge Flächen wie
   Motorhauben, Windschutzscheiben oder Lampenschirme.
+  Ein Teil mit `rot` (Grad) ist um seine eigene Mitte um die Hochachse gedreht – für Wendeltreppen
+  oder diagonale Streben; ein schmaler `loft` mit versetzter Oberseite ergibt eine schräge Stange
+  (Handlauf).
 - `color`: `#rrggbb` oder eine Rolle der eingebauten Palette (`body`, `fabric`, `cushion`, `wood`,
   `white`, `metal`, `dark`, `glass`, `plant`, `pot`, `accent`) – Rollen passen zum Look. `top` setzt
   eine eigene Farbe für die Oberseite, `edges` zeichnet leuchtende Kanten (`true`: dezent blau,
@@ -70,6 +73,8 @@ dessen öffentlicher Schlüssel zusätzlich in `PACK_PUBLIC_KEYS` eingetragen un
   Kaffeemaschine auf der Arbeitsplatte), `wall` (Unterkante bei `wall_y` Metern, z. B. Wallbox) oder
   `ceiling` (hängt von der Decke, z. B. Dunstabzug, Pendelleuchten).
 - `surface`: die Oberseite trägt andere Möbel (Tisch, Kücheninsel, Werkbank).
+- `hole`: eine Treppe – reicht sie bis zur Etage darüber, schneidet sie dort die Treppenöffnung in den
+  Boden (wie die eingebaute Treppe); die Stufen steigen von der Vorderkante (+z) nach hinten an.
 - `light`: das Möbel ist eine Leuchte und wird mit einem Licht (oder Schalter) verknüpft. Der Wert sagt,
   wie das Licht den Raum ausleuchtet (`ceiling`, `pendant`, `floor`, `table`, `wall`, `spot`, `garden` …).
   Teile mit `"glow": true` leuchten in Farbe und Helligkeit des Lichts.

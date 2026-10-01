@@ -175,3 +175,16 @@ def test_publisher_key_is_configured() -> None:
     assert len(packs.PACK_PUBLIC_KEYS) >= 1
     for kid, public in packs.PACK_PUBLIC_KEYS.items():
         assert packs.key_id(base64.b64decode(public)) == kid
+
+
+def test_turned_parts_and_stairs_holes_are_accepted() -> None:
+    """A part may turn around its centre (rot) and a stairs item may cut the floor above (hole)."""
+    item = copy.deepcopy(PAYLOAD["items"][0])
+    item["hole"] = True
+    item["parts"][0]["rot"] = 27.5
+    clean = packs.validate_payload({**PAYLOAD, "items": [item]})
+    assert clean["items"][0]["hole"] is True
+    assert clean["items"][0]["parts"][0]["rot"] == 27.5
+    with pytest.raises(packs.PackError):
+        item["parts"][0]["rot"] = 400
+        packs.validate_payload({**PAYLOAD, "items": [item]})

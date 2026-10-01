@@ -70,6 +70,8 @@ PART_SCHEMA = vol.Schema(
         vol.Optional("td"): _SPAN,
         # cylinder axis: upright (default) or lying along x or z (wheels, rollers)
         vol.Optional("axis"): vol.In(["x", "y", "z"]),
+        # turn of the part around its own centre (degrees around the vertical axis): spiral steps, diagonals
+        vol.Optional("rot"): vol.All(vol.Coerce(float), vol.Range(min=-360, max=360)),
     }
 )
 
@@ -104,6 +106,8 @@ ITEM_SCHEMA = vol.Schema(
         vol.Optional("surface", default=False): bool,
         # a vehicle: offered for parking spots
         vol.Optional("vehicle", default=False): bool,
+        # stairs: when it reaches the floor above, it cuts a stairwell opening into that floor
+        vol.Optional("hole", default=False): bool,
         # a lamp: how its light spreads (like the built-in lamp of that kind)
         vol.Optional("light"): vol.In(
             [

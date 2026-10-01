@@ -33,6 +33,8 @@ export interface PackPart {
   td?: number;
   /** Cylinder axis: upright (y, default) or lying along x or z (wheels, pipes, rollers). */
   axis?: "x" | "y" | "z";
+  /** Turn of the part around its own centre (degrees around the vertical axis). */
+  rot?: number;
 }
 
 export type PackSymbol =
@@ -54,6 +56,8 @@ export interface PackItem {
   surface?: boolean;
   /** A vehicle: offered for parking spots. */
   vehicle?: boolean;
+  /** Stairs: cuts a stairwell opening into the floor above when it reaches it. */
+  hole?: boolean;
   /** A lamp: how its light spreads. */
   light?: LampModel;
   parts: PackPart[];
