@@ -137,7 +137,7 @@ export class Fp3dEditor extends LitElement {
     _spots: { state: true },
     _outdoorId: { state: true },
     _wallId: { state: true },
-    _roomWallId: { state: true },
+    _edgeHi: { state: true },
     _floorMenu: { state: true },
     _openingPreset: { state: true },
     _measureLen: { state: true },
@@ -197,7 +197,8 @@ export class Fp3dEditor extends LitElement {
   /** Selected free-standing wall. */
   private declare _wallId: string | null;
   /** Selected room wall (id from generateWalls), to set its height. */
-  private declare _roomWallId: string | null;
+  /** Edge of the selected room highlighted from the wall height list. */
+  private declare _edgeHi: number | null;
   /** The "add floor" menu with the floors of Home Assistant is open. */
   private declare _floorMenu: boolean;
   /** Kind of opening the opening tool places (the last one chosen). */
@@ -251,7 +252,7 @@ export class Fp3dEditor extends LitElement {
     this._spots = null;
     this._outdoorId = null;
     this._wallId = null;
-    this._roomWallId = null;
+    this._edgeHi = null;
     this._floorMenu = false;
     this._openingPreset = "door";
     let split = false;
@@ -849,12 +850,6 @@ export class Fp3dEditor extends LitElement {
     if (wallEndEl && this.isAdmin) {
       const [id, end] = wallEndEl.getAttribute("data-wall-end")!.split(":");
       this.drag = { kind: "wallmove", id, end: end as "a" | "b", start: world, startScreen: local, base: this._doc, moved: false };
-      return;
-    }
-    const roomWallEl = target.closest("[data-room-wall]");
-    if (roomWallEl && this._tool === "select") {
-      this.selectItem("roomwall", roomWallEl.getAttribute("data-room-wall"));
-      this.drag = { kind: "pan", last: local };
       return;
     }
     const freeWallEl = target.closest("[data-free-wall]");
@@ -1547,14 +1542,14 @@ export class Fp3dEditor extends LitElement {
   }
 
   /** Select a room, an opening or a furniture item (only one at a time). */
-  private selectItem(kind: "room" | "opening" | "furniture" | "device" | "outdoor" | "wall" | "roomwall", id: string | null): void {
+  private selectItem(kind: "room" | "opening" | "furniture" | "device" | "outdoor" | "wall", id: string | null): void {
     this._notice = null;
     // a selection made in the plan (or by a tool) opens the folded sidebar
     if (id) this._sideOpen = true;
     this._outdoorId = kind === "outdoor" ? id : null;
     this._wallId = kind === "wall" ? id : null;
-    this._roomWallId = kind === "roomwall" ? id : null;
-    if (kind === "outdoor" || kind === "wall" || kind === "roomwall") this._roomId = null;
+    this._edgeHi = null;
+    if (kind === "outdoor" || kind === "wall") this._roomId = null;
     if (kind !== "room" || id !== this._roomId) this._vertex = null;
     this._roomId = kind === "room" ? id : this._roomId;
     this._openingId = kind === "opening" ? id : null;
@@ -1936,8 +1931,7 @@ export class Fp3dEditor extends LitElement {
               @contextmenu=${(e: Event) => e.preventDefault()}
             >
               ${this.renderBackground(floor)} ${this.renderGrid()} ${this.renderGhost()} ${walls ? this.renderWalls(walls.walls) : nothing}
-              ${floor ? this.renderOutdoor(floor) : nothing} ${floor ? this.renderRooms(floor) : nothing}
-              ${walls && this._tool === "select" ? this.renderRoomWallHits(walls.walls) : nothing} ${floor ? this.renderFurniture(floor) : nothing}
+              ${floor ? this.renderOutdoor(floor) : nothing} ${floor ? this.renderRooms(floor) : nothing} ${floor ? this.renderFurniture(floor) : nothing}
               ${floor ? this.renderFreeWalls(floor) : nothing}
               ${floor && walls ? this.renderOpenings(floor, walls.walls) : nothing} ${floor ? this.renderMeter(floor) : nothing}
               ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
@@ -2005,23 +1999,9 @@ export class Fp3dEditor extends LitElement {
     const H = this.floor?.height ?? 2.5;
     return svg`<g pointer-events="none">${walls.map((w) => {
       const low = w.height !== undefined && w.height < H - 0.01;
-      const cls = `fp3d-wall${w.exterior ? " fp3d-wall-ext" : ""}${low ? " fp3d-wall-low" : ""}${w.id === this._roomWallId ? " fp3d-wall-sel" : ""}`;
+      const cls = `fp3d-wall${w.exterior ? " fp3d-wall-ext" : ""}${low ? " fp3d-wall-low" : ""}`;
       return svg`<polygon class=${cls} points=${w.footprint.map((p) => this.toScreen(p).join(",")).join(" ")} />`;
     })}</g>`;
-  }
-
-  /**
-   * Invisible hit lines along the room walls, drawn above the room areas: the rooms would
-   * otherwise cover interior walls, so a tap on a wall selects it to set its height.
-   */
-  private renderRoomWallHits(walls: Wall[]) {
-    return svg`<g>${walls
-      .filter((w) => !w.free)
-      .map((w) => {
-        const [x0, y0] = this.toScreen(w.a);
-        const [x1, y1] = this.toScreen(w.b);
-        return svg`<line class="fp3d-room-wall-hit" data-room-wall=${w.id} x1=${x0} y1=${y0} x2=${x1} y2=${y1} />`;
-      })}</g>`;
   }
 
   /** Sets the height of one edge of a room, and of every wall piece shared with it. */
@@ -2043,20 +2023,26 @@ export class Fp3dEditor extends LitElement {
     });
   }
 
-  /** Height list per wall of a room in the room form, so heights are easy to find. */
+  /** Height list per wall of a room in the room form (always open); hovering a row lights the wall up. */
   private renderEdgeHeights(room: Room) {
-    const floor = this.floor!;
-    const H = floor.height;
+    const H = this.floor!.height;
     const n = room.points.length;
-    const set = room.wall_heights?.some((h) => h !== null && h !== undefined);
-    return html`<details class="fp3d-points" ?open=${set}>
-      <summary>${this.t("wall_heights")}</summary>
+    return html`<div class="fp3d-edge-box">
+      <h4>${this.t("wall_heights")}</h4>
       ${room.points.map((a, i) => {
         const b = room.points[(i + 1) % n];
         const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
         const h = room.wall_heights?.[i] ?? null;
-        return html`<div class="fp3d-edge-height">
-          <span class="fp3d-muted">${i + 1}–${((i + 1) % n) + 1} · ${formatNumber(this.hass, len, 2)} m</span>
+        const on = () => (this._edgeHi = i);
+        const off = () => (this._edgeHi = null);
+        return html`<div
+          class="fp3d-edge-height${i === this._edgeHi ? " fp3d-edge-on" : ""}${h !== null ? " fp3d-edge-low" : ""}"
+          @mouseenter=${on}
+          @mouseleave=${off}
+          @focusin=${on}
+          @focusout=${off}
+        >
+          <span><b>${this.t("wall_n", { a: i + 1, b: ((i + 1) % n) + 1 })}</b><br /><span class="fp3d-muted">${formatNumber(this.hass, len, 2)} m</span></span>
           ${this.num(this.t("wall_height"), h ?? H, (v) => this.setEdgeHeight(room, i, v >= H - 0.005 ? null : Math.max(0.05, v)), 0.05, 0.05)}
           ${this.isAdmin && h !== null
             ? html`<button class="fp3d-btn" title=${this.t("wall_height_full")} @click=${() => this.setEdgeHeight(room, i, null)}>↥</button>`
@@ -2064,49 +2050,9 @@ export class Fp3dEditor extends LitElement {
         </div>`;
       })}
       <p class="fp3d-sub">${this.t("room_wall_hint")}</p>
-    </details>`;
+    </div>`;
   }
 
-  /** The room wall tapped in the plan (by its generated id), with its edges in the rooms. */
-  private get roomWall(): Wall | undefined {
-    const floor = this.floor;
-    if (!this._roomWallId || !floor) return undefined;
-    return generateWalls(floor.rooms, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior }, floor.walls ?? []).walls.find(
-      (w) => w.id === this._roomWallId,
-    );
-  }
-
-  /** Sets the height of a room wall on every room edge it comes from (null = full height). */
-  private setRoomWallHeight(wall: Wall, height: number | null): void {
-    this.change((_, floor) => {
-      for (const s of wall.sources) {
-        const room = floor.rooms.find((r) => r.id === s.room_id);
-        if (!room) continue;
-        const list = (room.wall_heights ?? []).slice(0, room.points.length);
-        while (list.length < room.points.length) list.push(null);
-        list[s.edge] = height;
-        room.wall_heights = list.every((h) => h === null) ? undefined : list;
-      }
-    });
-  }
-
-  private renderRoomWallForm(w: Wall) {
-    const floor = this.floor!;
-    const admin = this.isAdmin;
-    const length = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]);
-    const names = [...new Set([w.roomLeft, w.roomRight].filter((id): id is string => !!id))].map((id) => floor.rooms.find((r) => r.id === id)?.name ?? id);
-    return html`<section>
-      <h3>${this.t("free_wall")}</h3>
-      <p class="fp3d-sub">${names.join(" · ")} · ${formatNumber(this.hass, length, 2)} m${w.exterior ? ` · ${this.t("wall_exterior_short")}` : ""}</p>
-      <div class="fp3d-form">
-        ${this.num(this.t("wall_height"), w.height ?? floor.height, (v) => this.setRoomWallHeight(w, v >= floor.height - 0.005 ? null : Math.max(0.05, v)), 0.05, 0.05)}
-      </div>
-      ${admin && w.height !== undefined
-        ? html`<div class="fp3d-actions"><button class="fp3d-btn" @click=${() => this.setRoomWallHeight(w, null)}>${this.t("wall_height_full")}</button></div>`
-        : nothing}
-      <p class="fp3d-sub">${this.t("room_wall_hint")}</p>
-    </section>`;
-  }
 
   private renderOutdoor(floor: Floor) {
     return svg`<g>${floor.outdoor.map((a) => {
@@ -2163,12 +2109,23 @@ export class Fp3dEditor extends LitElement {
         const pts = r.points.map((p) => this.toScreen(p).join(",")).join(" ");
         return svg`<polygon data-room=${r.id} class=${r.id === this._roomId ? "fp3d-room fp3d-room-sel" : "fp3d-room"} points=${pts} />`;
       })}</g>
+      ${this.renderEdgeHighlight()}
       <g pointer-events="none">${floor.rooms.map((r) => {
         const [cx, cy] = this.toScreen(centroid(r.points));
         return svg`<text class="fp3d-room-name" x=${cx} y=${cy - 2}>${r.name}</text>
           <text class="fp3d-room-area" x=${cx} y=${cy + 14}>${this.t("area_m2", { a: formatNumber(this.hass, polygonArea(r.points), 1) })}</text>`;
       })}</g>
     `;
+  }
+
+  /** The wall of the selected room whose row in the wall height list is hovered. */
+  private renderEdgeHighlight() {
+    const r = this.room;
+    const i = this._edgeHi;
+    if (!r || i === null || i >= r.points.length) return nothing;
+    const [x1, y1] = this.toScreen(r.points[i]);
+    const [x2, y2] = this.toScreen(r.points[(i + 1) % r.points.length]);
+    return svg`<line class="fp3d-edge-hi" pointer-events="none" x1=${x1} y1=${y1} x2=${x2} y2=${y2} />`;
   }
 
   private renderMeter(floor: Floor) {
@@ -2544,9 +2501,7 @@ export class Fp3dEditor extends LitElement {
                 ? this.renderOutdoorForm(this.outdoorArea)
                 : this.freeWall
                   ? this.renderFreeWallForm(this.freeWall)
-                  : this.roomWall
-                    ? this.renderRoomWallForm(this.roomWall)
-                    : null;
+                  : null;
     if (item) {
       return html`<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("room", this._roomId)}>‹ ${this.t(room ? "back_to_room" : "back_to_floor", { room: room?.name ?? "" })}</button>
         ${item}`;
@@ -2642,8 +2597,6 @@ export class Fp3dEditor extends LitElement {
         ? this.renderMeasureForm()
         : this.freeWall
         ? this.renderFreeWallForm(this.freeWall)
-        : this.roomWall
-        ? this.renderRoomWallForm(this.roomWall)
         : this.outdoorArea
         ? this.renderOutdoorForm(this.outdoorArea)
         : this.opening
@@ -2708,6 +2661,7 @@ export class Fp3dEditor extends LitElement {
             ${this.num(this.t("depth"), b.z1 - b.z0, (v) => this.setRect("d", v), 0.01, 0.05)}`
           : nothing}
       </div>
+      ${this.renderEdgeHeights(room)}
       <details class="fp3d-points" ?open=${!rect}>
         <summary>${this.t("points")} (${room.points.length})</summary>
         ${room.points.map(
@@ -2722,7 +2676,6 @@ export class Fp3dEditor extends LitElement {
           </div>`,
         )}
       </details>
-      ${this.renderEdgeHeights(room)}
       ${admin
         ? html`<div class="fp3d-actions">
             <button class="fp3d-btn fp3d-primary" @click=${() => (this._packages = !this._packages)}>${this.t("pkg_open")}</button>
@@ -4494,30 +4447,49 @@ export class Fp3dEditor extends LitElement {
       .fp3d-free-wall {
         cursor: grab;
       }
-      .fp3d-room-wall-hit {
-        stroke: transparent;
-        stroke-width: 12;
-        cursor: pointer;
-      }
       .fp3d-vertex-no {
         fill: var(--fp3d-accent);
         font-size: 11px;
         font-weight: 700;
         pointer-events: none;
       }
+      .fp3d-edge-box {
+        margin: 12px 0;
+        padding: 10px 12px;
+        border: 1px solid color-mix(in srgb, var(--fp3d-accent) 45%, transparent);
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--fp3d-accent) 6%, transparent);
+      }
+      .fp3d-edge-box h4 {
+        margin: 0 0 4px;
+        color: var(--fp3d-accent);
+        font-size: 13px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
       .fp3d-edge-height {
         display: grid;
         grid-template-columns: 1fr 1fr 40px;
         gap: 6px;
         align-items: end;
-        padding: 4px 0;
+        padding: 4px 6px;
+        margin: 0 -6px;
+        border-radius: 8px;
+      }
+      .fp3d-edge-on {
+        background: color-mix(in srgb, var(--fp3d-accent) 14%, transparent);
+      }
+      .fp3d-edge-low b {
+        color: var(--fp3d-accent);
       }
       .fp3d-wall-low {
         opacity: 0.55;
       }
-      .fp3d-wall-sel {
+      .fp3d-edge-hi {
         stroke: var(--fp3d-accent);
-        stroke-width: 2;
+        stroke-width: 6;
+        stroke-linecap: round;
+        filter: drop-shadow(0 0 6px var(--fp3d-accent));
       }
       .fp3d-free-wall .fp3d-hit {
         stroke: transparent;
