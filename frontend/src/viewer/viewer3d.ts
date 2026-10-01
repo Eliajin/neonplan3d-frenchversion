@@ -321,6 +321,7 @@ interface FloorView {
   /** The same lamp ranges, keyed by furniture id (for moving lamps). */
   lampFurnTris: { id: string; start: number; end: number }[];
   frameTris: { id: string; start: number; end: number }[];
+  glassTris: { id: string; start: number; end: number }[];
   blindTris: { id: string; start: number; end: number }[];
   wallMesh: Mesh;
   screenMesh: Mesh;
@@ -1484,6 +1485,7 @@ export class FloorplanViewer {
         coneTris: [],
         lampFurnTris: [],
         frameTris: [],
+        glassTris: [],
         blindTris: [],
         wallMesh,
         screenMesh,
@@ -2178,6 +2180,7 @@ export class FloorplanViewer {
   private buildOpenings(fv: FloorView): void {
     const parts = buildOpeningParts(fv.geo.openings, fv.openings, Math.min(fv.floor.cut_height, fv.floor.height));
     fv.frameTris = parts.frameTris;
+    fv.glassTris = parts.glassTris;
     fv.blindTris = parts.blindTris;
     for (const [mesh, geo] of [
       [fv.framesMesh, parts.frames],
@@ -2288,7 +2291,7 @@ export class FloorplanViewer {
   private pick(x: number, y: number): { entity: string } | { floorId: string; roomId: string | null } | null {
     const ray = this.rayAt(x, y);
     const floors = this.activeFloors();
-    const meshes = floors.flatMap((f) => [f.lampMesh, f.coneMesh, f.framesMesh, f.blindsMesh, f.wallMesh, f.floorMesh].filter((m) => m.visible));
+    const meshes = floors.flatMap((f) => [f.lampMesh, f.coneMesh, f.framesMesh, f.glassMesh, f.blindsMesh, f.wallMesh, f.floorMesh].filter((m) => m.visible));
     const inRange = (list: { id: string; start: number; end: number }[], tri: number) => list.find((r) => tri >= r.start && tri < r.end)?.id;
     for (const hit of ray.intersectObjects(meshes, false)) {
       if (hit.faceIndex == null) continue;
@@ -2298,8 +2301,9 @@ export class FloorplanViewer {
         // a camera's wedge on the floor is a far bigger target than the camera itself
         const id = inRange(hit.object === fv.lampMesh ? fv.lampTris : fv.coneTris, tri);
         if (id) return { entity: id };
-      } else if (hit.object === fv.framesMesh || hit.object === fv.blindsMesh) {
-        const id = inRange(hit.object === fv.framesMesh ? fv.frameTris : fv.blindTris, tri);
+      } else if (hit.object === fv.framesMesh || hit.object === fv.blindsMesh || hit.object === fv.glassMesh) {
+        // the whole window counts, glass included: a small blind is a poor target
+        const id = inRange(hit.object === fv.framesMesh ? fv.frameTris : hit.object === fv.glassMesh ? fv.glassTris : fv.blindTris, tri);
         const entity = id ? this.pickOpenings.get(id) : undefined;
         if (entity) return { entity };
       } else if (hit.object === fv.wallMesh) {
