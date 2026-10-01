@@ -1936,7 +1936,8 @@ export class Fp3dEditor extends LitElement {
               @contextmenu=${(e: Event) => e.preventDefault()}
             >
               ${this.renderBackground(floor)} ${this.renderGrid()} ${this.renderGhost()} ${walls ? this.renderWalls(walls.walls) : nothing}
-              ${floor ? this.renderOutdoor(floor) : nothing} ${floor ? this.renderRooms(floor) : nothing} ${floor ? this.renderFurniture(floor) : nothing}
+              ${floor ? this.renderOutdoor(floor) : nothing} ${floor ? this.renderRooms(floor) : nothing}
+              ${walls && this._tool === "select" ? this.renderRoomWallHits(walls.walls) : nothing} ${floor ? this.renderFurniture(floor) : nothing}
               ${floor ? this.renderFreeWalls(floor) : nothing}
               ${floor && walls ? this.renderOpenings(floor, walls.walls) : nothing} ${floor ? this.renderMeter(floor) : nothing}
               ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
@@ -2001,14 +2002,69 @@ export class Fp3dEditor extends LitElement {
   }
 
   private renderWalls(walls: Wall[]) {
-    // room walls can be tapped to set their height (free walls have their own hit line)
     const H = this.floor?.height ?? 2.5;
-    const pick = this._tool === "select";
-    return svg`<g>${walls.map((w) => {
+    return svg`<g pointer-events="none">${walls.map((w) => {
       const low = w.height !== undefined && w.height < H - 0.01;
       const cls = `fp3d-wall${w.exterior ? " fp3d-wall-ext" : ""}${low ? " fp3d-wall-low" : ""}${w.id === this._roomWallId ? " fp3d-wall-sel" : ""}`;
-      return svg`<polygon class=${cls} data-room-wall=${pick && !w.free ? w.id : nothing} pointer-events=${pick && !w.free ? "auto" : "none"} points=${w.footprint.map((p) => this.toScreen(p).join(",")).join(" ")} />`;
+      return svg`<polygon class=${cls} points=${w.footprint.map((p) => this.toScreen(p).join(",")).join(" ")} />`;
     })}</g>`;
+  }
+
+  /**
+   * Invisible hit lines along the room walls, drawn above the room areas: the rooms would
+   * otherwise cover interior walls, so a tap on a wall selects it to set its height.
+   */
+  private renderRoomWallHits(walls: Wall[]) {
+    return svg`<g>${walls
+      .filter((w) => !w.free)
+      .map((w) => {
+        const [x0, y0] = this.toScreen(w.a);
+        const [x1, y1] = this.toScreen(w.b);
+        return svg`<line class="fp3d-room-wall-hit" data-room-wall=${w.id} x1=${x0} y1=${y0} x2=${x1} y2=${y1} />`;
+      })}</g>`;
+  }
+
+  /** Sets the height of one edge of a room, and of every wall piece shared with it. */
+  private setEdgeHeight(room: Room, edge: number, height: number | null): void {
+    const floor = this.floor;
+    if (!floor || !this.isAdmin) return;
+    const walls = generateWalls(floor.rooms, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior }, floor.walls ?? []).walls;
+    const sources = walls.filter((w) => w.sources.some((s) => s.room_id === room.id && s.edge === edge)).flatMap((w) => w.sources);
+    if (!sources.some((s) => s.room_id === room.id && s.edge === edge)) sources.push({ room_id: room.id, edge, t0: 0, t1: 0 });
+    this.change((_, f) => {
+      for (const s of sources) {
+        const r = f.rooms.find((x) => x.id === s.room_id);
+        if (!r) continue;
+        const list = (r.wall_heights ?? []).slice(0, r.points.length);
+        while (list.length < r.points.length) list.push(null);
+        list[s.edge] = height;
+        r.wall_heights = list.every((h) => h === null) ? undefined : list;
+      }
+    });
+  }
+
+  /** Height list per wall of a room in the room form, so heights are easy to find. */
+  private renderEdgeHeights(room: Room) {
+    const floor = this.floor!;
+    const H = floor.height;
+    const n = room.points.length;
+    const set = room.wall_heights?.some((h) => h !== null && h !== undefined);
+    return html`<details class="fp3d-points" ?open=${set}>
+      <summary>${this.t("wall_heights")}</summary>
+      ${room.points.map((a, i) => {
+        const b = room.points[(i + 1) % n];
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        const h = room.wall_heights?.[i] ?? null;
+        return html`<div class="fp3d-edge-height">
+          <span class="fp3d-muted">${i + 1}–${((i + 1) % n) + 1} · ${formatNumber(this.hass, len, 2)} m</span>
+          ${this.num(this.t("wall_height"), h ?? H, (v) => this.setEdgeHeight(room, i, v >= H - 0.005 ? null : Math.max(0.05, v)), 0.05, 0.05)}
+          ${this.isAdmin && h !== null
+            ? html`<button class="fp3d-btn" title=${this.t("wall_height_full")} @click=${() => this.setEdgeHeight(room, i, null)}>↥</button>`
+            : nothing}
+        </div>`;
+      })}
+      <p class="fp3d-sub">${this.t("room_wall_hint")}</p>
+    </details>`;
   }
 
   /** The room wall tapped in the plan (by its generated id), with its edges in the rooms. */
@@ -2343,7 +2399,8 @@ export class Fp3dEditor extends LitElement {
     });
     const vertices = pts.map((p, i) => {
       const [x, y] = this.toScreen(p);
-      return svg`<g data-vertex=${i} class=${i === this._vertex ? "fp3d-vertex fp3d-vertex-sel" : "fp3d-vertex"}><circle cx=${x} cy=${y} r="16" class="fp3d-hit" /><circle cx=${x} cy=${y} r="6" /></g>`;
+      return svg`<g data-vertex=${i} class=${i === this._vertex ? "fp3d-vertex fp3d-vertex-sel" : "fp3d-vertex"}><circle cx=${x} cy=${y} r="16" class="fp3d-hit" /><circle cx=${x} cy=${y} r="6" /></g>
+        <text class="fp3d-vertex-no" x=${x + 9} y=${y - 9}>${i + 1}</text>`;
     });
     return svg`<g>${edges}${vertices}</g>`;
   }
@@ -2665,6 +2722,7 @@ export class Fp3dEditor extends LitElement {
           </div>`,
         )}
       </details>
+      ${this.renderEdgeHeights(room)}
       ${admin
         ? html`<div class="fp3d-actions">
             <button class="fp3d-btn fp3d-primary" @click=${() => (this._packages = !this._packages)}>${this.t("pkg_open")}</button>
@@ -4436,8 +4494,23 @@ export class Fp3dEditor extends LitElement {
       .fp3d-free-wall {
         cursor: grab;
       }
-      .fp3d-wall[data-room-wall] {
+      .fp3d-room-wall-hit {
+        stroke: transparent;
+        stroke-width: 12;
         cursor: pointer;
+      }
+      .fp3d-vertex-no {
+        fill: var(--fp3d-accent);
+        font-size: 11px;
+        font-weight: 700;
+        pointer-events: none;
+      }
+      .fp3d-edge-height {
+        display: grid;
+        grid-template-columns: 1fr 1fr 40px;
+        gap: 6px;
+        align-items: end;
+        padding: 4px 0;
       }
       .fp3d-wall-low {
         opacity: 0.55;

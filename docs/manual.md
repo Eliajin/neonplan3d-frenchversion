@@ -149,7 +149,7 @@ Walls are created automatically: every shared edge of two rooms becomes an inter
 
 **Single walls:** The **Wall** tool draws a free-standing wall, e.g. a partition that runs through half a room. **Shift** keeps it straight, **Alt** draws without snapping. Where it meets a room wall, the corner is mitred. When selected, drag the handles to move its ends or the line to move the whole wall. On the right you set **Length**, **Wall thickness** and **Height**. In 3D it behaves like any interior wall.
 
-**Wall height:** Any wall can be lower than the room, e.g. a parapet or a counter. For a single wall you set its **Height** in the form. For room walls tap the wall in the plan with **Select**; its **Height** appears on the right, **Full room height** resets it. If two rooms share the wall, the lower setting applies. Windows and doors in a low wall end at the wall height. Low walls look lighter in the plan.
+**Wall height:** Any wall can be lower than the room, e.g. a parapet or a counter. For a single wall you set its **Height** in the form. For rooms (rectangle and free shape) there are two ways: select the room and open **Wall heights** in the form; it lists every wall by its corners (e.g. "2–3", the numbers are shown at the corners in the plan) and its length, ↥ resets it to full room height. Or tap exactly on the wall line in the plan with **Select**; its **Height** appears on the right, **Full room height** resets it. If two rooms share the wall, the lower setting applies. Windows and doors in a low wall end at the wall height. Low walls look lighter in the plan.
 
 ### 4.5 Settings
 
