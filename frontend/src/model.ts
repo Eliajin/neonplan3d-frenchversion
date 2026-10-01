@@ -160,6 +160,8 @@ export interface BuildingSettings {
   /** Direction of north in the plan, degrees clockwise from "up" (for the sun). */
   north: number;
   roof: RoofSettings;
+  /** The weather entity shown outside the house (null = the first one). */
+  weather_entity?: string | null;
 }
 
 export const OUTDOOR_TYPES = ["lawn", "terrace", "path", "driveway", "pool", "bed", "hedge", "fence"] as const;

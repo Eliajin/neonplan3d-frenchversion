@@ -7,6 +7,7 @@ import { areaEntities, autoPlace, defaultHeight, entityName, furnitureEntities, 
 import { furnitureSymbol } from "./furniture2d.ts";
 import { closeGaps, suggestedThickness } from "../geometry/gaps.ts";
 import { keepInRoom, snapToWall } from "../geometry/snap.ts";
+import { weatherEntity } from "../weather.ts";
 import { furnishRoom, PACKAGES, type PackageId } from "../packages.ts";
 import { generateWalls, locateOnWalls, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
@@ -3647,8 +3648,11 @@ export class Fp3dEditor extends LitElement {
         >
         ${s.roof.type === "gable" ? this.num(this.t("roof_pitch"), s.roof.pitch, (v) => set({ roof: { ...s.roof, pitch: Math.min(60, Math.max(5, v)) } }), 1, 5) : nothing}
         ${s.roof.type !== "none" ? this.num(this.t("roof_overhang"), s.roof.overhang, (v) => set({ roof: { ...s.roof, overhang: Math.min(2, Math.max(0, v)) } }), 0.05, 0) : nothing}
+        ${this.hass
+          ? this.entitySelect(this.t("weather_entity"), s.weather_entity ?? null, weatherEntity(this.hass, null), this.entityOptions((id) => id.startsWith("weather.")), (v) => set({ weather_entity: v }))
+          : nothing}
       </div>
-      <p class="fp3d-sub">${this.t("north_hint")}</p>
+      <p class="fp3d-sub">${this.t("north_hint")} ${this.t("weather_entity_hint")}</p>
     </details>`;
   }
 

@@ -199,6 +199,8 @@ SETTINGS_SCHEMA = vol.Schema(
         # direction of north in the plan, degrees clockwise from "up"
         vol.Optional("north", default=0): vol.All(vol.Coerce(float), vol.Range(min=-360, max=360)),
         vol.Optional("roof", default=lambda: {"type": "none", "pitch": 35, "overhang": 0.4}): ROOF_SCHEMA,
+        # the weather entity for the weather outside (None = the first one)
+        vol.Optional("weather_entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
     },
     extra=vol.ALLOW_EXTRA,
 )

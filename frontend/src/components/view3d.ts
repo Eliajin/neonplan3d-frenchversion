@@ -425,7 +425,7 @@ export class Fp3dView3d extends LitElement {
       const warn = this.alertSrc ? alertEntities(this.alertSrc) : [];
       const parking = parkingEntities(b.floors);
       const motion = trailSources(hass, b).map((s) => s.entity);
-      const weather = weatherEntity(hass, this.weatherEntityId);
+      const weather = weatherEntity(hass, this.weatherEntityId ?? b.settings.weather_entity);
       const all = [...placed, ...cameraSensors, ...links, ...power, ...furniture, ...doors, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights, ...heat, ...warn, ...parking, ...motion, weather, "sun.sun"];
       this.watched = [...new Set(all.filter((id): id is string => !!id))];
       force = true;
@@ -505,7 +505,7 @@ export class Fp3dView3d extends LitElement {
     const elevation = typeof sun?.elevation === "number" ? sun.elevation : null;
     v.setSun(elevation !== null && typeof sun?.azimuth === "number" ? { elevation, azimuth: sun.azimuth } : null);
     // the weather outside: clouds darken the sky, rain, snow and fog fall over the plot
-    const weather = this.weather && !this.dimmed ? weatherState(hass, weatherEntity(hass, this.weatherEntityId)) : null;
+    const weather = this.weather && !this.dimmed ? weatherState(hass, weatherEntity(hass, this.weatherEntityId ?? b.settings.weather_entity)) : null;
     this.cloud = weather?.cloud ?? 0;
     this._sky = (elevation === null ? 0 : Math.min(1, Math.max(0, (elevation + 4) / 16))) * (1 - 0.45 * this.cloud);
     v.setWeather(weatherActive(weather) ? { ...weather!, sky: this.skyColor() } : null);
