@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🗳️ Ideas & voting / Ideen & Abstimmung
+    url: https://github.com/Mastershort/neonplan3d/discussions/categories/ideas
+    about: Suggest features and vote with 👍 on what you want most. / Wünsche vorschlagen und mit 👍 abstimmen.
+  - name: 💬 Questions & help / Fragen & Hilfe
+    url: https://github.com/Mastershort/neonplan3d/discussions/categories/q-a
+    about: How do I …? Ask the community. / Wie mache ich …? Frag die Community.
+  - name: 📖 Manual / Anleitung
+    url: https://mastershort.de/neonplan3d/anleitung/
+    about: The full manual in German and English. / Die komplette Anleitung auf Deutsch und Englisch.
+  - name: 🛒 Shop, licence, packs / Shop, Lizenz, Packs
+    url: https://mastershort.de/neonplan3d/
+    about: Questions about purchases and licence keys go to the shop, not here. / Fragen zu Käufen und Lizenzschlüsseln bitte über den Shop.

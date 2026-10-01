@@ -106,6 +106,13 @@ npm run screenshot  # renders preview/index.html (invented demo data) with a loc
 - **Python tests** run in CI with `pytest-homeassistant-custom-component`.
 - **Furniture pack format**: [docs/packs.md](docs/packs.md) (German).
 
+## Ideas, questions and bugs
+
+- **Ideas and voting:** [Discussions → Ideas](https://github.com/Mastershort/neonplan3d/discussions/categories/ideas) – vote with 👍 on what you want most.
+- **Questions:** [Discussions → Q&A](https://github.com/Mastershort/neonplan3d/discussions/categories/q-a).
+- **Bugs:** [open an issue](https://github.com/Mastershort/neonplan3d/issues/new/choose).
+- **What changed:** [CHANGELOG](CHANGELOG.md).
+
 ## Licence
 
 MIT – see [LICENSE](LICENSE). Furniture packs and Pro add-ons sold in the shop are not part of this repository.
