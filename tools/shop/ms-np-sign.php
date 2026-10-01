@@ -76,10 +76,20 @@ function ms_np_sign_download(string $email, string $order_key, int $product_id, 
     $body = '{"payload":' . $signed . ',"signature":{"key":"' . MS_NP_KEY_ID . '","sig":"' . base64_encode($sig) . '"}}';
 
     // count the download like WooCommerce does, then deliver the personalised file
+    // (WooCommerce 11: get_downloads + track_download; the older helpers do not exist any more)
     $data_store = WC_Data_Store::load('customer-download');
-    $downloads = wc_get_customer_download_permissions($order_id, $product_id, $download_id);
-    foreach ($downloads as $permission) {
-        $data_store->update_download_log($permission, $user_id, $email);
+    $permissions = $data_store->get_downloads([
+        'order_id' => $order_id,
+        'product_id' => $product_id,
+        'download_id' => $download_id,
+        'return' => 'objects',
+    ]);
+    $ip = class_exists('WC_Geolocation') ? WC_Geolocation::get_ip_address() : '';
+    foreach ($permissions as $permission) {
+        $permission->track_download($user_id > 0 ? $user_id : null, $ip !== '' ? $ip : null);
+    }
+    while (ob_get_level() > 0) {
+        ob_end_clean();
     }
     nocache_headers();
     header('Content-Type: application/json; charset=utf-8');

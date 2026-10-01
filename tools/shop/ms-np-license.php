@@ -225,6 +225,15 @@ function ms_np_pack_meta(string $pack_key): ?array
     return $meta;
 }
 
+/** A product saved or published: the cached shop pages and pack details are dropped at once. */
+add_action('save_post_product', 'ms_np_flush_caches');
+function ms_np_flush_caches(): void
+{
+    global $wpdb;
+    $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '\_transient\_ms\_np\_url\_%' OR option_name LIKE '\_transient\_timeout\_ms\_np\_url\_%' OR option_name LIKE '\_transient\_ms\_np\_meta\_%' OR option_name LIKE '\_transient\_timeout\_ms\_np\_meta\_%'");
+    wp_cache_flush_group('transient');
+}
+
 /** The shop page of a pack: the product with this _ms_np_key (not the bundle). */
 function ms_np_pack_url(string $pack_key): string
 {

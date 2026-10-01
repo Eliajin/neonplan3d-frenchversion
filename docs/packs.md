@@ -154,5 +154,13 @@ Serverseite (`tools/shop/ms-np-license.php`, neben `ms-np-sign.php`):
 3. `release` und `instance` stehen in den Vorlagen `<pack>.canonical.json` (neu erzeugen mit
    `python tools/fp3dpack.py canonical`); der Shop ersetzt das letzte `"instance":null`.
 
+Nutzt der Shop ein Mail-Template-Plugin, das `woocommerce_email_after_order_table` nicht ausführt
+(zum Beispiel „Email Template Customizer for WooCommerce“), hängt eine kleine Zusatzdatei
+`ms-np-license-mail.php` auf dem Server den Schlüssel über den Filter `woocommerce_mail_callback_params`
+an die fertige Mail an. Sie liegt nur auf dem Server, weil sie zum jeweiligen Shop gehört.
+
+Beim Speichern eines Produkts leert `ms-np-license.php` die zwischengespeicherten Produkt-Links und
+Pack-Angaben, damit der Katalog nach dem Veröffentlichen sofort die richtigen URLs liefert.
+
 Signieren von Hand: `python tools/fp3dpack.py sign PACK.json --key … --licensee "Name" --instance <Kennung>`.
 
