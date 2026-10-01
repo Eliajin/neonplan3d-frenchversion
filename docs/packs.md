@@ -141,7 +141,8 @@ oder wird die Verbindung getrennt, bleibt alles, nur Updates kommen nicht mehr v
 
 Ein Schlüssel ist mit höchstens drei Installationen gleichzeitig verbunden. Kommt eine neue dazu
 (Umzug auf neue Hardware), fällt die älteste heraus. Bis zu fünf neue Verbindungen sind in 365 Tagen
-möglich; darüber antwortet der Shop mit `activation_limit`.
+möglich; darüber antwortet der Shop mit `activation_limit`. Downloads von der Website sind an die zuletzt
+aktivierte Installation gebunden; wer noch nie aktiviert hat, bekommt die Datei nur mit Namen signiert.
 
 Serverseite (`tools/shop/ms-np-license.php`, neben `ms-np-sign.php`):
 
