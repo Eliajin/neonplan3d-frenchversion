@@ -20,7 +20,7 @@ import { mountBase } from "./packs.ts";
 import { hasFeature } from "./features.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
 
-type Mode = "view" | "editor";
+type Mode = "view" | "editor" | "extensions";
 
 /** View preferences belong to the device (a wall tablet wants other settings than a desktop). */
 const prefs = {
@@ -387,6 +387,7 @@ export class Floorplan3dPanel extends LitElement {
             ? html`<div class="fp3d-seg" role="tablist">
                 <button role="tab" aria-pressed=${this._mode === "view"} @click=${() => this.setMode("view")}>${this.t("view")}</button>
                 <button role="tab" aria-pressed=${this._mode === "editor"} @click=${() => this.setMode("editor")}>${this.t("editor")}</button>
+                <button role="tab" class="fp3d-tab-ext" aria-pressed=${this._mode === "extensions"} @click=${() => this.setMode("extensions")}>✦ ${this.t("ext_tab")}</button>
               </div>`
             : nothing}
           <span class="fp3d-grow"></span>
@@ -445,7 +446,13 @@ export class Floorplan3dPanel extends LitElement {
         ${this.renderNotices()}
         ${this.data.error && !b ? html`<p class="fp3d-message">${this.t("load_error")}: ${this.data.error}</p>` : nothing}
         ${!b && !this.data.error ? html`<p class="fp3d-message">${this.t("loading")}</p>` : nothing}
-        ${b ? (this._mode === "editor" && this.isAdmin ? this.renderEditor(b) : this.renderView(b)) : nothing}
+        ${b
+          ? this._mode === "editor" && this.isAdmin
+            ? this.renderEditor(b)
+            : this._mode === "extensions" && this.isAdmin
+              ? this.renderExtensions()
+              : this.renderView(b)
+          : nothing}
       </div>
     `;
   }
@@ -471,6 +478,18 @@ export class Floorplan3dPanel extends LitElement {
     return notices.length ? html`<div class="fp3d-notices">${notices}</div>` : nothing;
   }
 
+  /** The extensions page (shop connection, Pro add-ons, packs); it comes with the editor bundle. */
+  private renderExtensions() {
+    if (!this._editorReady) {
+      loadEditor().then(
+        () => (this._editorReady = true),
+        (err: unknown) => (this.data.error = String(err)),
+      );
+      return html`<div class="fp3d-empty"><p>${this.t("loading")}</p></div>`;
+    }
+    return html`<fp3d-extensions class="fp3d-body" .hass=${this.hass} .packs=${this.data.packs} @packs-changed=${() => void this.data.reloadPacks()}></fp3d-extensions>`;
+  }
+
   private renderEditor(b: Building) {
     if (!this._editorReady) {
       loadEditor().then(
@@ -486,6 +505,7 @@ export class Floorplan3dPanel extends LitElement {
       .narrow=${this.narrow}
       .packs=${this.data.packs}
       @packs-changed=${() => void this.data.reloadPacks()}
+      @open-extensions=${() => this.setMode("extensions")}
       @building-changed=${(e: CustomEvent<{ building: Building }>) => this.data.edit(e.detail.building)}
     ></fp3d-editor>`;
   }
@@ -564,6 +584,7 @@ export class Floorplan3dPanel extends LitElement {
           .quality=${this._quality}
           ?showStats=${this._stats}
           @room-tap=${this.onRoomTap}
+          @open-extensions=${() => this.setMode("extensions")}
           @floor-tap=${(e: CustomEvent<{ floorId: string | null }>) => {
             this._floorId = e.detail.floorId;
             this._roomId = null;

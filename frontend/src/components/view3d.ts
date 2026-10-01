@@ -1127,6 +1127,7 @@ export class Fp3dView3d extends LitElement {
       <span class="fp3d-sub">${translate(this.hass, "pro_locked")}</span>
       <div>
         <a class="fp3d-chip fp3d-chip-on" href=${PRO_URL} target="_blank" rel="noopener">${translate(this.hass, "pro_shop")}</a>
+        <button class="fp3d-chip" @click=${() => ((this._proHint = null), this.fire("open-extensions", null))}>${translate(this.hass, "ext_tab")}</button>
         <button class="fp3d-chip" @click=${() => (this._proHint = null)}>${translate(this.hass, "close")}</button>
       </div>
     </div>`;
