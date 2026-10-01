@@ -1,5 +1,7 @@
 # NeonPlan 3D – Anleitung
 
+🇩🇪 Deutsch · [🇬🇧 English](manual.md)
+
 NeonPlan 3D zeichnet dein Zuhause direkt in Home Assistant und zeigt es als 3D-Modell im Neon-Look. Lichter leuchten in ihrer Farbe, Rollläden fahren, Fenster kippen, Türen schwingen auf, Kameras schauen in den Raum und der Fernseher zeigt, was läuft. Alles läuft lokal in Home Assistant, ohne Cloud und ohne externe Programme, und ist für Wandtablets gebaut.
 
 Diese Anleitung beschreibt jede Funktion der Version 1.0. Die Bilder stammen aus der Demo mit erfundenen Daten.

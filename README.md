@@ -4,7 +4,7 @@
 
 ![The house in the neon 3D view](docs/images/view-house.jpg)
 
-📖 **Full manual (German):** [docs/anleitung.md](docs/anleitung.md) · online at [mastershort.de/neonplan3d](https://mastershort.de/neonplan3d/)
+📖 **Manual:** [English](docs/manual.md) · [Deutsch](docs/anleitung.md) · online at [mastershort.de/neonplan3d](https://mastershort.de/neonplan3d/)
 
 ## What it does
 
