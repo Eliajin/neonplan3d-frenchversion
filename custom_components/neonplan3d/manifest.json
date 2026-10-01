@@ -4,11 +4,11 @@
   "codeowners": ["@Mastershort"],
   "config_flow": true,
   "dependencies": ["frontend", "http", "panel_custom", "websocket_api"],
-  "documentation": "https://github.com/mastershort/neonplan3d",
+  "documentation": "https://mastershort.de/en/neonplan3d/manual/",
   "integration_type": "service",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/mastershort/neonplan3d/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "1.0.0"
+  "version": "1.0.1"
 }

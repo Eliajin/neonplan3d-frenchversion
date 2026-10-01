@@ -13,7 +13,7 @@ import {
   type CatalogPack,
   type LicenseStatus,
 } from "../api.ts";
-import { FEATURES, PRO_URL, unlockedFeatures } from "../features.ts";
+import { FEATURES, manualUrl, shopUrl, unlockedFeatures } from "../features.ts";
 import { translate, type I18nKey } from "../i18n.ts";
 import type { FurniturePack } from "../packs.ts";
 import { controls, tokens } from "../styles.ts";
@@ -64,7 +64,10 @@ export class Extensions extends LitElement {
       <header class="fp3d-ext-head">
         <h2>${this.t("ext_title")}</h2>
         <p class="fp3d-sub">${this.t("ext_intro")}</p>
-        <a class="fp3d-btn fp3d-primary" href=${this._license?.shop_url ?? PRO_URL} target="_blank" rel="noopener">${this.t("ext_shop")}</a>
+        <div class="fp3d-ext-actions">
+          <a class="fp3d-btn fp3d-primary" href=${shopUrl(this.hass?.language)} target="_blank" rel="noopener">${this.t("ext_shop")}</a>
+          <a class="fp3d-btn" href=${manualUrl(this.hass?.language, "extensions")} target="_blank" rel="noopener">📖 ${this.t("manual")}</a>
+        </div>
       </header>
       ${this.renderShop()}
       <section class="fp3d-ext-card">
@@ -74,9 +77,12 @@ export class Extensions extends LitElement {
             (f) => html`<div class="fp3d-ext-feature ${unlocked.has(f) ? "fp3d-ext-on" : ""}">
               <b>${unlocked.has(f) ? "✓" : "🔒"} ${this.t(`pro_name_${f}` as I18nKey)}</b>
               <span class="fp3d-sub">${this.t(`pro_feature_${f}` as I18nKey)}</span>
-              ${unlocked.has(f)
-                ? html`<span class="fp3d-ext-state">${this.t("ext_active")}</span>`
-                : html`<a class="fp3d-ext-link" href=${PRO_URL} target="_blank" rel="noopener">${this.t("ext_get")}</a>`}
+              <span class="fp3d-ext-links">
+                ${unlocked.has(f)
+                  ? html`<span class="fp3d-ext-state">${this.t("ext_active")}</span>`
+                  : html`<a class="fp3d-ext-link" href=${shopUrl(this.hass?.language)} target="_blank" rel="noopener">${this.t("ext_get")}</a>`}
+                <a class="fp3d-ext-link" href=${manualUrl(this.hass?.language, f)} target="_blank" rel="noopener">${this.t("manual_more")}</a>
+              </span>
             </div>`,
           )}
         </div>
@@ -282,6 +288,13 @@ export class Extensions extends LitElement {
       }
       .fp3d-ext-head a {
         text-decoration: none;
+      }
+      .fp3d-ext-actions,
+      .fp3d-ext-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
       }
       .fp3d-ext-head h2 {
         margin: 0;

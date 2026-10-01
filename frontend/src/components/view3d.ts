@@ -29,7 +29,7 @@ import { parkedVehicles, parkingEntities } from "../parking.ts";
 import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
 import { limitEffects, weatherEntity, weatherState } from "../weather.ts";
 import { SHOW_ENERGY, SHOW_PRESENCE } from "../flags.ts";
-import { hasFeature, PRO_URL, type Feature } from "../features.ts";
+import { hasFeature, manualUrl, shopUrl, type Feature } from "../features.ts";
 import { searchIndex, searchItems, type SearchItem } from "../search.ts";
 import { coverPositionable, lightAbilities } from "./quick-menu.ts";
 import "./quick-menu.ts";
@@ -1127,7 +1127,8 @@ export class Fp3dView3d extends LitElement {
       <span>${translate(this.hass, `pro_feature_${this._proHint}` as I18nKey)}</span>
       <span class="fp3d-sub">${translate(this.hass, "pro_locked")}</span>
       <div>
-        <a class="fp3d-chip fp3d-chip-on" href=${PRO_URL} target="_blank" rel="noopener">${translate(this.hass, "pro_shop")}</a>
+        <a class="fp3d-chip fp3d-chip-on" href=${shopUrl(this.hass.language)} target="_blank" rel="noopener">${translate(this.hass, "pro_shop")}</a>
+        <a class="fp3d-chip" href=${manualUrl(this.hass.language, this._proHint)} target="_blank" rel="noopener">${translate(this.hass, "manual_more")}</a>
         <button class="fp3d-chip" @click=${() => ((this._proHint = null), this.fire("open-extensions", null))}>${translate(this.hass, "ext_tab")}</button>
         <button class="fp3d-chip" @click=${() => (this._proHint = null)}>${translate(this.hass, "close")}</button>
       </div>

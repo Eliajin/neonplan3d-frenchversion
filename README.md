@@ -6,7 +6,7 @@
 
 ![The house in the neon 3D view](docs/images/view-house.jpg)
 
-📖 **Manual:** [English](docs/manual.md) · [Deutsch](docs/anleitung.md) · online at [mastershort.de/neonplan3d](https://mastershort.de/neonplan3d/)
+📖 **Manual:** [English](https://mastershort.de/en/neonplan3d/manual/?lang=en) · [Deutsch](https://mastershort.de/neonplan3d/anleitung/?lang=de) (also in this repository: [manual.md](docs/manual.md), [anleitung.md](docs/anleitung.md))
 
 ## What it does
 
@@ -23,7 +23,7 @@ Also included: parking spots with vehicles that appear while a car is home, a he
 
 ### Free, packs and Pro add-ons
 
-The integration and everything above are free and open source (MIT). Optional extras are sold at [mastershort.de](https://mastershort.de/neonplan3d/) and install from the **Extensions** tab:
+The integration and everything above are free and open source (MIT). Optional extras are sold at [mastershort.de](https://mastershort.de/en/neonplan3d/?lang=en) and install from the **Extensions** tab:
 
 - **Furniture packs** – rooms (living, kitchen, bedroom, bath), areas (kids, office, garden, garage, fitness, smart home), vehicles, stairs & railings.
 - **Pro add-ons** – *Camera cockpit* (look through a camera, motion trail), *Weather outside* (rain, snow, clouds, lightning, sun and moon), *Live screens* (app colours and artwork on TVs, pictures by rules, camera live pictures on screens).

@@ -9,7 +9,7 @@ import { closeGaps, suggestedThickness } from "../geometry/gaps.ts";
 import { keepInRoom, snapToWall } from "../geometry/snap.ts";
 import { weatherEntity } from "../weather.ts";
 import { SHOW_ENERGY, SHOW_PRESENCE } from "../flags.ts";
-import { hasFeature, PRO_URL } from "../features.ts";
+import { hasFeature, manualUrl, shopUrl } from "../features.ts";
 import { TOGGLE_KINDS } from "../devices.ts";
 import { storedImageIds } from "../transfer.ts";
 import { DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS,
@@ -3012,7 +3012,7 @@ export class Fp3dEditor extends LitElement {
     if (!hasFeature("screens")) {
       return html`<div class="fp3d-wide">
         <div class="fp3d-sub">${this.t("screen_pictures")}</div>
-        <p class="fp3d-sub">🔒 ${this.t("pro_feature_screens")} – ${this.t("pro_locked")} <a href=${PRO_URL} target="_blank" rel="noopener">${this.t("pro_shop")}</a></p>
+        <p class="fp3d-sub">🔒 ${this.t("pro_feature_screens")} – ${this.t("pro_locked")} <a href=${shopUrl(this.hass?.language)} target="_blank" rel="noopener">${this.t("pro_shop")}</a> · <a href=${manualUrl(this.hass?.language, "screens")} target="_blank" rel="noopener">${this.t("manual_more")}</a></p>
       </div>`;
     }
     const set = (next: ScreenPicture[]) => this.updateFurniture({ pictures: next });
