@@ -177,7 +177,7 @@ Mit **Tür & Fenster** tippst du auf eine Wand. Danach wählst du rechts die **A
 Jede Öffnung hat:
 
 - **Breite**, **Brüstung** und **Höhe**, dazu die Anschlagseite. Mit **Auswählen** schiebst du sie entlang der Wand.
-- **Stil:** Zimmertür, Haustür, Haustür mit Glasausschnitt, mit einem oder zwei Seitenteilen, Glastür, Schiebetür. Fenster gibt es als Standard oder mit Sprossen. „Automatisch“ wählt eine Haustür für Außentüren.
+- **Stil:** Zimmertür, Haustür, Haustür mit Glasausschnitt, mit einem oder zwei Seitenteilen, Glastür, Schiebetür oder **Durchbruch (ohne Tür)**. Ein Durchbruch ist nur eine Öffnung in der Wand, ohne Zarge und Türblatt; das Licht fällt immer hindurch. Fenster gibt es als Standard oder mit Sprossen. „Automatisch“ wählt eine Haustür für Außentüren.
 - **Flügel:** einflügelig oder zweiflügelig, mit eigenem Kontakt für den zweiten Flügel.
 
 ![Haustür](images/editor-front-door.jpg)

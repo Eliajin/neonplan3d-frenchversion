@@ -574,7 +574,7 @@ export const OPENING_DEFAULTS = {
 
 /** Kinds of openings offered when placing one; a terrace door is a window down to the floor. */
 /** Door looks: room doors, front doors (with glass, one or two sidelights), a glass door, a sliding door. */
-export const DOOR_STYLES = ["interior", "front", "front_glass", "sidelight", "sidelights", "glass", "sliding"] as const;
+export const DOOR_STYLES = ["interior", "front", "front_glass", "sidelight", "sidelights", "glass", "sliding", "passage"] as const;
 export const WINDOW_STYLES = ["standard", "bars"] as const;
 export type OpeningStyle = (typeof DOOR_STYLES)[number] | (typeof WINDOW_STYLES)[number];
 

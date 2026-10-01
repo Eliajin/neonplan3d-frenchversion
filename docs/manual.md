@@ -177,7 +177,7 @@ With **Doors & windows** you tap a wall. Then you choose the **Type** on the rig
 Every opening has:
 
 - **Width**, **sill** and **height**, plus the hinge side. With **Select** you slide it along the wall.
-- **Style:** room door, front door, front door with glass, with one or two sidelights, glass door, sliding door. Windows come as standard or with glazing bars. "Automatic" picks a front door for exterior doors.
+- **Style:** room door, front door, front door with glass, with one or two sidelights, glass door, sliding door or **Opening (no door)**. An opening is just a gap in the wall, without frame and leaf; light always passes through. Windows come as standard or with glazing bars. "Automatic" picks a front door for exterior doors.
 - **Leaves:** single or double, with an own contact for the second leaf.
 
 ![Front door](images/editor-front-door.jpg)

@@ -128,7 +128,9 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
     // local frame: x from the opening start along the wall, n from the wall axis towards the room
     const tf: Tf = (x, n, y) => [info.start[0] + info.axis[0] * x + info.toRoom[0] * n, y, info.start[1] + info.axis[1] * x + info.toRoom[1] * n];
     const mid = (info.faceRoom - info.faceOut) / 2;
-    if (info.opening.type === "door" || info.opening.type === "garage") {
+    // a passage (wall opening without a door) shows nothing but the gap in the wall
+    const passage = info.opening.type === "door" && openingStyle(info.opening, info.exterior) === "passage";
+    if ((info.opening.type === "door" && !passage) || info.opening.type === "garage") {
       // door frame (Zarge) around the opening, covering the reveal on both faces; an open garage door glows warm
       const n0 = -info.faceOut - 0.012;
       const n1 = info.faceRoom + 0.012;
@@ -171,8 +173,8 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
         splitBox(frames, tf, 0.02, W - 0.02, -info.faceOut - 0.02, info.faceRoom, 0, 0.02, new Color(SILL), frameTop, cut, bucket);
         if (info.exterior) splitBox(frames, tf, W / 2 - 0.08, W / 2 + 0.08, -info.faceOut - 0.1, -info.faceOut, T + 0.1, T + 0.17, shade(OPEN_WARM, 0.55), shade(OPEN_WARM, 0.85), cut, ALWAYS);
       }
-      const leaves: [boolean, number][] = [[info.hingeAtStart, st.open]];
-      if (two) leaves.push([!info.hingeAtStart, st.open2 ?? 0]);
+      const leaves: [boolean, number][] = passage ? [] : [[info.hingeAtStart, st.open]];
+      if (two && !passage) leaves.push([!info.hingeAtStart, st.open2 ?? 0]);
       for (const [atStart, openness] of leaves) {
         const open = Math.min(1, Math.max(0, openness));
         const theta = style === "sliding" ? 0 : open * DOOR_ANGLE;

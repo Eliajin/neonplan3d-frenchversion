@@ -297,7 +297,7 @@ DEMO_BUILDING.floors[0].openings = [
   hole("window", "wohnen", 0, 1.6, 1.4, { contact: "none" }),
   hole("window", "wohnen", 0, 4.3, 1.8, { ...terrace, leaves: 2, contact: "binary_sensor.wohnzimmer_terrasse", contact2: "binary_sensor.wohnzimmer_terrasse_2", hinge: "right" }),
   hole("window", "wohnen", 3, 2.3, 1.2, { contact: "none" }),
-  hole("door", "wohnen", 1, 3.4, 0.9),
+  hole("door", "wohnen", 1, 3.0, 1.4, { style: "passage" }),
   hole("door", "wohnen", 2, 4.2, 0.9),
   hole("window", "kueche", 0, 2.4, 1.2),
   hole("door", "kueche", 1, 3.6, 0.9, { hinge: "right" }),

@@ -44,7 +44,7 @@ import {
 } from "three";
 import type { Building, Floor, Furniture, Room } from "../model.ts";
 import { recolorLamps, SHADE_SENTINEL, shadeFactors } from "./lamp-colors.ts";
-import { centroid, pointInPolygon } from "../model.ts";
+import { centroid, pointInPolygon, openingStyle } from "../model.ts";
 import { buildFloorGeometry, SLAB, stairHoles, type FloorGeometry } from "./build.ts";
 import { OrbitControls, type OrbitView } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
@@ -1263,6 +1263,8 @@ export class FloorplanViewer {
     if (!surface) return;
     const sources = this.lightSources(fv);
     const doorOpen = surface.doors.map((d) => {
+      const info = fv.geo.openings.find((i) => i.opening.id === d.id);
+      if (info && openingStyle(info.opening, info.exterior) === "passage") return 1;
       const o = fv.openings.get(d.id);
       return o ? Math.max(o.open, o.open2 ?? 0) : 0.5;
     });

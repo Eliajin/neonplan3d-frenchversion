@@ -2178,7 +2178,9 @@ export class Fp3dEditor extends LitElement {
           return svg`<path d="M${hx} ${hy}L${leaf[0]} ${leaf[1]}A${r} ${r} 0 0 ${cross > 0 ? 1 : 0} ${fx} ${fy}" />`;
         };
         symbol = svg`${paneLines}${
-          style === "sliding"
+          style === "passage"
+            ? svg`<line class="fp3d-open-passage" x1=${q(p0, mid)[0]} y1=${q(p0, mid)[1]} x2=${q(p1, mid)[0]} y2=${q(p1, mid)[1]} />`
+            : style === "sliding"
             ? svg`<line x1=${q(l0, face)[0]} y1=${q(l0, face)[1]} x2=${q(l1, face)[0]} y2=${q(l1, face)[1]} />`
             : two
               ? svg`${arc(l0, midP)}${arc(l1, midP)}`
@@ -4381,6 +4383,9 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-draft-wall {
         stroke-width: 4;
+      }
+      .fp3d-open-passage {
+        stroke-dasharray: 4 4;
       }
       .fp3d-out-sel polygon {
         stroke: var(--fp3d-accent);
