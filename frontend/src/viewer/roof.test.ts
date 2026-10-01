@@ -30,3 +30,29 @@ test("a gable roof rises to half the house depth times the slope", () => {
   assert.ok(Math.abs(top - 9.48 / 2) < 1e-6, `ridge at ${top}`);
   assert.ok(buildRoof(house("flat"))!.solid.count > 0);
 });
+
+test("a gable ridge can run along the short side", () => {
+  // highest points of the roof: they lie on the ridge, so their spread shows its direction
+  const ridge = (dir?: "long" | "short") => {
+    const b = house("gable");
+    b.settings.roof.ridge = dir;
+    const p = buildRoof(b)!.solid.p;
+    let top = -Infinity;
+    for (let i = 1; i < p.length; i += 3) top = Math.max(top, p[i]);
+    let x = [Infinity, -Infinity];
+    let z = [Infinity, -Infinity];
+    for (let i = 0; i < p.length; i += 3) {
+      if (Math.abs(p[i + 1] - top) > 1e-6) continue;
+      x = [Math.min(x[0], p[i]), Math.max(x[1], p[i])];
+      z = [Math.min(z[0], p[i + 2]), Math.max(z[1], p[i + 2])];
+    }
+    return { top, dx: x[1] - x[0], dz: z[1] - z[0] };
+  };
+  // the house is 10 m along x and 8 m along z
+  const long = ridge();
+  assert.ok(long.dx > 10 && long.dz < 1e-6, JSON.stringify(long));
+  const short = ridge("short");
+  assert.ok(short.dz > 8 && short.dx < 1e-6, JSON.stringify(short));
+  // across the 10 m side: 10 + 2 × (0.24 + 0.5) = 11.48 m, half of it rises at 45°
+  assert.ok(Math.abs(short.top - 11.48 / 2) < 1e-6, `ridge at ${short.top}`);
+});

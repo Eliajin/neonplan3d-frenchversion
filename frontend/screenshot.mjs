@@ -97,6 +97,8 @@ const shots = [
   { name: "view-shared-light", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Bad" },
   { name: "view-lamp-height", query: "", width: 1280, height: 800, editor: true, editorScript: "const f = e._doc.floors[0].furniture.find((x) => x.type === 'led_strip'); f.mount_y = 0.1; f.x = 4.9; f.w = 1.6; e.setDoc(structuredClone(e._doc));", then3d: "Wohnzimmer" },
   { name: "view-lamp-height-default", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Wohnzimmer" },
+  { name: "view-roof-short", query: "", width: 1280, height: 800, editor: true, editorScript: "e._doc.settings.roof.ridge = 'short'; e.setDoc(structuredClone(e._doc));", then3d: "Alle Etagen" },
+  { name: "editor-roof-ridge", query: "", width: 1280, height: 1200, editor: true, openDetails: true, scrollSide: true },
   { name: "editor-lamp-height", query: "", width: 1280, height: 1000, editor: true, editorScript: "const f = e._doc.floors[0].furniture.find((x) => x.type === 'led_strip'); e._roomId = 'wohnen'; e._furnitureId = f.id;", scrollSide: true },
   { name: "editor-hole-tool", query: "", width: 1280, height: 800, editor: true, editorState: { _tool: "hole" } },
   { name: "editor-split-idle", query: "", width: 1400, height: 900, editor: true, editorScript: "e._split = true; e._sidePinned = false;" },

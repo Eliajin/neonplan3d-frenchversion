@@ -172,6 +172,8 @@ export interface RoofSettings {
   pitch: number;
   /** How far the roof reaches beyond the outer walls (metres). */
   overhang: number;
+  /** Gable roof: ridge along the long side (default) or across, along the short side (terraced houses). */
+  ridge?: "long" | "short" | null;
 }
 
 export interface BuildingSettings {

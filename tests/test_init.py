@@ -312,7 +312,7 @@ async def test_outdoor_roof_and_north_get_defaults(hass: HomeAssistant, hass_ws_
     await client.send_json_auto_id({"type": "neonplan3d/building/get"})
     got = (await client.receive_json())["result"]["building"]
     assert got["settings"]["north"] == 0
-    assert got["settings"]["roof"] == {"type": "none", "pitch": 35, "overhang": 0.4}
+    assert got["settings"]["roof"] == {"type": "none", "pitch": 35, "overhang": 0.4, "ridge": None}
     assert got["floors"][0]["outdoor"][0]["type"] == "lawn"
     assert got["floors"][0]["ha_floor"] is None
     assert got["floors"][0]["rooms"][0]["panel"] == []
