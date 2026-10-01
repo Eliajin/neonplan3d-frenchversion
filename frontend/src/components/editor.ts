@@ -8,6 +8,7 @@ import { furnitureSymbol } from "./furniture2d.ts";
 import { closeGaps, suggestedThickness } from "../geometry/gaps.ts";
 import { keepInRoom, snapToWall } from "../geometry/snap.ts";
 import { weatherEntity } from "../weather.ts";
+import { SHOW_ENERGY, SHOW_PRESENCE } from "../flags.ts";
 import { hasFeature, PRO_URL } from "../features.ts";
 import { TOGGLE_KINDS } from "../devices.ts";
 import { storedImageIds } from "../transfer.ts";
@@ -1750,7 +1751,7 @@ export class Fp3dEditor extends LitElement {
         <div class="fp3d-main">
           <div class="fp3d-toolbar">
             <div class="fp3d-seg" role="group" aria-label=${this.t("tool_select")}>
-              ${(["select", "rect", "polygon", "measure", "opening", "furniture", "outdoor", "hole"] as Tool[]).map(
+              ${(["select", "rect", "polygon", "opening", "furniture", "outdoor", "hole"] as Tool[]).map(
                 (tool) => html`<button
                   aria-pressed=${this._tool === tool}
                   ?disabled=${!floor || (!this.isAdmin && tool !== "select")}
@@ -2387,8 +2388,8 @@ export class Fp3dEditor extends LitElement {
             : floor
               ? this.renderRoomList(floor)
               : nothing}
-      ${admin ? this.renderEnergySettings() : nothing}
-      ${admin ? this.renderPresenceSettings() : nothing}
+      ${admin && SHOW_ENERGY ? this.renderEnergySettings() : nothing}
+      ${admin && SHOW_PRESENCE ? this.renderPresenceSettings() : nothing}
       ${floor && admin ? this.renderBackgroundForm(floor) : nothing} ${admin ? this.renderSettings() : nothing}
       ${admin ? this.renderBackup() : nothing}
     `;

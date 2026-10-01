@@ -28,6 +28,7 @@ import { getPacks, mountBase, packItem, packsVersion } from "../packs.ts";
 import { parkedVehicles, parkingEntities } from "../parking.ts";
 import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
 import { limitEffects, weatherEntity, weatherState } from "../weather.ts";
+import { SHOW_ENERGY, SHOW_PRESENCE } from "../flags.ts";
 import { hasFeature, PRO_URL, type Feature } from "../features.ts";
 import { searchIndex, searchItems, type SearchItem } from "../search.ts";
 import { coverPositionable, lightAbilities } from "./quick-menu.ts";
@@ -493,7 +494,7 @@ export class Fp3dView3d extends LitElement {
     }
     const batteryPlaced = b.energy.battery ? b.floors.flatMap((f) => f.placements.filter((p) => p.entity_id === b.energy.battery).map((p) => ({ floorId: f.id, x: p.x, z: p.z })))[0] : null;
     v.setFlows(
-      !(this.flows ?? this._flows) || this.dimmed
+      !SHOW_ENERGY || !(this.flows ?? this._flows) || this.dimmed
         ? []
         : flowSegments({ building: b, consumers, summary, battery: batteryPlaced ?? null }).map((f) => ({
         floorId: f.floorId,
@@ -504,7 +505,7 @@ export class Fp3dView3d extends LitElement {
         color: flowColor(f.kind, summary),
       })),
     );
-    const persons = personsInRooms(hass, b);
+    const persons = SHOW_PRESENCE ? personsInRooms(hass, b) : [];
     v.setPersons(persons);
     const counts = floorCounts(hass, b, this.openingLinks!, persons);
     v.setFloorInfo(new Map([...counts].map(([id, c]) => [id, floorInfoText(hass, c)])));
@@ -1212,7 +1213,7 @@ export class Fp3dView3d extends LitElement {
 
   private renderEnergy() {
     const e = this._energy;
-    if (!e || this.roomId || !this.showEnergy) return nothing;
+    if (!SHOW_ENERGY || !e || this.roomId || !this.showEnergy) return nothing;
     const t = (k: Parameters<typeof translate>[1]) => translate(this.hass, k);
     const items: { cls: string; label: string; value: string }[] = [];
     if (e.consumption !== null) items.push({ cls: "total", label: t("energy_consumption"), value: formatPower(this.hass, e.consumption) });
