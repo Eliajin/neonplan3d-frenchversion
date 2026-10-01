@@ -60,7 +60,8 @@
             // no local packs
           }
         }
-        return importedPacks;
+        // ?nopro also drops local feature packs, so the locked look can be seen
+        return params.has("nopro") ? importedPacks.filter((p) => !p.features?.length) : importedPacks;
       }
 
       const hass = {
