@@ -2306,6 +2306,25 @@ export class FloorplanViewer {
         const id = inRange(fv.geo.furnitureTris, tri);
         const entity = id ? this.pickFurniture.get(id) : undefined;
         if (entity) return { entity };
+        // a wall: the tap stops at it unless it is see-through (cut away, or glass in the floor view)
+        if (hit.face && !id) {
+          const fold = (fv.wallMesh.geometry.getAttribute("fold") as Float32BufferAttribute | undefined)?.getX(hit.face.a) ?? 32;
+          const part = Math.floor(fold / 16);
+          const bucket = fold % 16;
+          const cutAway = this.wallMode === "cut" && part === 0;
+          const glass = (fv.mask.glass.value & (1 << bucket)) !== 0;
+          if (!cutAway) {
+            // the room on the camera's side of the wall is what the tap means
+            const dir = ray.ray.direction;
+            const l = Math.hypot(dir.x, dir.z) || 1;
+            const p: [number, number] = [hit.point.x - (dir.x / l) * 0.3, hit.point.z - (dir.z / l) * 0.3];
+            const beside = fv.floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon(p, r.points))?.id ?? null;
+            if (this.roomId !== null) {
+              // in a room: its own walls catch the tap (nothing behind them is meant), other walls let it through
+              if (beside === this.roomId) return { floorId: fv.floor.id, roomId: beside };
+            } else if (!glass && beside) return { floorId: fv.floor.id, roomId: beside };
+          }
+        }
       } else if (hit.object === fv.floorMesh) {
         return { floorId: fv.floor.id, roomId: inRange(fv.geo.roomTris.map((r) => ({ id: r.roomId, start: r.start, end: r.end })), tri) ?? null };
       }
