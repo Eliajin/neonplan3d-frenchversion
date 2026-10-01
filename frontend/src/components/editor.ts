@@ -18,7 +18,7 @@ import { DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS,
   type FreeWall,
 } from "../model.ts";
 import { furnishRoom, PACKAGES, type PackageId } from "../packages.ts";
-import { generateWalls, locateOnWalls, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
+import { generateWalls, locateOpening, openingHost, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { iconPath } from "../icons.ts";
 import {
@@ -106,6 +106,9 @@ const EDIT_DRAGS = new Set(["vertex", "room", "device", "opening", "furniture", 
 const HISTORY = 100;
 const SNAP_PX = 10;
 const round = (v: number) => Math.round(v * 1000) / 1000;
+
+/** Arrow keys as plan directions (x right, z down). */
+const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 
 export class Fp3dEditor extends LitElement {
   static properties = {
@@ -831,7 +834,7 @@ export class Fp3dEditor extends LitElement {
           if (target.wall_heights) target.wall_heights.splice(i + 1, 0, target.wall_heights[i] ?? null);
           const first = Math.hypot(mid[0] - a[0], mid[1] - a[1]);
           for (const o of floor.openings) {
-            if (o.room_id !== roomId) continue;
+            if (o.room_id !== roomId || o.wall) continue;
             if (o.edge > i) o.edge += 1;
             else if (o.edge === i && o.offset > first) {
               o.edge = i + 1;
@@ -979,9 +982,9 @@ export class Fp3dEditor extends LitElement {
         drag.moved = true;
         const baseFloor = drag.base.floors.find((f) => f.id === this._floorId);
         const o = baseFloor?.openings.find((x) => x.id === drag.id);
-        const room = baseFloor?.rooms.find((r) => r.id === o?.room_id);
-        if (!o || !room) return;
-        const offset = this.offsetOnEdge(room, o.edge, world, o.width, e.altKey);
+        const host = o && baseFloor ? openingHost(o, baseFloor.rooms, baseFloor.walls ?? []) : null;
+        if (!o || !host) return;
+        const offset = this.offsetOnEdge(host.room, host.edge, world, o.width, e.altKey);
         this.change((_, floor) => Object.assign(floor.openings.find((x) => x.id === drag.id)!, { offset }), drag.base, false);
         break;
       }
@@ -1308,7 +1311,10 @@ export class Fp3dEditor extends LitElement {
   private deleteFreeWall(): void {
     const id = this._wallId;
     if (!id || !this.isAdmin) return;
-    this.change((_, floor) => (floor.walls = (floor.walls ?? []).filter((w) => w.id !== id)));
+    this.change((_, floor) => {
+      floor.walls = (floor.walls ?? []).filter((w) => w.id !== id);
+      floor.openings = floor.openings.filter((o) => o.wall !== id);
+    });
     this._wallId = null;
   }
 
@@ -1443,6 +1449,11 @@ export class Fp3dEditor extends LitElement {
       else if (this._furnitureId) this.deleteFurniture();
       else if (this._vertex !== null) this.deleteVertex(this._vertex);
       else this.deleteRoom();
+    } else if (Object.hasOwn(ARROWS, e.key) && !mod && (this._tool === "select" || this._tool === "furniture")) {
+      // arrow keys nudge the selection: one grid step, Shift 10 cm, Alt 1 cm
+      const step = e.altKey ? 0.01 : e.shiftKey ? 0.1 : this._doc.settings.grid;
+      const [dx, dz] = ARROWS[e.key];
+      if (this.nudge(dx * step, dz * step)) e.preventDefault();
     } else if (e.key.toLowerCase() === "r" && !mod && this._furnitureId) {
       this.rotateFurniture(e.shiftKey ? -90 : 90);
     } else if (e.key === "Backspace" && this._tool === "polygon") {
@@ -1458,6 +1469,68 @@ export class Fp3dEditor extends LitElement {
   };
 
   // ------------------------------------------------------------------ actions
+
+  /** Moves the selected item by (dx, dz) metres; false when nothing movable is selected. */
+  private nudge(dx: number, dz: number): boolean {
+    const floor = this.floor;
+    if (!floor || !this.isAdmin) return false;
+    const mv = (p: Vec2): Vec2 => [round(p[0] + dx), round(p[1] + dz)];
+    if (this._deviceId) {
+      const id = this._deviceId;
+      if (!floor.placements.some((p) => p.entity_id === id)) return false;
+      this.change((_, f) => {
+        const p = f.placements.find((x) => x.entity_id === id)!;
+        [p.x, p.z] = mv([p.x, p.z]);
+      });
+    } else if (this._furnitureId) {
+      const id = this._furnitureId;
+      this.change((_, f) => {
+        const m = f.furniture.find((x) => x.id === id);
+        if (m) [m.x, m.z] = mv([m.x, m.z]);
+      });
+    } else if (this._openingId) {
+      const o = this.opening;
+      const host = o ? openingHost(o, floor.rooms, floor.walls ?? []) : null;
+      if (!o || !host) return false;
+      const a = host.room.points[host.edge];
+      const b = host.room.points[(host.edge + 1) % host.room.points.length];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      // along the wall: the arrow's share in the wall direction
+      const along = (dx * (b[0] - a[0]) + dz * (b[1] - a[1])) / len;
+      if (Math.abs(along) < 1e-9) return true;
+      const half = Math.min(o.width, len) / 2;
+      this.updateOpening({ offset: round(Math.min(len - half, Math.max(half, o.offset + along))) });
+    } else if (this._wallId) {
+      const id = this._wallId;
+      this.change((_, f) => {
+        const w = (f.walls ?? []).find((x) => x.id === id);
+        if (w) [w.a, w.b] = [mv(w.a), mv(w.b)];
+      });
+    } else if (this._outdoorId) {
+      const id = this._outdoorId;
+      this.change((_, f) => {
+        const area = f.outdoor.find((x) => x.id === id);
+        if (area) area.points = area.points.map(mv);
+      });
+    } else if (this._roomId) {
+      const id = this._roomId;
+      const vertex = this._vertex;
+      const room = floor.rooms.find((r) => r.id === id);
+      if (!room) return false;
+      // a selected corner moves alone; otherwise the room moves with the devices in it
+      const inside = new Set(floor.placements.filter((pl) => pointInPolygon([pl.x, pl.z], room.points)).map((pl) => pl.entity_id));
+      this.change((_, f) => {
+        const r = f.rooms.find((x) => x.id === id)!;
+        if (vertex !== null && vertex < r.points.length) {
+          r.points[vertex] = mv(r.points[vertex]);
+          return;
+        }
+        r.points = r.points.map(mv);
+        for (const pl of f.placements) if (inside.has(pl.entity_id)) [pl.x, pl.z] = mv([pl.x, pl.z]);
+      });
+    } else return false;
+    return true;
+  }
 
   /** Floors of Home Assistant's floor registry that no floor of the plan stands for yet, lowest first. */
   private get freeHaFloors(): HassFloor[] {
@@ -1526,7 +1599,7 @@ export class Fp3dEditor extends LitElement {
     this.change((_, floor) => {
       const room = floor.rooms.find((r) => r.id === id);
       floor.rooms = floor.rooms.filter((r) => r.id !== id);
-      floor.openings = floor.openings.filter((o) => o.room_id !== id);
+      floor.openings = floor.openings.filter((o) => o.room_id !== id || o.wall);
       if (room) floor.placements = floor.placements.filter((pl) => !pointInPolygon([pl.x, pl.z], room.points));
     });
     this._roomId = null;
@@ -1585,7 +1658,20 @@ export class Fp3dEditor extends LitElement {
   private placeOpening(preset: OpeningPreset, screen: [number, number]): boolean {
     const floor = this.floor;
     if (!floor || !this.isAdmin) return false;
-    let best: { room: Room; edge: number; d: number } | null = null;
+    let best: { room: Room; edge: number; d: number; wall?: string; roomId?: string } | null = null;
+    for (const w of floor.walls ?? []) {
+      const host = openingHost({ room_id: "", edge: 0, wall: w.id }, floor.rooms, floor.walls ?? []);
+      if (!host) continue;
+      const [ax, ay] = this.toScreen(w.a);
+      const [bx, by] = this.toScreen(w.b);
+      const l2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
+      const t = Math.min(1, Math.max(0, ((screen[0] - ax) * (bx - ax) + (screen[1] - ay) * (by - ay)) / l2));
+      const d = Math.hypot(screen[0] - ax - (bx - ax) * t, screen[1] - ay - (by - ay) * t);
+      // a free wall wins over a room edge at the same distance
+      const mid: Vec2 = [(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2];
+      const inside = floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon(mid, r.points));
+      if (d < SNAP_PX * 2.2 && (!best || d - 1 < best.d)) best = { room: host.room, edge: 0, d: d - 1, wall: w.id, roomId: inside?.id ?? w.id };
+    }
     for (const room of floor.rooms) {
       for (let i = 0; i < room.points.length; i++) {
         const [ax, ay] = this.toScreen(room.points[i]);
@@ -1599,7 +1685,7 @@ export class Fp3dEditor extends LitElement {
       }
     }
     if (!best) return false;
-    const { room, edge } = best;
+    const { room, edge, wall } = best;
     const a = room.points[edge];
     const b = room.points[(edge + 1) % room.points.length];
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -1608,8 +1694,9 @@ export class Fp3dEditor extends LitElement {
     const width = round(Math.min(defaults.width, Math.max(0.3, len - 0.1)));
     const opening: Opening = {
       id: uid("opening"),
-      room_id: room.id,
+      room_id: best.roomId ?? room.id,
       edge,
+      ...(wall ? { wall } : {}),
       offset: this.offsetOnEdge(room, edge, this.toWorld(...screen), width, false),
       width,
       type,
@@ -1806,8 +1893,8 @@ export class Fp3dEditor extends LitElement {
       if (target.wall_heights) target.wall_heights.splice(index, 1);
       // the two edges at the removed corner merge; openings on them cannot keep their place
       floor.openings = floor.openings
-        .filter((o) => o.room_id !== room.id || (o.edge !== index && o.edge !== prev))
-        .map((o) => (o.room_id === room.id && o.edge > index ? { ...o, edge: o.edge - 1 } : o));
+        .filter((o) => o.room_id !== room.id || o.wall || (o.edge !== index && o.edge !== prev))
+        .map((o) => (o.room_id === room.id && !o.wall && o.edge > index ? { ...o, edge: o.edge - 1 } : o));
     });
     this._vertex = null;
   }
@@ -2187,11 +2274,12 @@ export class Fp3dEditor extends LitElement {
 
   private renderOpenings(floor: Floor, walls: Wall[]) {
     return svg`<g>${floor.openings.map((o) => {
-      const room = floor.rooms.find((r) => r.id === o.room_id);
-      if (!room || o.edge >= room.points.length) return nothing;
-      const hit = locateOnWalls(walls, room, o.edge, o.offset);
-      const p0 = pointOnRoomEdge(room, o.edge, o.offset - o.width / 2);
-      const p1 = pointOnRoomEdge(room, o.edge, o.offset + o.width / 2);
+      const host = openingHost(o, floor.rooms, floor.walls ?? []);
+      if (!host) return nothing;
+      const { room, edge } = host;
+      const hit = locateOpening(walls, o, host);
+      const p0 = pointOnRoomEdge(room, edge, o.offset - o.width / 2);
+      const p1 = pointOnRoomEdge(room, edge, o.offset + o.width / 2);
       const ux = (p1[0] - p0[0]) / (o.width || 1);
       const uz = (p1[1] - p0[1]) / (o.width || 1);
       // normal into the room (room outlines may run either way round)
@@ -2199,7 +2287,7 @@ export class Fp3dEditor extends LitElement {
       const n: Vec2 = [-uz * sgn, ux * sgn];
       // gap across the whole wall thickness
       let across: [number, number] = [0.06, 0.06];
-      if (hit) across = hit.wall.roomLeft === room.id ? [hit.wall.left, hit.wall.right] : [hit.wall.right, hit.wall.left];
+      if (hit) across = hit.wall.free || hit.wall.roomLeft === room.id ? [hit.wall.left, hit.wall.right] : [hit.wall.right, hit.wall.left];
       const q = (p: Vec2, k: number) => this.toScreen([p[0] + n[0] * k, p[1] + n[1] * k]);
       const gap = [q(p0, across[0] + 0.01), q(p1, across[0] + 0.01), q(p1, -across[1] - 0.01), q(p0, -across[1] - 0.01)];
       const sel = o.id === this._openingId;
@@ -2230,7 +2318,7 @@ export class Fp3dEditor extends LitElement {
           const both = style === "sidelights";
           const lw0 = Math.min(1.05, Math.max(0.6, o.width - 0.04 - (both ? 0.6 : 0.3)));
           const side = (o.width - 0.04 - lw0) / (both ? 2 : 1);
-          const at = (k: number): Vec2 => pointOnRoomEdge(room, o.edge, o.offset - o.width / 2 + k);
+          const at = (k: number): Vec2 => pointOnRoomEdge(room, edge, o.offset - o.width / 2 + k);
           const start = both || !hingeAtP0 ? 0.02 + side : 0.02;
           l0 = at(start);
           l1 = at(start + lw0);
@@ -2804,10 +2892,10 @@ export class Fp3dEditor extends LitElement {
   /** Whether an opening sits in an exterior wall (decides the automatic door style). */
   private openingIsExterior(o: Opening): boolean {
     const floor = this.floor;
-    const room = floor?.rooms.find((r) => r.id === o.room_id);
-    if (!floor || !room) return false;
+    const host = floor ? openingHost(o, floor.rooms, floor.walls ?? []) : null;
+    if (!floor || !host) return false;
     const walls = generateWalls(floor.rooms, { exterior: this._doc.settings.wall_exterior, interior: this._doc.settings.wall_interior }, floor.walls ?? []);
-    return locateOnWalls(walls.walls, room, o.edge, o.offset)?.wall.exterior ?? false;
+    return locateOpening(walls.walls, o, host)?.wall.exterior ?? false;
   }
 
   /** The look of a door or window: automatic (by wall), or one of the built-in styles. */

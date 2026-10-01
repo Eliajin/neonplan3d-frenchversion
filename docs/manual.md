@@ -110,7 +110,7 @@ The editor has the floor plan in the middle, the toolbar at the top and the side
 
 Next to them are **Undo**, **Redo**, **Show all** and **3D beside**. A short hint for the active tool is always shown at the bottom of the plan.
 
-**Mouse and touch:** Two fingers pan and zoom. With a mouse, the wheel zooms and dragging an empty spot pans. **Ctrl+Z** undoes, **Ctrl+Y** or **Ctrl+Shift+Z** redoes, **Del** deletes the selection, **Esc** cancels.
+**Mouse and touch:** Two fingers pan and zoom. With a mouse, the wheel zooms and dragging an empty spot pans. **Ctrl+Z** undoes, **Ctrl+Y** or **Ctrl+Shift+Z** redoes, **Del** deletes the selection, **Esc** cancels. The **arrow keys** nudge the selection (room, corner, furniture, device, wall, outdoor area) by one grid step, with **Shift** by 10 cm, with **Alt** by 1 cm; doors and windows slide along their wall.
 
 ### 4.2 Floors
 
@@ -147,7 +147,7 @@ A selected room shows on the right:
 
 Walls are created automatically: every shared edge of two rooms becomes an interior wall, every outer edge an exterior wall. Corners and T-junctions are mitred. You set the thicknesses under **Settings**.
 
-**Single walls:** The **Wall** tool draws a free-standing wall, e.g. a partition that runs through half a room. **Shift** keeps it straight, **Alt** draws without snapping. Where it meets a room wall, the corner is mitred. When selected, drag the handles to move its ends or the line to move the whole wall. On the right you set **Length**, **Wall thickness** and **Height**. In 3D it behaves like any interior wall.
+**Single walls:** The **Wall** tool draws a free-standing wall, e.g. a partition that runs through half a room. **Shift** keeps it straight, **Alt** draws without snapping. Where it meets a room wall, the corner is mitred. When selected, drag the handles to move its ends or the line to move the whole wall. On the right you set **Length**, **Wall thickness** and **Height**. In 3D it behaves like any interior wall. You can put doors and windows into single walls too, with **Doors & windows** (see 4.7). Deleting the wall removes its doors and windows as well.
 
 **Wall height:** Any wall can be lower than the room, e.g. a parapet or a counter. For a single wall you set its **Height** in the form. For rooms (rectangle and free shape) select the room; the form shows the **Wall heights** box with every wall of the room, named by its corners (e.g. "Wall 2–3", the numbers are shown at the corners in the plan) and with its length. Hovering a row or tapping its field lights the wall up in the plan. ↥ resets it to full room height. If two rooms share the wall, the lower setting applies. Windows and doors in a low wall end at the wall height. Low walls look lighter in the plan.
 
@@ -172,7 +172,7 @@ Under **Template (floor plan image)** you load a photo or scan of your floor pla
 
 ![A selected door](images/editor-opening.jpg)
 
-With **Doors & windows** you tap a wall. Then you choose the **Type** on the right: door, window or garage door. A window with a sill of 0 is a terrace door.
+With **Doors & windows** you tap a wall, a room wall or a single wall. Then you choose the **Type** on the right: door, window or garage door. A window with a sill of 0 is a terrace door.
 
 ![Kinds of openings](images/editor-opening-kinds.jpg)
 

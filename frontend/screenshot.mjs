@@ -92,6 +92,8 @@ const shots = [
   { name: "editor-free-wall", query: "", width: 1280, height: 800, editor: true, editorState: { _floorId: "og", _tool: "select" } },
   { name: "editor-room-wall-heights", query: "", width: 1280, height: 1000, editor: true, editorState: { _floorId: "og", _tool: "select", _roomId: "kind", _edgeHi: 1 }, scrollSide: true },
   { name: "view-free-wall", query: "", width: 1280, height: 800, click: "Obergeschoss", then: "Gästezimmer" },
+  { name: "editor-free-wall-door", query: "", width: 1280, height: 800, editor: true, editorScript: "const o = e._doc.floors[0].openings.find((x) => x.wall); e._floorId = e._doc.floors[0].id; e._tool = 'select'; e._openingId = o.id;" },
+  { name: "view-free-wall-door", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Garage" },
   { name: "editor-hole-tool", query: "", width: 1280, height: 800, editor: true, editorState: { _tool: "hole" } },
   { name: "editor-split-idle", query: "", width: 1400, height: 900, editor: true, editorScript: "e._split = true; e._sidePinned = false;" },
   { name: "editor-front-door", query: "", width: 1280, height: 900, editor: true, editorScript: "const f = e._doc.floors[0]; const o = f.openings.find((x) => x.style === 'sidelight'); e._roomId = o.room_id; e._openingId = o.id;" },

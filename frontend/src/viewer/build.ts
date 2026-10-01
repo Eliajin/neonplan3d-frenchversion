@@ -13,7 +13,7 @@
 import { Color, type BufferGeometry } from "three";
 import type { Floor, Opening, Room, Vec2 } from "../model.ts";
 import { furnitureFootprint, isLamp, pointInPolygon } from "../model.ts";
-import { generateWalls, locateOnWalls, type Wall } from "../geometry/walls.ts";
+import { generateWalls, locateOpening, openingHost, type Wall } from "../geometry/walls.ts";
 import { pushFurniture } from "./furniture.ts";
 import { mountBase, packItem } from "../packs.ts";
 import { pushOutdoor } from "./outdoor.ts";
@@ -172,16 +172,18 @@ export function buildFloorGeometry(floor: Floor, wallExterior: number, wallInter
   const spans = new Map<Wall, Span[]>();
   const openings: OpeningInfo[] = [];
   for (const o of floor.openings) {
-    const room = floor.rooms.find((r) => r.id === o.room_id);
-    if (!room || o.edge >= room.points.length) continue;
-    const hit = locateOnWalls(walls, room, o.edge, o.offset);
+    const host = openingHost(o, floor.rooms, floor.walls ?? []);
+    if (!host) continue;
+    const hit = locateOpening(walls, o, host);
     if (!hit) continue;
     const { wall, s } = hit;
     const ax: Vec2 = unit([wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]]);
     const len = Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]);
     const width = Math.min(o.width, len);
     const s0 = Math.max(0, Math.min(len - width, s - width / 2));
-    const roomLeft = wall.roomLeft === o.room_id;
+    // in a free wall the "room" side is the left of the wall as drawn
+    const hp = host.room.points;
+    const roomLeft = wall.free ? ax[0] * (hp[1][0] - hp[0][0]) + ax[1] * (hp[1][1] - hp[0][1]) > 0 : wall.roomLeft === o.room_id;
     const nLeft: Vec2 = [-ax[1], ax[0]];
     const toRoom: Vec2 = roomLeft ? nLeft : [-nLeft[0], -nLeft[1]];
     const top = Math.min(wallHeight(wall, floor.height) - 0.02, o.sill + o.height);

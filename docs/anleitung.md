@@ -110,7 +110,7 @@ Der Editor besteht aus dem Grundriss in der Mitte, der Werkzeugleiste oben und d
 
 Daneben stehen **Rückgängig**, **Wiederholen**, **Alles zeigen** und **3D daneben**. Unten im Plan steht immer ein kurzer Hinweis zum aktiven Werkzeug.
 
-**Maus und Touch:** Mit zwei Fingern ziehst du die Ansicht, mit zwei Fingern zoomst du. Mit der Maus zoomt das Mausrad, die Ansicht ziehst du auf einer leeren Stelle. **Strg+Z** macht rückgängig, **Strg+Y** oder **Strg+Umschalt+Z** wiederholt, **Entf** löscht das Ausgewählte, **Esc** bricht ab.
+**Maus und Touch:** Mit zwei Fingern ziehst du die Ansicht, mit zwei Fingern zoomst du. Mit der Maus zoomt das Mausrad, die Ansicht ziehst du auf einer leeren Stelle. **Strg+Z** macht rückgängig, **Strg+Y** oder **Strg+Umschalt+Z** wiederholt, **Entf** löscht das Ausgewählte, **Esc** bricht ab. Die **Pfeiltasten** verschieben das Ausgewählte (Raum, Ecke, Möbel, Gerät, Wand, Außenfläche) um einen Rasterschritt, mit **Umschalt** um 10 cm, mit **Alt** um 1 cm; Türen und Fenster wandern dabei entlang ihrer Wand.
 
 ### 4.2 Etagen
 
@@ -147,7 +147,7 @@ Ein ausgewählter Raum zeigt rechts:
 
 Wände entstehen automatisch: Jede gemeinsame Kante zweier Räume wird eine Innenwand, jede Außenkante eine Außenwand. Ecken und T-Stöße werden sauber verschnitten. Die Stärken stellst du unter **Einstellungen** ein.
 
-**Einzelne Wände:** Mit dem Werkzeug **Wand** ziehst du eine frei stehende Wand, zum Beispiel einen Raumteiler, der nur durch den halben Raum geht. **Umschalt** hält sie gerade, **Alt** zeichnet ohne Fangen. Trifft sie auf eine Raumwand, wird die Ecke verschnitten. Ausgewählt ziehst du die Endpunkte an den Griffen oder die ganze Wand an der Linie. Rechts stellst du **Länge**, **Wandstärke** und **Höhe** ein. In 3D verhält sie sich wie jede Innenwand.
+**Einzelne Wände:** Mit dem Werkzeug **Wand** ziehst du eine frei stehende Wand, zum Beispiel einen Raumteiler, der nur durch den halben Raum geht. **Umschalt** hält sie gerade, **Alt** zeichnet ohne Fangen. Trifft sie auf eine Raumwand, wird die Ecke verschnitten. Ausgewählt ziehst du die Endpunkte an den Griffen oder die ganze Wand an der Linie. Rechts stellst du **Länge**, **Wandstärke** und **Höhe** ein. In 3D verhält sie sich wie jede Innenwand. Auch in einzelne Wände setzt du mit **Tür & Fenster** Türen und Fenster ein (siehe 4.7). Löschst du die Wand, verschwinden ihre Türen und Fenster mit.
 
 **Wandhöhe:** Jede Wand kann niedriger sein als der Raum, etwa als Brüstung oder Theke. Bei einer einzelnen Wand stellst du die **Höhe** im Formular ein. Bei Räumen (Rechteck und freie Form) wählst du den Raum aus; im Formular steht der Kasten **Wandhöhen** mit jeder Wand des Raums, benannt nach ihren Eckpunkten (z. B. „Wand 2–3“, die Nummern stehen im Plan an den Ecken) und mit ihrer Länge. Fährst du über eine Zeile oder tippst in ihr Feld, leuchtet die Wand im Plan auf. ↥ setzt sie auf volle Raumhöhe zurück. Teilen sich zwei Räume die Wand, gilt die niedrigere Einstellung. Fenster und Türen in einer niedrigen Wand enden an der Wandhöhe. Niedrige Wände erscheinen im Plan heller.
 
@@ -172,7 +172,7 @@ Unter **Vorlage (Grundriss-Bild)** lädst du ein Foto oder einen Scan deines Gru
 
 ![Tür ausgewählt](images/editor-opening.jpg)
 
-Mit **Tür & Fenster** tippst du auf eine Wand. Danach wählst du rechts die **Art**: Tür, Fenster oder Garagentor. Ein Fenster mit Brüstung 0 ist eine Terrassentür.
+Mit **Tür & Fenster** tippst du auf eine Wand, eine Raumwand oder eine einzelne Wand. Danach wählst du rechts die **Art**: Tür, Fenster oder Garagentor. Ein Fenster mit Brüstung 0 ist eine Terrassentür.
 
 ![Arten von Öffnungen](images/editor-opening-kinds.jpg)
 

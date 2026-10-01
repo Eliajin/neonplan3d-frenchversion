@@ -382,6 +382,8 @@ DEMO_BUILDING.floors[0].furniture = [
 // a half-height wall between the kids' room and the office (edge 1 of the kids' room)
 DEMO_BUILDING.floors[1].rooms.find((r) => r.id === "kind").wall_heights = [null, 1.0, null, null];
 DEMO_BUILDING.floors[1].walls = [{ id: "wall_demo", a: [8, 8], b: [8, 6], thickness: null, height: 1.1 }];
+DEMO_BUILDING.floors[0].walls = [{ id: "wall_garage", a: [10, 1.1], b: [12.6, 1.1], thickness: null, height: null }];
+DEMO_BUILDING.floors[0].openings.push(hole("door", "garage", 0, 1.2, 0.9, { wall: "wall_garage" }));
 DEMO_BUILDING.floors[1].furniture = [
   item("bed", 1.0, 1.4, 1.0, 2.05, 0.8, 90),
   item("desk", 2.8, 3.8, 1.2, 0.6, 0.75, 180),

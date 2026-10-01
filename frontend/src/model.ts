@@ -26,10 +26,12 @@ export type EntityRef = string | null;
 export interface Opening {
   id: string;
   room_id: string;
-  /** Room edge the opening sits on (points[edge] -> points[edge + 1]). */
+  /** Room edge the opening sits on (points[edge] -> points[edge + 1]); 0 in a free wall. */
   edge: number;
-  /** Distance of the opening's centre from points[edge] (metres). */
+  /** Distance of the opening's centre from points[edge], or from the free wall's start (metres). */
   offset: number;
+  /** Free wall the opening sits in (its id); room_id is then the room the wall stands in. */
+  wall?: string | null;
   width: number;
   type: OpeningType;
   /** Height of the bottom above the floor; 0 for doors, garage doors and terrace doors. */

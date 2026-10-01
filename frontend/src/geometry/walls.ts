@@ -6,7 +6,7 @@
 // edges and T-junctions work. Wall ends are mitred at every node by intersecting the face lines of
 // neighbouring walls.
 
-import type { FreeWall, Room, Vec2 } from "../model.ts";
+import type { FreeWall, Opening, Room, Vec2 } from "../model.ts";
 import { pointInPolygon, signedArea } from "../model.ts";
 
 export interface WallSource {
@@ -404,6 +404,31 @@ export function pointOnRoomEdge(room: Room, edge: number, offset: number): Vec2 
   const q = room.points[(edge + 1) % room.points.length];
   const d = unit(sub(q, p));
   return add(p, mul(d, offset));
+}
+
+/**
+ * The line an opening sits on, as a room and an edge: the edge of its room, or for an opening in a
+ * free wall a virtual triangle room whose edge 0 is the free wall (the room side is its left).
+ */
+export function openingHost(o: Pick<Opening, "room_id" | "edge" | "wall">, rooms: readonly Room[], free: readonly FreeWall[]): { room: Room; edge: number } | null {
+  if (o.wall) {
+    const w = free.find((x) => x.id === o.wall);
+    if (!w || Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) < 0.05) return null;
+    const d = unit(sub(w.b, w.a));
+    const room = { id: o.room_id, name: "", area_id: null, points: [w.a, w.b, add(w.a, [-d[1], d[0]])] } as unknown as Room;
+    return { room, edge: 0 };
+  }
+  const room = rooms.find((r) => r.id === o.room_id);
+  return room && o.edge < room.points.length ? { room, edge: o.edge } : null;
+}
+
+/** Locate an opening in the generated walls (see openingHost): the wall and the distance from wall.a. */
+export function locateOpening(walls: readonly Wall[], o: Pick<Opening, "wall" | "offset">, host: { room: Room; edge: number }): { wall: Wall; s: number } | null {
+  if (!o.wall) return locateOnWalls(walls, host.room, host.edge, o.offset);
+  const wall = walls.find((w) => w.free === o.wall);
+  if (!wall) return null;
+  const p = pointOnRoomEdge(host.room, 0, o.offset);
+  return { wall, s: dot(sub(p, wall.a), unit(sub(wall.b, wall.a))) };
 }
 
 /** Locate a position on a room edge in the generated walls: the wall and the distance from wall.a. */

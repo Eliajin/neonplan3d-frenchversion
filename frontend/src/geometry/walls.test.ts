@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Room, Vec2 } from "../model.ts";
 import { polygonArea, signedArea } from "../model.ts";
-import { generateWalls, locateOnWalls } from "./walls.ts";
+import { generateWalls, locateOnWalls, locateOpening, openingHost } from "./walls.ts";
 
 const EXT = 0.24;
 const INT = 0.12;
@@ -153,4 +153,22 @@ test("walls take their own height: from the room edge (the lower one when shared
   assert.equal(walls.find((w) => w.free === "fw")!.height, 1.0);
   // every other wall stands at full height
   assert.ok(walls.filter((w) => w.exterior).every((w) => w.height === undefined));
+});
+
+test("an opening in a free wall is located on that wall, with its room side on the left", () => {
+  const rooms = [rect("a", 0, 0, 6, 4)];
+  const free = [{ id: "fw", a: [3, 0] as Vec2, b: [3, 3] as Vec2 }];
+  const { walls } = generateWalls(rooms, opts, free);
+  const o = { room_id: "a", edge: 0, offset: 1.5, wall: "fw" };
+  const host = openingHost(o, rooms, free);
+  assert.ok(host);
+  const hit = locateOpening(walls, o, host);
+  assert.ok(hit);
+  assert.equal(hit.wall.free, "fw");
+  near(hit.s, 1.5);
+  // a deleted free wall drops its openings
+  assert.equal(openingHost(o, rooms, []), null);
+  // room edge openings work as before
+  const edgeHost = openingHost({ room_id: "a", edge: 0 }, rooms, free);
+  assert.ok(edgeHost && locateOpening(walls, { offset: 1 }, edgeHost));
 });

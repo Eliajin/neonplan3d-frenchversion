@@ -48,6 +48,8 @@ OPENING_SCHEMA = vol.Schema(
         vol.Required("room_id"): _ID,
         vol.Required("edge"): vol.All(int, vol.Range(min=0, max=MAX_POINTS)),
         vol.Required("offset"): _LENGTH,
+        # an opening in a free wall: the wall's id (room_id is then the room the wall stands in)
+        vol.Optional("wall", default=None): vol.Any(None, _ID),
         vol.Required("width"): _LENGTH,
         vol.Required("type"): vol.In(["door", "window", "garage"]),
         vol.Required("sill"): _LENGTH,
