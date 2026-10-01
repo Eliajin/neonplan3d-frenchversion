@@ -1,5 +1,7 @@
 # NeonPlan 3D
 
+[![Spenden mit PayPal](https://img.shields.io/badge/PayPal-Spenden-00457C?logo=paypal&logoColor=white)](https://www.paypal.com/donate/?hosted_button_id=Z3G2VWKSK5VJL)
+
 **by Mastershort** – draw your home right inside Home Assistant and control it in a neon 3D view: lights glow in their colours, blinds move, doors and windows open, cameras watch, and the TV shows what is playing. No external tools, no cloud, made for wall tablets.
 
 [![Open your Home Assistant instance and open the NeonPlan 3D repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Mastershort&repository=neonplan3d&category=integration)
@@ -107,3 +109,11 @@ npm run screenshot  # renders preview/index.html (invented demo data) with a loc
 ## Licence
 
 MIT – see [LICENSE](LICENSE). Furniture packs and Pro add-ons sold in the shop are not part of this repository.
+
+## Unterstützen / Support
+
+NeonPlan 3D ist kostenlos. Wenn es dir gefällt, freue ich mich über einen Kaffee ☕ –
+oder schau dir die Möbel-Packs im Shop an: https://mastershort.de/neonplan3d/
+NeonPlan 3D is free. If you like it, you can buy me a coffee or check out the furniture packs.
+
+[![PayPal](https://img.shields.io/badge/PayPal-Spenden-00457C?logo=paypal&logoColor=white)](https://www.paypal.com/donate/?hosted_button_id=Z3G2VWKSK5VJL)
