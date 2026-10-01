@@ -65,6 +65,8 @@ export interface FloorGeometry {
   floor: BufferGeometry;
   /** Triangle ranges of room tops (for picking and highlighting) with their base colour. */
   roomTris: { roomId: string; start: number; end: number; color: number }[];
+  /** Openings cut into the floor (stairwells, galleries): the light surface leaves them out. */
+  holes: Vec2[][];
   /** Walls (with folding upper parts) and furniture. */
   walls: BufferGeometry;
   lines: BufferGeometry;
@@ -101,12 +103,14 @@ export function buildFloorGeometry(floor: Floor, wallExterior: number, wallInter
   const floorBuf = new GeoBuffer(true, true);
   const roomTris: FloorGeometry["roomTris"] = [];
   const holeLines = new LineBuffer();
+  const cutHoles: Vec2[][] = [];
   for (const room of floor.rooms) {
     if (room.points.length < 3) continue;
     const poly = ccw(room.points);
     const look = FLOOR_LOOK[room.floor_material] ?? FLOOR_LOOK.wood;
     const top = new Color(look.color);
     const inside = holes.filter((h) => h.every((p) => pointInPolygon(p, poly)));
+    cutHoles.push(...inside);
     const all = [...poly, ...inside.flat()];
     const start = floorBuf.count;
     for (const [i, j, l] of triangulate(poly, inside)) {
@@ -132,7 +136,9 @@ export function buildFloorGeometry(floor: Floor, wallExterior: number, wallInter
       for (let i = 0; i < h.length; i++) {
         const a = h[i];
         const b = h[(i + 1) % h.length];
-        holeLines.seg([a[0], 0.004, a[1]], [b[0], 0.004, b[1]], EDGE_SOFT);
+        // a bright rim like the walls' tops, so the opening reads from above
+        holeLines.seg([a[0], 0.006, a[1]], [b[0], 0.006, b[1]], EDGE_TOP);
+        holeLines.seg([a[0], -SLAB, a[1]], [b[0], -SLAB, b[1]], EDGE_SOFT);
       }
     }
   }
@@ -273,6 +279,7 @@ export function buildFloorGeometry(floor: Floor, wallExterior: number, wallInter
   return {
     floor: floorBuf.geometry(),
     roomTris,
+    holes: cutHoles,
     walls: wallBuf.geometry(),
     lines: lines.geometry(),
     shadow: shadow.geometry(),

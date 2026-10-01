@@ -47,7 +47,7 @@ const FACE_GAP = 0.012;
  * Builds the light surface of a floor: a grid of `cell` metres on every room floor and strips on the
  * room side of every wall face, split at the cut height and left out where doors and windows are.
  */
-export function buildLightSurface(floor: Floor, walls: Wall[], wallBuckets: number[], openings: OpeningInfo[], cell: number): LightSurface {
+export function buildLightSurface(floor: Floor, walls: Wall[], wallBuckets: number[], openings: OpeningInfo[], cell: number, holes: Vec2[][] = []): LightSurface {
   const pos: number[] = [];
   const normal: number[] = [];
   const room: number[] = [];
@@ -75,6 +75,8 @@ export function buildLightSurface(floor: Floor, walls: Wall[], wallBuckets: numb
         const cx = x0 + (i + 0.5) * cell;
         const cz = z0 + (j + 0.5) * cell;
         if (!pointInPolygon([cx, cz], r.points)) continue;
+        // no light over a floor opening: one looks through it
+        if (holes.some((h) => pointInPolygon([cx, cz], h))) continue;
         const a = x0 + i * cell;
         const b = z0 + j * cell;
         quad([a, LIFT, b], [a, LIFT, b + cell], [a + cell, LIFT, b + cell], [a + cell, LIFT, b], [0, 1, 0], ri, -1);

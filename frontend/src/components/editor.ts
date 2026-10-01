@@ -14,6 +14,7 @@ import { TOGGLE_KINDS } from "../devices.ts";
 import { storedImageIds } from "../transfer.ts";
 import { DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS,
   normalizeBuilding,
+  furnitureFootprint,
 } from "../model.ts";
 import { furnishRoom, PACKAGES, type PackageId } from "../packages.ts";
 import { generateWalls, locateOnWalls, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
@@ -2757,7 +2758,12 @@ export class Fp3dEditor extends LitElement {
           : nothing}
       </div>
       ${f.type === "stairs" ? html`<p class="fp3d-sub">${this.t("stairs_hint")}</p>` : nothing}
-      ${f.type === "stairwell" ? html`<p class="fp3d-sub">${this.t("stairwell_hint")}</p>` : nothing}
+      ${f.type === "stairwell"
+        ? html`<p class="fp3d-sub">${this.t("stairwell_hint")}</p>
+            ${this.floor && !this.floor.rooms.some((r) => r.points.length >= 3 && furnitureFootprint(f).every((p) => pointInPolygon(p, r.points)))
+              ? html`<p class="fp3d-sub fp3d-pack-error">${this.t("stairwell_outside")}</p>`
+              : nothing}`
+        : nothing}
       ${f.type === "lamp_pendant"
         ? html`<div class="fp3d-form">
             <label class="fp3d-field fp3d-wide"
