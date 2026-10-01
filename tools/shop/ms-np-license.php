@@ -134,11 +134,11 @@ function ms_np_key_in_mail(WC_Order $order, bool $sent_to_admin, bool $plain_tex
         return;
     }
     if ($plain_text) {
-        echo "\n" . 'NeonPlan 3D – Lizenzschlüssel: ' . $key . "\n" . 'In NeonPlan 3D unter Editor > Packs > Shop-Verbindung eintragen; die gekauften Packs erscheinen dann dort und bekommen Updates von selbst.' . "\n\n";
+        echo "\n" . 'NeonPlan 3D – Lizenzschlüssel: ' . $key . "\n" . 'In NeonPlan 3D unter Erweiterungen > Shop-Verbindung eintragen; die gekauften Packs erscheinen dann dort und bekommen Updates von selbst.' . "\n\n";
         return;
     }
     echo '<h2>NeonPlan 3D – Lizenzschlüssel</h2><p style="font-size:1.3em;font-family:monospace"><b>' . esc_html($key) . '</b></p>'
-        . '<p>In NeonPlan 3D unter <i>Editor › Packs › Shop-Verbindung</i> eintragen. Die gekauften Packs erscheinen dann dort und bekommen Updates von selbst. Alles Installierte funktioniert auch ohne Verbindung.</p>';
+        . '<p>In NeonPlan 3D unter <i>Erweiterungen › Shop-Verbindung</i> eintragen. Die gekauften Packs erscheinen dann dort und bekommen Updates von selbst. Alles Installierte funktioniert auch ohne Verbindung.</p>';
 }
 
 add_action('woocommerce_order_details_after_order_table', 'ms_np_key_in_order');
@@ -147,7 +147,7 @@ function ms_np_key_in_order(WC_Order $order): void
     $key = ms_np_ensure_license($order);
     if ($key !== '') {
         echo '<section class="ms-np-license"><h2>NeonPlan 3D – Lizenzschlüssel</h2><p style="font-size:1.3em;font-family:monospace"><b>' . esc_html($key) . '</b></p>'
-            . '<p>In NeonPlan 3D unter <i>Editor › Packs › Shop-Verbindung</i> eintragen.</p></section>';
+            . '<p>In NeonPlan 3D unter <i>Erweiterungen › Shop-Verbindung</i> eintragen.</p></section>';
     }
 }
 
@@ -157,7 +157,7 @@ function ms_np_key_in_account(): void
     $key = (string) get_user_meta(get_current_user_id(), MS_NP_LICENSE_META, true);
     if ($key !== '') {
         echo '<section class="ms-np-license"><h3>NeonPlan 3D – Lizenzschlüssel</h3><p style="font-size:1.3em;font-family:monospace"><b>' . esc_html($key) . '</b></p>'
-            . '<p>In NeonPlan 3D unter <i>Editor › Packs › Shop-Verbindung</i> eintragen. Gekaufte Packs erscheinen dort und bekommen Updates von selbst.</p></section>';
+            . '<p>In NeonPlan 3D unter <i>Erweiterungen › Shop-Verbindung</i> eintragen. Gekaufte Packs erscheinen dort und bekommen Updates von selbst.</p></section>';
     }
 }
 

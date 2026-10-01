@@ -127,7 +127,7 @@ Pack erneut importiert wird.
 
 Jeder Kunde bekommt mit dem ersten Pack-Kauf **einen Schlüssel** (`NP-XXXX-XXXX-XXXX-XXXX`), der in
 der Bestell-Mail, auf der Danke-Seite und im Kundenkonto steht. In NeonPlan 3D wird er einmal unter
-*Editor › Packs › Shop-Verbindung* eingetragen. Danach:
+*Erweiterungen › Shop-Verbindung* eingetragen. Danach:
 
 - listet die Integration die gekauften Packs (Knopf „Installieren“ beziehungsweise „Aktualisieren“),
 - holt sie **signiert für diese Installation**: das Payload-Feld `instance` trägt den Fingerabdruck

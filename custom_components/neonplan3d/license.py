@@ -29,8 +29,11 @@ _LOGGER = logging.getLogger(__name__)
 SHOP_API = "https://mastershort.de/wp-json/neonplan/v1"
 SHOP_URL = "https://mastershort.de/neonplan3d/"
 REFRESH_INTERVAL = timedelta(hours=24)
-# the first check after a start waits a little, so a restart does not hammer the shop
-FIRST_CHECK_DELAY = 180
+# the first check after a start waits a random while (5 minutes to 6 hours): many installations restart
+# at the same moment after a Home Assistant release, and their checks should not arrive together
+FIRST_CHECK_DELAY = (300, 6 * 3600)
+# a check this recent makes the next one wait (a restart does not ask the shop again)
+MIN_CHECK_AGE = 20 * 3600
 KEY_PATTERN = re.compile(r"^NP(-[A-Z0-9]{4}){4}$")
 _TIMEOUT = aiohttp.ClientTimeout(total=30)
 
@@ -204,6 +207,8 @@ async def async_refresh(hass: HomeAssistant, data: FloorplanData, install_update
 async def async_refresh_quietly(hass: HomeAssistant, data: FloorplanData) -> None:
     """The daily check: failures are kept in the status, never raised."""
     if not data.license.get("key"):
+        return
+    if time.time() - (data.license.get("checked_at") or 0) < MIN_CHECK_AGE:
         return
     try:
         await async_refresh(hass, data)

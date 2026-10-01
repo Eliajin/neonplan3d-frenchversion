@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import random
 
 from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
@@ -53,7 +54,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await async_refresh_quietly(hass, data)
 
     entry.async_on_unload(async_track_time_interval(hass, _check, REFRESH_INTERVAL))
-    entry.async_on_unload(async_call_later(hass, FIRST_CHECK_DELAY, _check))
+    entry.async_on_unload(async_call_later(hass, random.uniform(*FIRST_CHECK_DELAY), _check))
 
     # static paths cannot be unregistered, so they are registered once per run
     if not hass.data.get(_STATIC_REGISTERED):

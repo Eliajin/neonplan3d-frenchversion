@@ -120,6 +120,8 @@ async def test_activate_install_and_update(hass: HomeAssistant, hass_ws_client, 
     aioclient_mock.post(
         f"{lic.SHOP_API}/pack", text=_sign(private, keys, {**PAYLOAD, "instance": fp, "licensee": "Anna", "release": 2})
     )
+    # a check from the last 20 hours makes the daily check wait: pretend the last one is old
+    hass.data[DOMAIN].license["checked_at"] = 0
     await lic.async_refresh_quietly(hass, hass.data[DOMAIN])
     assert hass.data[DOMAIN].packs[0]["release"] == 2
     await client.send_json_auto_id({"type": "neonplan3d/license/get"})
