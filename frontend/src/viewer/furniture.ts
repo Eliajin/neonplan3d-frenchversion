@@ -821,6 +821,8 @@ export function pushFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuff
     case "stairs":
       stairs(b, w, d, h);
       break;
+    case "stairwell":
+      return; // only a hole in the floor (see stairHoles in build.ts), nothing to draw
     case "sideboard":
       sideboard(b, w, d, h);
       break;

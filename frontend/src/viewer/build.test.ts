@@ -130,3 +130,17 @@ test("clipping a wall footprint along its axis", () => {
   near(Math.min(...xs), 1);
   near(Math.max(...xs), 2.5);
 });
+
+test("a stairwell opening cuts a hole into its own floor; stairs below reaching up do too", () => {
+  const upper = floorWith([rect("a", 0, 0, 6, 4)]);
+  upper.elevation = 3;
+  upper.furniture.push({ id: "w", type: "stairwell", x: 3, z: 2, rotation: 0, w: 1, d: 2, h: 0.02, variant: null });
+  const lower = floorWith([rect("b", 0, 0, 6, 4)]);
+  lower.furniture.push({ id: "s", type: "stairs", x: 1, z: 2, rotation: 0, w: 1, d: 2.5, h: 3, variant: null });
+  const holes = stairHoles([lower, upper], upper);
+  assert.equal(holes.length, 2);
+  // the floor loses the area of both holes
+  const solid = area(buildFloorGeometry(upper, EXT, INT).floor);
+  const cut = area(buildFloorGeometry(upper, EXT, INT, holes).floor);
+  assert.ok(solid - cut > 4.4 && solid - cut < 4.6, `${solid - cut}`);
+});

@@ -376,6 +376,7 @@ export const FURNITURE_TYPES = [
   "robot_vacuum",
   "parking",
   "fridge_smart",
+  "stairwell",
 ] as const;
 
 /** Furniture library sections (the editor lists them in this order). */
@@ -386,7 +387,7 @@ export const FURNITURE_GROUPS: Record<string, FurnitureType[]> = {
   kitchen: ["kitchen", "kitchen_wall", "kitchen_tall", "island", "sink", "stove", "dishwasher", "fridge", "fridge_smart"],
   sleeping: ["bed", "bunk_bed", "nightstand", "wardrobe", "dresser"],
   bath: ["bathtub", "shower", "wc", "washbasin", "washer", "dryer"],
-  work: ["desk", "office_chair", "tall_cabinet", "coat_rack", "radiator", "stairs", "robot_vacuum"],
+  work: ["desk", "office_chair", "tall_cabinet", "coat_rack", "radiator", "stairs", "stairwell", "robot_vacuum"],
   vehicles: ["parking"],
 };
 
@@ -409,7 +410,7 @@ export const LAMP_TYPES = new Set<string>([
 
 /** Items that can be lifted off the floor (a wall cabinet, a shelf): everything but lamps hung from the ceiling and the ceiling-mounted pack items. */
 export function canLift(f: Pick<Furniture, "type">): boolean {
-  if (["lamp_ceiling", "lamp_downlight", "lamp_spot", "lamp_panel", "lamp_pendant", "led_strip", "stairs", "parking"].includes(f.type)) return false;
+  if (["lamp_ceiling", "lamp_downlight", "lamp_spot", "lamp_panel", "lamp_pendant", "led_strip", "stairs", "stairwell", "parking"].includes(f.type)) return false;
   return packItem(f.type)?.mount !== "ceiling";
 }
 
@@ -505,6 +506,7 @@ export const FURNITURE_SIZE: Record<FurnitureType, [number, number, number]> = {
   kitchen: [2.4, 0.62, 0.92],
   fridge: [0.6, 0.65, 1.8],
   fridge_smart: [0.91, 0.73, 1.78],
+  stairwell: [1.0, 2.6, 0.02],
   stove: [0.6, 0.62, 0.92],
   sink: [0.9, 0.62, 0.92],
   bathtub: [1.7, 0.75, 0.58],

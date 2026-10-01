@@ -482,9 +482,12 @@ function buildShadow(edges: OutlineEdge[], rooms: readonly Room[], spans: Map<Wa
 
 /** Ceiling openings of a floor: stairs on the floor directly below that reach up to it. */
 export function stairHoles(floors: readonly Floor[], floor: Floor): Vec2[][] {
+  // a stairwell opening placed on this floor cuts its floor; stairs below that reach up here do too
+  const own = floor.furniture.filter((f) => f.type === "stairwell").map(furnitureFootprint);
   const below = floors.filter((f) => f.elevation < floor.elevation).sort((p, q) => q.elevation - p.elevation)[0];
-  if (!below) return [];
-  return below.furniture.filter((f) => f.type === "stairs" && below.elevation + f.h >= floor.elevation - 0.3).map(furnitureFootprint);
+  if (!below) return own;
+  const stairs = below.furniture.filter((f) => f.type === "stairs" && below.elevation + f.h >= floor.elevation - 0.3).map(furnitureFootprint);
+  return [...own, ...stairs];
 }
 
 function unit(v: Vec2): Vec2 {

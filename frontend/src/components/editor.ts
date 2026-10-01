@@ -2753,6 +2753,7 @@ export class Fp3dEditor extends LitElement {
           : nothing}
       </div>
       ${f.type === "stairs" ? html`<p class="fp3d-sub">${this.t("stairs_hint")}</p>` : nothing}
+      ${f.type === "stairwell" ? html`<p class="fp3d-sub">${this.t("stairwell_hint")}</p>` : nothing}
       ${f.type === "lamp_pendant"
         ? html`<div class="fp3d-form">
             <label class="fp3d-field fp3d-wide"
