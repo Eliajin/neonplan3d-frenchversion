@@ -28,6 +28,7 @@ const DEFAULTS: Partial<CardConfig> = {
   alert_jump: false,
   scenes: true,
   motion_trail: false,
+  weather: true,
   idle_return: 0,
   night: "off",
   idle_orbit: false,
@@ -94,7 +95,7 @@ export class Floorplan3dCardEditor extends LitElement {
     </label>`;
   }
 
-  private toggle(key: "explode" | "energy" | "room_panel" | "stats" | "fullscreen_button" | "room_names" | "alerts" | "alert_jump" | "scenes" | "idle_orbit" | "motion_trail", label: I18nKey, hint?: I18nKey) {
+  private toggle(key: "explode" | "energy" | "room_panel" | "stats" | "fullscreen_button" | "room_names" | "alerts" | "alert_jump" | "scenes" | "idle_orbit" | "motion_trail" | "weather", label: I18nKey, hint?: I18nKey) {
     const on = this.value[key];
     return html`<label class="toggle">
       <input type="checkbox" .checked=${on} @change=${(e: Event) => this.set(key, (e.target as HTMLInputElement).checked)} />
@@ -186,7 +187,8 @@ export class Floorplan3dCardEditor extends LitElement {
       <p class="hint">${this.t("card_idle_hint")}</p>
       ${this.toggle("idle_orbit", "card_idle_orbit", "card_idle_orbit_hint")}
       ${this.toggle("alerts", "card_alerts", "card_alerts_hint")} ${this.toggle("alert_jump", "card_alert_jump", "card_alert_jump_hint")}
-      ${this.toggle("scenes", "card_scenes", "card_scenes_hint")} ${this.toggle("motion_trail", "card_motion_trail", "card_motion_trail_hint")}`;
+      ${this.toggle("scenes", "card_scenes", "card_scenes_hint")} ${this.toggle("motion_trail", "card_motion_trail", "card_motion_trail_hint")}
+      ${this.toggle("weather", "card_weather", "card_weather_hint")}`;
   }
 
   protected render() {

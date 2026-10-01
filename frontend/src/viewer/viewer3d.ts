@@ -7,6 +7,8 @@
 
 import {
   AdditiveBlending,
+  FogExp2,
+  CircleGeometry,
   Box3,
   CanvasTexture,
   ClampToEdgeWrapping,
@@ -187,6 +189,16 @@ export interface ScreenState {
 export interface SunState {
   elevation: number;
   azimuth: number;
+}
+
+/** Weather outside (each 0…1) and the sky colour behind the house (for fog). */
+export interface WeatherView {
+  rain: number;
+  snow: number;
+  fog: number;
+  cloud: number;
+  wind: number;
+  sky: [number, number, number];
 }
 
 export interface PersonPin {
@@ -456,6 +468,14 @@ export class FloorplanViewer {
   private theme: Theme = "neon";
   private readonly themeUniform: ThemeUniform = { value: 0 };
   private sun: SunState | null = null;
+  private weather: WeatherView | null = null;
+  /** Rain streaks and snow flakes over the plot, the sun or moon disc in the sky. */
+  private rain = new LineSegments(new Geometry(), new LineBasicMaterial({ color: 0x9fc8ff, transparent: true, opacity: 0.4, blending: AdditiveBlending, depthWrite: false }));
+  private snow = new Points(new Geometry(), new PointsMaterial({ color: 0xf4f8ff, size: 0.14, transparent: true, opacity: 0.85, depthWrite: false }));
+  private skyDisc = new Mesh(new CircleGeometry(1, 28), new MeshBasicMaterial({ color: 0xffd98a, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false }));
+  private weatherBox = { x0: -10, x1: 10, z0: -10, z1: 10, y0: 0, y1: 8 };
+  private weatherTimer: ReturnType<typeof setTimeout> | undefined;
+  private weatherLast = 0;
   /** Heatmap colour per room id (null: normal floors). */
   private roomTint: Map<string, [number, number, number]> | null = null;
   private houseRadius = 20;
@@ -476,6 +496,13 @@ export class FloorplanViewer {
     this.ground.rotation.x = -Math.PI / 2;
     this.ground.renderOrder = -1;
     this.scene.add(this.ground, this.root);
+    this.rain.frustumCulled = false;
+    this.snow.frustumCulled = false;
+    this.rain.visible = false;
+    this.snow.visible = false;
+    this.skyDisc.visible = false;
+    this.skyDisc.renderOrder = -1;
+    this.scene.add(this.rain, this.snow, this.skyDisc);
     this.controls = this.makeControls();
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(host);
@@ -776,7 +803,129 @@ export class FloorplanViewer {
   setSun(sun: SunState | null): void {
     this.sun = sun;
     for (const fv of this.floors) this.buildSun(fv);
+    this.placeSky();
     this.invalidate();
+  }
+
+  /** Weather outside: particles over the plot, fog, a dimmer sun; nothing on the tablet level but the dimming. */
+  setWeather(weather: WeatherView | null): void {
+    this.weather = weather;
+    for (const fv of this.floors) this.buildSun(fv);
+    this.applyWeather();
+    this.placeSky();
+    this.invalidate();
+  }
+
+  private applyWeather(): void {
+    const w = this.weather;
+    const on = !!w && !this.lowQuality;
+    const skyColor = w ? new Color(w.sky[0] / 255, w.sky[1] / 255, w.sky[2] / 255) : null;
+    this.scene.fog = on && w.fog > 0 && skyColor ? new FogExp2(skyColor, 0.01 + 0.035 * w.fog) : null;
+    const rainCount = on ? Math.round(700 * w.rain) : 0;
+    const snowCount = on ? Math.round(450 * w.snow) : 0;
+    this.seedParticles(this.rain, rainCount * 2, true);
+    this.seedParticles(this.snow, snowCount, false);
+    this.rain.visible = rainCount > 0;
+    this.snow.visible = snowCount > 0;
+  }
+
+  /** Random positions over the plot (rain as pairs: a streak's top and bottom). */
+  private seedParticles(obj: LineSegments | Points, vertices: number, streaks: boolean): void {
+    const current = obj.geometry.getAttribute("position") as Float32BufferAttribute | undefined;
+    if ((current?.count ?? 0) === vertices) return;
+    const b = this.weatherBox;
+    const p = new Float32Array(vertices * 3);
+    const step = streaks ? 2 : 1;
+    for (let i = 0; i < vertices; i += step) {
+      const x = b.x0 + Math.random() * (b.x1 - b.x0);
+      const y = b.y0 + Math.random() * (b.y1 - b.y0);
+      const z = b.z0 + Math.random() * (b.z1 - b.z0);
+      p.set([x, y, z], i * 3);
+      if (streaks) p.set([x, y - 0.45, z], i * 3 + 3);
+    }
+    obj.geometry.dispose();
+    const g = new Geometry();
+    g.setAttribute("position", new Float32BufferAttribute(p, 3));
+    obj.geometry = g;
+  }
+
+  /** Lets rain fall and snow drift; true while something moved. */
+  private stepWeather(now: number): boolean {
+    const w = this.weather;
+    if (!w || (!this.rain.visible && !this.snow.visible)) {
+      this.weatherLast = 0;
+      return false;
+    }
+    const dt = this.weatherLast ? Math.min(0.1, (now - this.weatherLast) / 1000) : 0;
+    this.weatherLast = now;
+    if (!dt) return true;
+    const b = this.weatherBox;
+    const span = b.y1 - b.y0;
+    const drift = w.wind * 2.5;
+    if (this.rain.visible) {
+      const a = this.rain.geometry.getAttribute("position") as Float32BufferAttribute;
+      const p = a.array as Float32Array;
+      const fall = (8 + 4 * w.rain) * dt;
+      for (let i = 0; i < p.length; i += 6) {
+        let y = p[i + 1] - fall;
+        let x = p[i] + drift * dt;
+        if (y < b.y0) {
+          y += span;
+          x = b.x0 + Math.random() * (b.x1 - b.x0);
+        }
+        if (x > b.x1) x -= b.x1 - b.x0;
+        p[i] = x;
+        p[i + 1] = y;
+        p[i + 3] = x - drift * 0.05;
+        p[i + 4] = y - 0.45;
+        p[i + 5] = p[i + 2];
+      }
+      a.needsUpdate = true;
+    }
+    if (this.snow.visible) {
+      const a = this.snow.geometry.getAttribute("position") as Float32BufferAttribute;
+      const p = a.array as Float32Array;
+      const t = now / 1000;
+      for (let i = 0; i < p.length; i += 3) {
+        let y = p[i + 1] - (0.9 + 0.6 * w.snow) * dt;
+        let x = p[i] + (drift + Math.sin(t + i) * 0.4) * dt;
+        if (y < b.y0) {
+          y += span;
+          x = b.x0 + Math.random() * (b.x1 - b.x0);
+        }
+        if (x > b.x1) x -= b.x1 - b.x0;
+        p[i] = x;
+        p[i + 1] = y;
+      }
+      a.needsUpdate = true;
+    }
+    return true;
+  }
+
+  /** The sun by day, the moon by night: a disc far out along its direction, paler under clouds. */
+  private placeSky(): void {
+    const sun = this.sun;
+    const w = this.weather;
+    const cloud = w?.cloud ?? 0;
+    const night = !sun || sun.elevation < -3;
+    if (!sun || cloud > 0.85 || (!night && sun.elevation < 1)) {
+      this.skyDisc.visible = false;
+      return;
+    }
+    const north = (this.building?.settings.north ?? 0) * DEG;
+    const az = (night ? sun.azimuth + 180 : sun.azimuth) * DEG;
+    const el = Math.max(10, Math.abs(sun.elevation)) * DEG;
+    const b = this.weatherBox;
+    const center = new Vector3((b.x0 + b.x1) / 2, b.y0, (b.z0 + b.z1) / 2);
+    const r = Math.min(300, Math.max(80, this.houseRadius * 5));
+    const dir = new Vector3(Math.sin(north + az) * Math.cos(el), Math.sin(el), -Math.cos(north + az) * Math.cos(el));
+    this.skyDisc.position.copy(center).addScaledVector(dir, r);
+    this.skyDisc.scale.setScalar(r * (night ? 0.03 : 0.04));
+    this.skyDisc.lookAt(center);
+    const mat = this.skyDisc.material as MeshBasicMaterial;
+    mat.color.set(night ? 0xcfd8ee : 0xffd98a);
+    mat.opacity = (night ? 0.55 : 0.85) * (1 - cloud);
+    this.skyDisc.visible = true;
   }
 
   /** Heatmap: floor colour per room id, or null for the normal look. */
@@ -878,6 +1027,11 @@ export class FloorplanViewer {
     clearTimeout(this.effectTimer);
     clearTimeout(this.robotTimer);
     clearTimeout(this.orbitTimer);
+    clearTimeout(this.weatherTimer);
+    for (const o of [this.rain, this.snow, this.skyDisc]) {
+      o.geometry.dispose();
+      (o.material as Material).dispose();
+    }
     this.resizeObserver.disconnect();
     this.intersection?.disconnect();
     document.removeEventListener("visibilitychange", this.onVisibility);
@@ -913,6 +1067,7 @@ export class FloorplanViewer {
   private makeRenderer(quality: Quality): WebGLRenderer {
     const low = quality === "low" || (quality === "auto" && isLowEnd());
     this.lowQuality = low;
+    this.applyWeather();
     this.highQuality = quality === "high";
     const renderer = new WebGLRenderer({ antialias: !low, alpha: true, powerPreference: low ? "low-power" : "default" });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, low ? 1 : quality === "high" ? 2.5 : 2));
@@ -1674,12 +1829,14 @@ export class FloorplanViewer {
   private buildSun(fv: FloorView): void {
     const sun = this.sun;
     const north = (this.building?.settings.north ?? 0) * DEG;
-    const sig = sun ? `${sun.elevation.toFixed(1)},${sun.azimuth.toFixed(1)},${north},${[...fv.openings.values()].map((o) => (o.cover ?? 0).toFixed(2)).join(",")}` : "";
+    // clouds take most of the sunlight
+    const cloud = this.weather?.cloud ?? 0;
+    const sig = sun ? `${sun.elevation.toFixed(1)},${sun.azimuth.toFixed(1)},${north},${cloud.toFixed(2)},${[...fv.openings.values()].map((o) => (o.cover ?? 0).toFixed(2)).join(",")}` : "";
     if (sig === fv.sunSig) return;
     fv.sunSig = sig;
     const buf = new GeoBuffer();
-    if (sun && sun.elevation > 2) {
-      const day = Math.min(1, sun.elevation / 12);
+    if (sun && sun.elevation > 2 && cloud < 0.97) {
+      const day = Math.min(1, sun.elevation / 12) * (1 - 0.8 * cloud);
       const el = sun.elevation * DEG;
       const az = sun.azimuth * DEG;
       // horizontal direction towards the sun in plan coordinates (x right, z down, "up" = -z)
@@ -2068,6 +2225,10 @@ export class FloorplanViewer {
     }
     if (box.isEmpty()) box.set(new Vector3(-4, 0, -4), new Vector3(4, 2.5, 4));
     this.placeGround();
+    // the weather falls over the plot and a margin around it
+    this.weatherBox = { x0: box.min.x - 6, x1: box.max.x + 6, z0: box.min.z - 6, z1: box.max.z + 6, y0: box.min.y, y1: box.max.y + 6 };
+    this.applyWeather();
+    this.placeSky();
     const center = box.getCenter(new Vector3());
     const size = box.getSize(new Vector3());
     // perspective widens the near corners; portrait screens need a little more room for that
@@ -2627,6 +2788,7 @@ export class FloorplanViewer {
     }
     const roofMoving = this.placeRoof(dt);
     const robotsMoving = this.stepRobots(now);
+    const weatherMoving = this.stepWeather(now);
     const moving = cameraMoving || floorsMoving || openingsMoving || flashing || roofMoving;
     const busy: string[] = [];
     if (cameraMoving) busy.push("camera");
@@ -2673,6 +2835,13 @@ export class FloorplanViewer {
         this.orbitTimer = undefined;
         this.invalidate();
       }, this.lowQuality ? 66 : 33);
+    }
+    if (!moving && weatherMoving && !this.weatherTimer) {
+      // falling rain or snow: about 30 frames per second
+      this.weatherTimer = setTimeout(() => {
+        this.weatherTimer = undefined;
+        this.invalidate();
+      }, 33);
     }
     if (!moving && robotsMoving && !this.robotTimer) {
       // a driving robot: about 30 frames per second, 15 on the tablet level

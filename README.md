@@ -62,6 +62,7 @@
   - Stripes move with the power (still at 0 W); grid import is cyan, solar and export yellow, battery green. The animation runs at about 30 fps and stops when nothing flows or the page is hidden.
   - Watt labels at the devices and an energy bar with consumption, grid, solar, battery and tariff.
 - **Shop connection**: a customer key from the publisher's shop lists the bought furniture packs, installs them signed for this installation and checks once a day for updates. Everything installed keeps working offline.
+- **Weather outside**: rain streaks, snow and fog over the plot from a `weather.*` entity, clouds dim the sky and the sunlight through the windows, lightning flashes, the sun by day and the moon by night stand where `sun.sun` puts them. Off on the tablet quality level except the dimming; the panel has a "Weather" switch, the card the option `weather`.
 - **Smart fridge**: a side-by-side fridge whose two doors swing open in 3D while their door sensors report open; the screen on its right door shows pictures by rules like a TV.
 - **Motion trail**: the "Trail" switch shows where motion, occupancy and presence sensors (including a camera's) reported motion in the last 30 minutes: glowing spots with the time, joined in order and fading with age. Sensors placed in the plan sit at their spot, a camera's at the camera, others at the centre of their room.
 - **Presence**: per person a room sensor (e.g. ESPresense, Bermuda) whose state names the room or area; people at home show as pink markers in their room. Floor labels count rooms, lights on, open windows and people.
@@ -107,6 +108,8 @@ alerts: true            # optional: smoke, gas, CO, water, alarm and windows ope
 alert_jump: false       # optional: jump to the room of a new warning
 scenes: true            # optional: scene and script buttons of the selected room
 motion_trail: false     # optional: where motion was reported in the last 30 minutes, with times
+weather: true           # optional: rain, snow, fog, clouds, sun and moon outside the house
+weather_entity: weather.home   # optional: which weather entity (default: the first one)
 idle_return: 0          # optional: kiosk – seconds without a touch until the start view returns
 night: "off"            # optional: kiosk – dim at night: off | sun | "22:00-06:00"
 idle_orbit: false       # optional: kiosk – slow camera turn after the idle return

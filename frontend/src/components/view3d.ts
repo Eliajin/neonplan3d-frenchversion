@@ -27,6 +27,7 @@ import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { getPacks, mountBase, packItem, packsVersion } from "../packs.ts";
 import { parkedVehicles, parkingEntities } from "../parking.ts";
 import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
+import { weatherActive, weatherEntity, weatherState } from "../weather.ts";
 import { searchIndex, searchItems, type SearchItem } from "../search.ts";
 import { coverPositionable, lightAbilities } from "./quick-menu.ts";
 import "./quick-menu.ts";
@@ -58,6 +59,9 @@ export class Fp3dView3d extends LitElement {
     flows: { attribute: false },
     furnish: { type: Boolean },
     trail: { type: Boolean },
+    weather: { type: Boolean },
+    weatherEntityId: { attribute: false },
+    _flash: { state: true },
     selectedFurniture: { attribute: false },
     selectedDevice: { attribute: false },
     _sky: { state: true },
@@ -107,6 +111,14 @@ export class Fp3dView3d extends LitElement {
   declare furnish: boolean;
   /** Motion trail: where motion was reported in the last half hour, with times. */
   declare trail: boolean;
+  /** Weather outside: rain, snow, fog and clouds from a weather entity, sun and moon from sun.sun. */
+  declare weather: boolean;
+  /** The weather entity to use (null: the first one). */
+  declare weatherEntityId: string | null;
+  /** A lightning flash lights the stage for a moment. */
+  private declare _flash: boolean;
+  private flashTimer: ReturnType<typeof setTimeout> | undefined;
+  private cloud = 0;
   /** History rows of the trail's sensors (fetched while the trail is shown, again every minute). */
   private trailRows: Record<string, HistoryRow[]> = {};
   private trailTimer: ReturnType<typeof setInterval> | undefined;
@@ -207,6 +219,9 @@ export class Fp3dView3d extends LitElement {
     this.theme = "neon";
     this.furnish = false;
     this.trail = false;
+    this.weather = true;
+    this.weatherEntityId = null;
+    this._flash = false;
     this.showEnergy = true;
     this.flows = null;
     this.selectedFurniture = null;
@@ -261,6 +276,8 @@ export class Fp3dView3d extends LitElement {
     this.cameraTimer = undefined;
     clearInterval(this.trailTimer);
     this.trailTimer = undefined;
+    clearTimeout(this.flashTimer);
+    this.flashTimer = undefined;
     this.viewer?.dispose();
     this.viewer = null;
   }
@@ -366,6 +383,7 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("selectedFurniture")) v.selectFurniture(this.selectedFurniture);
     if (changed.has("selectedDevice")) v.setSelectedDevice(this.selectedDevice);
     if (changed.has("trail")) this.watchTrail();
+    if (changed.has("weather") || changed.has("weatherEntityId")) this.syncDevices(true);
     if (changed.has("quality") && changed.get("quality") !== undefined) {
       v.setQuality(this.quality);
       this._low = v.low;
@@ -407,7 +425,8 @@ export class Fp3dView3d extends LitElement {
       const warn = this.alertSrc ? alertEntities(this.alertSrc) : [];
       const parking = parkingEntities(b.floors);
       const motion = trailSources(hass, b).map((s) => s.entity);
-      const all = [...placed, ...cameraSensors, ...links, ...power, ...furniture, ...doors, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights, ...heat, ...warn, ...parking, ...motion, "sun.sun"];
+      const weather = weatherEntity(hass, this.weatherEntityId);
+      const all = [...placed, ...cameraSensors, ...links, ...power, ...furniture, ...doors, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights, ...heat, ...warn, ...parking, ...motion, weather, "sun.sun"];
       this.watched = [...new Set(all.filter((id): id is string => !!id))];
       force = true;
     }
@@ -485,7 +504,12 @@ export class Fp3dView3d extends LitElement {
     const sun = hass.states["sun.sun"]?.attributes;
     const elevation = typeof sun?.elevation === "number" ? sun.elevation : null;
     v.setSun(elevation !== null && typeof sun?.azimuth === "number" ? { elevation, azimuth: sun.azimuth } : null);
-    this._sky = elevation === null ? 0 : Math.min(1, Math.max(0, (elevation + 4) / 16));
+    // the weather outside: clouds darken the sky, rain, snow and fog fall over the plot
+    const weather = this.weather && !this.dimmed ? weatherState(hass, weatherEntity(hass, this.weatherEntityId)) : null;
+    this.cloud = weather?.cloud ?? 0;
+    this._sky = (elevation === null ? 0 : Math.min(1, Math.max(0, (elevation + 4) / 16))) * (1 - 0.45 * this.cloud);
+    v.setWeather(weatherActive(weather) ? { ...weather!, sky: this.skyColor() } : null);
+    this.watchLightning(!!weather?.lightning);
     this.applyTint();
     const hasEnergy = summary.grid !== null || summary.solar !== null || summary.battery !== null || summary.tariff !== null;
     const energy = hasEnergy ? summary : null;
@@ -1186,14 +1210,40 @@ export class Fp3dView3d extends LitElement {
     </div>`;
   }
 
+  /** The sky colour behind the house right now (night: deep blue-black, day: lighter and bluer, clouds in between). */
+  private skyColor(): [number, number, number] {
+    const stage = STAGE[this.theme] ?? STAGE.neon;
+    const sky = this._sky;
+    return stage.night[0].map((v, i) => Math.round(v + (stage.day[0][i] - v) * sky)) as [number, number, number];
+  }
+
+  /** While a storm is reported the stage flashes now and then. */
+  private watchLightning(on: boolean): void {
+    if (!on) {
+      clearTimeout(this.flashTimer);
+      this.flashTimer = undefined;
+      return;
+    }
+    if (this.flashTimer) return;
+    const next = () => {
+      this.flashTimer = setTimeout(() => {
+        if (!document.hidden) {
+          this._flash = true;
+          setTimeout(() => (this._flash = false), 140);
+        }
+        next();
+      }, 5000 + Math.random() * 9000);
+    };
+    next();
+  }
+
   protected render() {
-    // night: deep blue-black; day: a lighter, bluer sky behind the house
     const sky = this._sky;
     const mix = (a: number[], b: number[]) => `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * sky)).join(",")})`;
     const stage = STAGE[this.theme] ?? STAGE.neon;
     const style = `--fp3d-sky:${mix(stage.night[0], stage.day[0])};--fp3d-ground:${mix(stage.night[1], stage.day[1])}`;
     return html`<div
-      class="fp3d-stage ${this.roomLabels ? "" : "fp3d-no-room-names"} ${this._low ? "fp3d-low" : ""} ${this.panelOpen ? "fp3d-panel-open" : ""} ${this._alerts.length ? "fp3d-has-alerts" : ""} ${this._through ? "fp3d-through-on" : ""}"
+      class="fp3d-stage ${this.roomLabels ? "" : "fp3d-no-room-names"} ${this._low ? "fp3d-low" : ""} ${this.panelOpen ? "fp3d-panel-open" : ""} ${this._alerts.length ? "fp3d-has-alerts" : ""} ${this._through ? "fp3d-through-on" : ""} ${this._flash ? "fp3d-flash" : ""}"
       style=${style}
     >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.renderEnergy()} ${this.renderLegend()}
@@ -1672,6 +1722,14 @@ export class Fp3dView3d extends LitElement {
         position: absolute;
         inset: 0;
         z-index: 4;
+        pointer-events: none;
+      }
+      .fp3d-flash::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 3;
+        background: rgba(225, 238, 255, 0.4);
         pointer-events: none;
       }
       .fp3d-through-img {

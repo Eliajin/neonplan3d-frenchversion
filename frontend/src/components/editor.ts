@@ -3145,8 +3145,11 @@ export class Fp3dEditor extends LitElement {
 
   private libraryButton(type: string, label: string) {
     const show = (e: Event) => void this.showPreview(type, e.currentTarget as HTMLElement);
+    // a lamp can be switched from 3D, another electric item takes an entity and a power sensor
+    const badge = isLamp(type) ? "light" : isElectric(type) ? "switch" : null;
     return html`<button
-      class="fp3d-btn"
+      class="fp3d-btn ${badge ? "fp3d-lib-electric" : ""}"
+      title=${badge ? this.t(badge === "light" ? "lib_badge_light" : "lib_badge_electric") : label}
       @click=${() => this.addFurniture(type)}
       @mouseenter=${show}
       @focus=${show}
@@ -3154,6 +3157,11 @@ export class Fp3dEditor extends LitElement {
       @blur=${() => (this._preview = null)}
     >
       ${label}
+      ${badge
+        ? html`<svg class="fp3d-lib-badge" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d=${iconPath(badge)} />
+          </svg>`
+        : nothing}
     </button>`;
   }
 
@@ -4252,6 +4260,11 @@ export class Fp3dEditor extends LitElement {
         margin-top: 2px;
         font-size: 13px;
         color: #e8eeff;
+      }
+      .fp3d-lib-badge {
+        margin-left: 4px;
+        color: #37e0ff;
+        vertical-align: -2px;
       }
       .fp3d-shop {
         margin: 10px 0;

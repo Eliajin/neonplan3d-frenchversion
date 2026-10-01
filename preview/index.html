@@ -187,6 +187,11 @@
         },
       };
 
+      if (params.has("weather")) {
+        // ?weather=pouring|snowy|fog|lightning-rainy|cloudy… sets the demo weather
+        hass.states["weather.zuhause"].state = params.get("weather");
+        hass.states["weather.zuhause"].attributes = { ...hass.states["weather.zuhause"].attributes, cloud_coverage: 85, wind_speed: 25, wind_speed_unit: "km/h" };
+      }
       if (params.has("alerts")) {
         // ?alerts: smoke in the kitchen while it rains on open windows
         hass.states["binary_sensor.kueche_rauch"].state = "on";

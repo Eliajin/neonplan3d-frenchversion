@@ -44,6 +44,10 @@ export interface CardConfig {
   scenes?: boolean;
   /** Motion trail: where motion was reported in the last half hour, with times (default off). */
   motion_trail?: boolean;
+  /** Weather outside the house: rain, snow, fog, clouds, sun and moon (default on). */
+  weather?: boolean;
+  /** The weather entity to use (default: the first one). */
+  weather_entity?: string;
   /** Kiosk: seconds without a touch after which the card returns to its start view (0 = never). */
   idle_return?: number;
   /** Kiosk: dim at night – "off", "sun" (sun.sun below the horizon) or a time range "22:00-06:00". */

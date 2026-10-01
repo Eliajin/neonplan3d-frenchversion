@@ -62,6 +62,7 @@ export class Floorplan3dPanel extends LitElement {
     _floorStack: { state: true },
     _roomNames: { state: true },
     _trail: { state: true },
+    _weather: { state: true },
   };
 
   declare hass: HomeAssistant;
@@ -89,6 +90,8 @@ export class Floorplan3dPanel extends LitElement {
   private declare _roomNames: boolean;
   /** Motion trail of the last half hour in 3D. */
   private declare _trail: boolean;
+  /** Weather outside the house in 3D. */
+  private declare _weather: boolean;
 
   private readonly data = new BuildingController(this);
 
@@ -118,6 +121,7 @@ export class Floorplan3dPanel extends LitElement {
     this._floorStack = stack === "stacked" || stack === "single" ? stack : "dim";
     this._roomNames = prefs.get("room_names") !== "0";
     this._trail = prefs.get("trail") === "1";
+    this._weather = prefs.get("weather") !== "0";
   }
 
   private t(key: I18nKey, vars?: Record<string, string | number>): string {
@@ -541,6 +545,7 @@ export class Floorplan3dPanel extends LitElement {
           .floorStack=${this._floorStack}
           .roomLabels=${this._roomNames}
           ?trail=${this._trail}
+          ?weather=${this._weather}
           .panelOpen=${!!this._roomId}
           .floorId=${b.floors.length > 1 ? this._floorId : (b.floors[0]?.id ?? null)}
           .roomId=${this._roomId}
@@ -635,6 +640,17 @@ export class Floorplan3dPanel extends LitElement {
             }}
           >
             ${this.t("trail_short")}
+          </button>
+          <button
+            class="fp3d-chip"
+            aria-pressed=${this._weather}
+            title=${this.t("weather_hint")}
+            @click=${() => {
+              this._weather = !this._weather;
+              prefs.set("weather", this._weather ? "1" : "0");
+            }}
+          >
+            ${this.t("weather_short")}
           </button>
           ${this.isAdmin
             ? html`<button

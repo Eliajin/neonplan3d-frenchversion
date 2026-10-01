@@ -204,6 +204,8 @@ export class Floorplan3dCard extends LitElement {
               .alertJump=${!!c?.alert_jump}
               .scenes=${c?.scenes !== false}
               ?trail=${!!c?.motion_trail}
+              ?weather=${c?.weather !== false}
+              .weatherEntityId=${c?.weather_entity ?? null}
               .dimmed=${this._night}
               .autoOrbit=${this._orbit}
               style=${bar ? "--fp3d-bottom-inset: 52px" : ""}
