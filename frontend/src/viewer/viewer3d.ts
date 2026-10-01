@@ -199,6 +199,8 @@ export interface WeatherView {
   cloud: number;
   wind: number;
   sky: [number, number, number];
+  /** Whether the sun or moon disc shows. */
+  disc?: boolean;
 }
 
 export interface PersonPin {
@@ -908,7 +910,7 @@ export class FloorplanViewer {
     const w = this.weather;
     const cloud = w?.cloud ?? 0;
     const night = !sun || sun.elevation < -3;
-    if (!sun || cloud > 0.85 || (!night && sun.elevation < 1)) {
+    if (!sun || !w || w.disc === false || cloud > 0.85 || (!night && sun.elevation < 1)) {
       this.skyDisc.visible = false;
       return;
     }

@@ -27,7 +27,7 @@ import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { getPacks, mountBase, packItem, packsVersion } from "../packs.ts";
 import { parkedVehicles, parkingEntities } from "../parking.ts";
 import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
-import { weatherActive, weatherEntity, weatherState } from "../weather.ts";
+import { limitEffects, weatherEntity, weatherState } from "../weather.ts";
 import { searchIndex, searchItems, type SearchItem } from "../search.ts";
 import { coverPositionable, lightAbilities } from "./quick-menu.ts";
 import "./quick-menu.ts";
@@ -505,10 +505,13 @@ export class Fp3dView3d extends LitElement {
     const elevation = typeof sun?.elevation === "number" ? sun.elevation : null;
     v.setSun(elevation !== null && typeof sun?.azimuth === "number" ? { elevation, azimuth: sun.azimuth } : null);
     // the weather outside: clouds darken the sky, rain, snow and fog fall over the plot
-    const weather = this.weather && !this.dimmed ? weatherState(hass, weatherEntity(hass, this.weatherEntityId ?? b.settings.weather_entity)) : null;
+    const raw = this.weather && !this.dimmed ? weatherState(hass, weatherEntity(hass, this.weatherEntityId ?? b.settings.weather_entity)) : null;
+    const weather = raw ? limitEffects(raw, b.settings.weather_effects) : null;
     this.cloud = weather?.cloud ?? 0;
     this._sky = (elevation === null ? 0 : Math.min(1, Math.max(0, (elevation + 4) / 16))) * (1 - 0.45 * this.cloud);
-    v.setWeather(weatherActive(weather) ? { ...weather!, sky: this.skyColor() } : null);
+    // with the feature on, the viewer always gets the weather (the sun and moon disc shows on clear days too)
+    const disc = weather ? weather.sky : (b.settings.weather_effects ?? ["sky"]).includes("sky");
+    v.setWeather(this.weather && !this.dimmed ? { ...(weather ?? { rain: 0, snow: 0, fog: 0, cloud: 0, wind: 0 }), sky: this.skyColor(), disc } : null);
     this.watchLightning(!!weather?.lightning);
     this.applyTint();
     const hasEnergy = summary.grid !== null || summary.solar !== null || summary.battery !== null || summary.tariff !== null;

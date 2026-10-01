@@ -8,6 +8,7 @@ import { furnitureSymbol } from "./furniture2d.ts";
 import { closeGaps, suggestedThickness } from "../geometry/gaps.ts";
 import { keepInRoom, snapToWall } from "../geometry/snap.ts";
 import { weatherEntity } from "../weather.ts";
+import { DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS } from "../model.ts";
 import { furnishRoom, PACKAGES, type PackageId } from "../packages.ts";
 import { generateWalls, locateOnWalls, pointOnRoomEdge, type Wall } from "../geometry/walls.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
@@ -3651,6 +3652,21 @@ export class Fp3dEditor extends LitElement {
         ${this.hass
           ? this.entitySelect(this.t("weather_entity"), s.weather_entity ?? null, weatherEntity(this.hass, null), this.entityOptions((id) => id.startsWith("weather.")), (v) => set({ weather_entity: v }))
           : nothing}
+        <div class="fp3d-sub fp3d-wide">${this.t("weather_effects")}</div>
+        ${WEATHER_EFFECTS.map((effect) => {
+          const current = s.weather_effects ?? DEFAULT_WEATHER_EFFECTS;
+          return html`<label class="fp3d-check"
+            ><input
+              type="checkbox"
+              .checked=${current.includes(effect)}
+              @change=${(ev: Event) => {
+                const checked = (ev.target as HTMLInputElement).checked;
+                set({ weather_effects: checked ? [...new Set([...current, effect])] : current.filter((x) => x !== effect) });
+              }}
+            />
+            ${this.t(`weather_effect_${effect}` as I18nKey)}</label
+          >`;
+        })}
       </div>
       <p class="fp3d-sub">${this.t("north_hint")} ${this.t("weather_entity_hint")}</p>
     </details>`;

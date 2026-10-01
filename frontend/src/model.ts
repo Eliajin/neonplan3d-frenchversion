@@ -162,7 +162,14 @@ export interface BuildingSettings {
   roof: RoofSettings;
   /** The weather entity shown outside the house (null = the first one). */
   weather_entity?: string | null;
+  /** Which weather effects the 3D view shows (null = all but fog). */
+  weather_effects?: WeatherEffect[] | null;
 }
+
+export const WEATHER_EFFECTS = ["rain", "snow", "fog", "clouds", "lightning", "sky"] as const;
+export type WeatherEffect = (typeof WEATHER_EFFECTS)[number];
+/** The effects shown when the plan does not say: everything but fog (fog greys the whole scene). */
+export const DEFAULT_WEATHER_EFFECTS: WeatherEffect[] = ["rain", "snow", "clouds", "lightning", "sky"];
 
 export const OUTDOOR_TYPES = ["lawn", "terrace", "path", "driveway", "pool", "bed", "hedge", "fence"] as const;
 export type OutdoorType = (typeof OUTDOOR_TYPES)[number];

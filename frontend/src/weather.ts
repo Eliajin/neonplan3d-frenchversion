@@ -2,6 +2,7 @@
  * Weather outside the house, read from a `weather.*` entity: how much it rains or snows, fog, cloud
  * cover, wind and lightning, each 0…1, so the 3D view can draw particles, dim the sky and the sun.
  */
+import { DEFAULT_WEATHER_EFFECTS, type WeatherEffect } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
 
 export interface WeatherState {
@@ -66,6 +67,20 @@ export function weatherState(hass: HomeAssistant, entity: string | null): Weathe
     cloud,
     wind,
     lightning: !!base.lightning,
+  };
+}
+
+/** Only the chosen effects stay (the others are zeroed); `sky` says whether the sun or moon disc shows. */
+export function limitEffects(w: WeatherState, effects: readonly WeatherEffect[] | null | undefined): WeatherState & { sky: boolean } {
+  const on = new Set(effects ?? DEFAULT_WEATHER_EFFECTS);
+  return {
+    ...w,
+    rain: on.has("rain") ? w.rain : 0,
+    snow: on.has("snow") ? w.snow : 0,
+    fog: on.has("fog") ? w.fog : 0,
+    cloud: on.has("clouds") ? w.cloud : 0,
+    lightning: on.has("lightning") && w.lightning,
+    sky: on.has("sky"),
   };
 }
 

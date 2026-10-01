@@ -145,7 +145,6 @@ const shots = [
   { name: "view-alert-banner", query: "?alerts", width: 1280, height: 800, click: "Erdgeschoss" },
   { name: "view-weather-rain", query: "?weather=pouring", width: 1280, height: 800, wait: 1200 },
   { name: "view-weather-snow", query: "?weather=snowy", width: 1280, height: 800, wait: 1200 },
-  { name: "view-weather-fog", query: "?weather=fog", width: 1280, height: 800, wait: 600 },
   { name: "view-trail", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Spur", wait: 1500 },
   { name: "view-fridge", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Küche", viewScript: "v.markerMode = 'none'; const c = v.viewer.controls; c.view.target.set(6.6, 1.0, 0.8); c.view.radius = 3.6; c.view.theta = -0.75; c.view.phi = 1.2; c.events.change(); v.viewer.invalidate();" },
   { name: "card-alert", query: "?card&alerts", width: 1400, height: 900 },

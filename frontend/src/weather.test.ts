@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { HomeAssistant } from "./types.ts";
-import { weatherActive, weatherEntity, weatherState } from "./weather.ts";
+import { limitEffects, weatherActive, weatherEntity, weatherState } from "./weather.ts";
 
 function hassWith(state: string, attributes: Record<string, unknown> = {}): HomeAssistant {
   return {
@@ -44,4 +44,14 @@ test("conditions map to rain, snow, fog, cloud and lightning; attributes refine 
   assert.equal(weatherState(hassWith("sunny"), null), null);
   assert.equal(weatherActive(weatherState(hassWith("sunny"), "weather.zuhause")), false);
   assert.equal(weatherActive(weatherState(hassWith("fog"), "weather.zuhause")), true);
+});
+
+test("only the chosen effects stay; by default everything but fog", () => {
+  const foggy = weatherState(hassWith("fog"), "weather.zuhause")!;
+  const limited = limitEffects(foggy, null);
+  assert.equal(limited.fog, 0);
+  assert.equal(limited.cloud, 0.6);
+  assert.equal(limited.sky, true);
+  const only = limitEffects({ ...foggy, rain: 1, lightning: true }, ["fog"]);
+  assert.deepEqual([only.fog, only.rain, only.cloud, only.lightning, only.sky], [1, 0, 0, false, false]);
 });
