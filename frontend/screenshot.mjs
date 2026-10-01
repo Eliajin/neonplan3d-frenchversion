@@ -90,6 +90,7 @@ const shots = [
   { name: "editor-library", query: "", width: 1280, height: 900, editor: true, editorScript: "e._roomId = 'wohnen'; e._furnQuery = 'sofa';" },
   { name: "editor-split-3d", query: "", width: 1400, height: 900, editor: true, editorScript: "e._split = true; e._furnitureId = 'm2';" },
   { name: "editor-free-wall", query: "", width: 1280, height: 800, editor: true, editorState: { _floorId: "og", _tool: "select" } },
+  { name: "editor-wall-height", query: "", width: 1280, height: 800, editor: true, editorState: { _floorId: "og", _tool: "select", _roomWallId: "w_440_0_440_420" } },
   { name: "view-free-wall", query: "", width: 1280, height: 800, click: "Obergeschoss", then: "Gästezimmer" },
   { name: "editor-hole-tool", query: "", width: 1280, height: 800, editor: true, editorState: { _tool: "hole" } },
   { name: "editor-split-idle", query: "", width: 1400, height: 900, editor: true, editorScript: "e._split = true; e._sidePinned = false;" },

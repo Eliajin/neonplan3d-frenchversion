@@ -107,9 +107,11 @@ export function buildLightSurface(floor: Floor, walls: Wall[], wallBuckets: numb
 
   // walls: the face towards each room
   const cut = Math.min(floor.cut_height, floor.height);
-  const H = floor.height;
-  const rows = [0.02, cut, (cut + H) / 2, H - 0.02];
   walls.forEach((w, wi) => {
+    // rows of light cells up to the wall's own height
+    const H = Math.min(floor.height, w.height ?? floor.height);
+    const c = Math.min(cut, H - 0.02);
+    const rows = [0.02, c, (c + H) / 2, H - 0.02].filter((y, i, a) => i === 0 || y > a[i - 1] + 0.005);
     const dx = w.b[0] - w.a[0];
     const dz = w.b[1] - w.a[1];
     const len = Math.hypot(dx, dz);

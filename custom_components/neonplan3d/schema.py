@@ -30,6 +30,10 @@ ROOM_SCHEMA = vol.Schema(
         vol.Required("floor_material"): vol.All(str, vol.Length(max=32)),
         # entities shown in the room's panel although they are not in the plan
         vol.Optional("panel", default=list): vol.All([vol.All(str, vol.Length(max=255))], vol.Length(max=100)),
+        # height of the wall on each edge (None = full floor height), aligned with the points
+        vol.Optional("wall_heights"): vol.All(
+            [vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.05, max=20)))], vol.Length(max=MAX_POINTS)
+        ),
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -182,6 +186,7 @@ FREE_WALL_SCHEMA = vol.Schema(
         vol.Required("a"): _POINT,
         vol.Required("b"): _POINT,
         vol.Optional("thickness", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.02, max=1))),
+        vol.Optional("height", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.05, max=20))),
     },
     extra=vol.ALLOW_EXTRA,
 )

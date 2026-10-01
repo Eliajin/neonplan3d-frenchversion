@@ -35,6 +35,8 @@ export interface Wall {
   footprint: Vec2[];
   /** A free-standing wall drawn on its own (its id). */
   free?: string;
+  /** Own height in metres; undefined = full floor height. */
+  height?: number;
 }
 
 export interface WallOptions {
@@ -61,6 +63,7 @@ interface Segment {
 
 interface Draft {
   free?: string;
+  height?: number;
   a: number;
   b: number;
   left: number;
@@ -162,6 +165,13 @@ export function generateWalls(rooms: readonly Room[], options: WallOptions, free
     g.push(s);
   }
   const src = (s: Segment): WallSource => ({ room_id: s.room, edge: s.edge, t0: s.t0, t1: s.t1 });
+  // a wall's own height: the lowest one set on its room edges (shared walls take the lower setting)
+  const heightOf = (list: Segment[]): number | undefined => {
+    const hs = list
+      .map((s) => rooms.find((r) => r.id === s.room)?.wall_heights?.[s.edge])
+      .filter((h): h is number => typeof h === "number" && h > 0);
+    return hs.length ? Math.min(...hs) : undefined;
+  };
   let drafts: Draft[] = [];
   for (const g of groups.values()) {
     const first = g[0];
@@ -179,6 +189,7 @@ export function generateWalls(rooms: readonly Room[], options: WallOptions, free
         roomLeft: first.room,
         roomRight: partner.room,
         sources: [src(first), src(partner)],
+        height: heightOf([first, partner]),
       });
     } else {
       drafts.push({
@@ -190,6 +201,7 @@ export function generateWalls(rooms: readonly Room[], options: WallOptions, free
         roomLeft: first.room,
         roomRight: null,
         sources: [src(first)],
+        height: heightOf([first]),
       });
     }
   }
@@ -201,7 +213,8 @@ export function generateWalls(rooms: readonly Room[], options: WallOptions, free
     const mid: Vec2 = [(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2];
     const room = rooms.find((r) => r.points.length >= 3 && pointInPolygon(mid, r.points))?.id ?? null;
     const half = (w.thickness ?? options.interior) / 2;
-    drafts.push({ free: w.id, a: ia, b: ib, left: half, right: half, exterior: false, roomLeft: room, roomRight: room, sources: [] });
+    const height = typeof w.height === "number" && w.height > 0 ? w.height : undefined;
+    drafts.push({ free: w.id, a: ia, b: ib, left: half, right: half, exterior: false, roomLeft: room, roomRight: room, sources: [], height });
   });
 
   // 5. merge collinear runs through nodes where nothing else meets
@@ -228,6 +241,7 @@ export function generateWalls(rooms: readonly Room[], options: WallOptions, free
       sources: w.sources,
       footprint,
       ...(w.free ? { free: w.free } : {}),
+      ...(w.height !== undefined ? { height: w.height } : {}),
     };
   });
   return { walls, warnings: [...new Set(warnings)] };
@@ -269,6 +283,7 @@ function mergeCollinear(drafts: Draft[], verts: Vec2[]): Draft[] {
       if (
         w1.free ||
         w2.free ||
+        w1.height !== w2.height ||
         w1.exterior !== w2.exterior ||
         w1.roomLeft !== w2.roomLeft ||
         w1.roomRight !== w2.roomRight ||

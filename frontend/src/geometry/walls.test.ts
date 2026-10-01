@@ -141,3 +141,16 @@ test("a free-standing wall becomes an interior wall of its room and splits the r
   // too short walls are ignored
   assert.equal(generateWalls([room], { exterior: 0.24, interior: 0.12 }, [{ id: "x", a: [1, 1], b: [1, 1.01] }]).walls.some((w) => w.free), false);
 });
+
+test("walls take their own height: from the room edge (the lower one when shared) or from a free wall", () => {
+  const a = { id: "a", name: "A", area_id: null, points: [[0, 0], [4, 0], [4, 3], [0, 3]] as [number, number][], floor_material: "wood", wall_heights: [null, 1.1, null, null] };
+  const b = { id: "b", name: "B", area_id: null, points: [[4, 0], [7, 0], [7, 3], [4, 3]] as [number, number][], floor_material: "wood", wall_heights: [null, null, null, 0.9] };
+  const free = [{ id: "fw", a: [1, 1] as [number, number], b: [1, 2.5] as [number, number], height: 1.0 }];
+  const { walls } = generateWalls([a, b], { exterior: 0.24, interior: 0.12 }, free);
+  // the shared wall at x = 4: room a says 1.1, room b says 0.9 -> 0.9
+  const shared = walls.find((w) => !w.exterior && !w.free)!;
+  assert.equal(shared.height, 0.9);
+  assert.equal(walls.find((w) => w.free === "fw")!.height, 1.0);
+  // every other wall stands at full height
+  assert.ok(walls.filter((w) => w.exterior).every((w) => w.height === undefined));
+});

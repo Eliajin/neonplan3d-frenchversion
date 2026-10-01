@@ -14,6 +14,8 @@ export interface Room {
   floor_material: string;
   /** Entities shown in the room's panel although they are not in the plan. */
   panel?: string[];
+  /** Height of the wall on each edge (index = edge points[i] -> points[i + 1]); null = full floor height. */
+  wall_heights?: (number | null)[];
 }
 
 export type OpeningType = "door" | "window" | "garage";
@@ -156,6 +158,8 @@ export interface FreeWall {
   b: Vec2;
   /** Thickness in metres (null = the interior wall thickness of the settings). */
   thickness?: number | null;
+  /** Height in metres (null = full floor height), e.g. a half-height wall or a counter. */
+  height?: number | null;
 }
 
 export type RoofType = "none" | "flat" | "gable";

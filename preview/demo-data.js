@@ -379,7 +379,9 @@ DEMO_BUILDING.floors[0].furniture = [
   { ...item("parking", 16.2, 2.7, 2.6, 5.2, 0.02, 90), entity: "device_tracker.zweitwagen", vehicle: "pack:mastershort.vehicles:compact" },
 ];
 // a partition through half of the guest room (a free-standing wall)
-DEMO_BUILDING.floors[1].walls = [{ id: "wall_demo", a: [8, 8], b: [8, 6], thickness: null }];
+// a half-height wall between the kids' room and the office (edge 1 of the kids' room)
+DEMO_BUILDING.floors[1].rooms.find((r) => r.id === "kind").wall_heights = [null, 1.0, null, null];
+DEMO_BUILDING.floors[1].walls = [{ id: "wall_demo", a: [8, 8], b: [8, 6], thickness: null, height: 1.1 }];
 DEMO_BUILDING.floors[1].furniture = [
   item("bed", 1.0, 1.4, 1.0, 2.05, 0.8, 90),
   item("desk", 2.8, 3.8, 1.2, 0.6, 0.75, 180),

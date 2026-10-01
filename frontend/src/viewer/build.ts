@@ -184,7 +184,7 @@ export function buildFloorGeometry(floor: Floor, wallExterior: number, wallInter
     const roomLeft = wall.roomLeft === o.room_id;
     const nLeft: Vec2 = [-ax[1], ax[0]];
     const toRoom: Vec2 = roomLeft ? nLeft : [-nLeft[0], -nLeft[1]];
-    const top = Math.min(floor.height - 0.02, o.sill + o.height);
+    const top = Math.min(wallHeight(wall, floor.height) - 0.02, o.sill + o.height);
     const sill = Math.max(0, Math.min(o.sill, top - 0.1));
     // looking at the wall from the room, "right" is (toRoom.z, -toRoom.x)
     const right: Vec2 = [toRoom[1], -toRoom[0]];
@@ -216,15 +216,16 @@ export function buildFloorGeometry(floor: Floor, wallExterior: number, wallInter
     const b = wallBucket.get(wall)!;
     const ax = unit([wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]]);
     const list = (spans.get(wall) ?? []).sort((p, q) => p.s0 - q.s0);
+    const H = wallHeight(wall, floor.height);
     // pieces along the axis: solid between openings, sill and lintel inside them
     const pieces: { t0: number; t1: number; ranges: [number, number][] }[] = [];
     let t = -Infinity;
     for (const sp of list) {
-      if (sp.s0 > t) pieces.push({ t0: t, t1: sp.s0, ranges: [[-SLAB, floor.height]] });
-      pieces.push({ t0: Math.max(t, sp.s0), t1: sp.s1, ranges: [[-SLAB, sp.sill], [sp.top, floor.height]] });
+      if (sp.s0 > t) pieces.push({ t0: t, t1: sp.s0, ranges: [[-SLAB, H]] });
+      pieces.push({ t0: Math.max(t, sp.s0), t1: sp.s1, ranges: [[-SLAB, sp.sill], [sp.top, H]] });
       t = Math.max(t, sp.s1);
     }
-    pieces.push({ t0: t, t1: Infinity, ranges: [[-SLAB, floor.height]] });
+    pieces.push({ t0: t, t1: Infinity, ranges: [[-SLAB, H]] });
     for (const piece of pieces) {
       const poly = clipAlong(wall.footprint, wall.a, ax, piece.t0, piece.t1);
       if (poly.length < 3) continue;
@@ -255,12 +256,16 @@ export function buildFloorGeometry(floor: Floor, wallExterior: number, wallInter
     for (const [p, q] of subtractSpans(e, spansOf(e.wall, (sp) => sp.sill <= 0.005))) lines.seg([p[0], 0.004, p[1]], [q[0], 0.004, q[1]], EDGE_BASE);
     // cut line: not where an opening crosses the cut height
     for (const [p, q] of subtractSpans(e, spansOf(e.wall, (sp) => sp.sill < cut && sp.top > cut))) lines.seg([p[0], cut, p[1]], [q[0], cut, q[1]], EDGE_CUT, CUT_OFFSET + b);
-    // top line: not where an opening reaches the ceiling
-    for (const [p, q] of subtractSpans(e, spansOf(e.wall, (sp) => sp.top >= floor.height - 0.021))) {
-      lines.seg([p[0], floor.height, p[1]], [q[0], floor.height, q[1]], EDGE_TOP, b);
+    // top line: not where an opening reaches the top; a wall below the cut height keeps its top line
+    const H = wallHeight(e.wall, floor.height);
+    for (const [p, q] of subtractSpans(e, spansOf(e.wall, (sp) => sp.top >= H - 0.021))) {
+      lines.seg([p[0], H, p[1]], [q[0], H, q[1]], EDGE_TOP, H <= cut + 1e-6 ? LOWER_OFFSET + b : b);
     }
   }
-  for (const c of outline.corners) lines.segSplit([c.p[0], 0.004, c.p[1]], [c.p[0], floor.height, c.p[1]], EDGE_SOFT, cut, wallBucket.get(c.wall)!);
+  for (const c of outline.corners) {
+    const H = wallHeight(c.wall, floor.height);
+    lines.segSplit([c.p[0], 0.004, c.p[1]], [c.p[0], H, c.p[1]], EDGE_SOFT, Math.min(cut, H), wallBucket.get(c.wall)!);
+  }
   for (const list of spans.values()) for (const sp of list) pushOpeningLines(lines, sp, cut);
 
   // ---------------------------------------------------------------- furniture and shadows
@@ -497,6 +502,11 @@ export function stairHoles(floors: readonly Floor[], floor: Floor): Vec2[][] {
     .filter((f) => (f.type === "stairs" || packItem(f.type)?.hole) && below.elevation + f.h >= floor.elevation - 0.3)
     .map(furnitureFootprint);
   return [...own, ...stairs];
+}
+
+/** How tall a wall stands: its own height (a low wall, a counter), never above the floor height. */
+export function wallHeight(wall: Wall, floorHeight: number): number {
+  return Math.min(floorHeight, wall.height ?? floorHeight);
 }
 
 function unit(v: Vec2): Vec2 {
