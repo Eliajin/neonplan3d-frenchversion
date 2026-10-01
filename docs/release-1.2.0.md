@@ -7,7 +7,7 @@
   - **Freie Wände:** Wand antippen und im Formular die **Höhe** einstellen.
   - Teilen sich zwei Räume eine Wand, gilt die niedrigere Höhe. Fenster und Türen in einer niedrigen Wand enden an der Wandhöhe. Niedrige Wände erscheinen im Plan heller, in 3D bekommen sie eine leuchtende Oberkante.
 - **Türen und Fenster in einzelnen Wänden:** Mit **Tür & Fenster** auf eine frei stehende Wand tippen, schon sitzt dort eine Tür oder ein Fenster, mit allen Arten, Stilen und Sensoren wie in Raumwänden. Löschst du die Wand, verschwinden ihre Türen und Fenster mit.
-- **Höhe von Wandleuchten und LED-Streifen:** Im Formular gibt es jetzt **Höhe über Boden**, etwa für einen Streifen unter den Hängeschränken oder eine Wandleuchte neben dem Bett. Ohne Angabe bleibt alles wie bisher (Wandleuchte 1,75 m, Streifen unter der Decke).
+- **Höhe von Wandleuchten und LED-Streifen:** Im Formular gibt es jetzt **Höhe über Boden**, etwa für einen Streifen unter den Hängeschränken oder eine Wandleuchte neben dem Bett. Ein Streifen unter 1 m, etwa an der Sockelleiste, strahlt nach oben an die Wand. Ohne Angabe bleibt alles wie bisher (Wandleuchte 1,75 m, Streifen unter der Decke).
 - **Pfeiltasten im Editor:** Das Ausgewählte (Raum, Ecke, Möbel, Gerät, Wand, Außenfläche) rückt um einen Rasterschritt, mit **Umschalt** um 10 cm, mit **Alt** um 1 cm. Türen und Fenster wandern entlang ihrer Wand.
 
 ### Behoben
@@ -33,7 +33,7 @@ Nach dem Update Home Assistant neu starten und die Seite neu laden.
   - **Free walls:** tap the wall and set its **Height** in the form.
   - If two rooms share a wall, the lower height applies. Windows and doors in a low wall end at the wall height. Low walls look lighter in the plan and get a glowing top edge in 3D.
 - **Doors and windows in single walls:** tap a free-standing wall with **Doors & windows** to put a door or window into it, with all types, styles and sensors as in room walls. Deleting the wall removes its doors and windows as well.
-- **Height of wall lights and LED strips:** the form now has **Height above floor**, e.g. for a strip under the wall cabinets or a wall light beside the bed. Without a value nothing changes (wall light at 1.75 m, strip under the ceiling).
+- **Height of wall lights and LED strips:** the form now has **Height above floor**, e.g. for a strip under the wall cabinets or a wall light beside the bed. A strip below 1 m, e.g. on the skirting board, shines up the wall. Without a value nothing changes (wall light at 1.75 m, strip under the ceiling).
 - **Arrow keys in the editor:** the selection (room, corner, furniture, device, wall, outdoor area) moves by one grid step, with **Shift** by 10 cm, with **Alt** by 1 cm. Doors and windows slide along their wall.
 
 ### Fixed

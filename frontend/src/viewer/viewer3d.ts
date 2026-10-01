@@ -248,6 +248,8 @@ const CABLE_HALO = 0.14;
 const LAMP_BODY = 0x2a3a60;
 const LAMP_SHADE = 0x1d2946;
 /** Lamps that hang from the ceiling (hidden in the cut view). */
+/** LED strips mounted below this height (metres) light upwards instead of down. */
+const LOW_STRIP = 1.0;
 const HANGING = new Set<LampModel>(["ceiling", "downlight", "spot", "panel", "pendant", "strip"]);
 const FLASH_MS = 450;
 const EFFECT_MS = 125;
@@ -1238,7 +1240,9 @@ export class FloorplanViewer {
         uplight: [h, "up"],
         table: [base + h - 0.1, "omni"],
         wall: [base + 0.1, "wall"],
-        strip: [base + Math.max(0.02, h) - 0.01, "ceiling"],
+        // a strip under the ceiling or the wall cabinets shines down; one low down (skirting,
+        // behind a cabinet) washes the wall and the floor around it from below
+        strip: [base + Math.max(0.02, h) - 0.01, base < LOW_STRIP ? "up" : "ceiling"],
         bollard: [base + h - 0.08, "ceiling"],
         garden: [base + h, "up"],
       };

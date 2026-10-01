@@ -10,7 +10,7 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 
 - **Wall height per wall:** parapets, counters and half-height dividers. Rooms get a *Wall heights* box with every wall, free walls a height field.
 - **Doors and windows in free walls:** the *Door & window* tool now also works on free-standing walls.
-- **Height above floor** for wall lights and LED strips.
+- **Height above floor** for wall lights and LED strips; strips below 1 m shine upwards.
 - **Arrow keys** nudge the selection in the plan editor: one grid step, Shift 10 cm, Alt 1 cm.
 
 ### Fixes
