@@ -144,7 +144,9 @@ PAYLOAD_SCHEMA = vol.Schema(
         # fingerprint of the installation the pack is bound to (None = any installation)
         vol.Optional("instance", default=None): vol.Any(None, vol.Match(r"^[0-9a-f]{16}$")),
         vol.Optional("description", default=""): vol.All(str, vol.Length(max=400)),
-        vol.Required("items"): vol.All([ITEM_SCHEMA], vol.Length(min=1, max=200)),
+        # Pro features the pack unlocks (a feature pack may carry no furniture at all)
+        vol.Optional("features", default=[]): vol.All([vol.In(["camera_cockpit", "weather"])], vol.Length(max=10)),
+        vol.Required("items"): vol.All([ITEM_SCHEMA], vol.Length(min=0, max=200)),
     }
 )
 
@@ -192,6 +194,8 @@ def validate_payload(payload: Any) -> dict[str, Any]:
     ids = [item["id"] for item in clean["items"]]
     if len(ids) != len(set(ids)):
         raise PackError("invalid_content", "item ids must be unique")
+    if not ids and not clean["features"]:
+        raise PackError("invalid_content", "a pack needs items or features")
     return clean
 
 

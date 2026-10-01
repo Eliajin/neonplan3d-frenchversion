@@ -3371,7 +3371,7 @@ export class Fp3dEditor extends LitElement {
         (p) => html`<div class="fp3d-pack">
           <div>
             <b>${p.name}</b>
-            <span class="fp3d-sub">${this.t("pack_by", { publisher: p.publisher, n: p.items.length })}</span>
+            <span class="fp3d-sub">${p.features?.length ? this.t("pack_features", { publisher: p.publisher, n: p.features.length }) : this.t("pack_by", { publisher: p.publisher, n: p.items.length })}</span>
             ${p.licensee ? html`<span class="fp3d-sub">${this.t("pack_licensed", { name: p.licensee })}${p.release && p.release > 1 ? ` · v${p.release}` : ""}</span>` : nothing}
           </div>
           <button class="fp3d-btn fp3d-danger" @click=${() => this.deletePack(p)}>${this.t("pack_remove")}</button>

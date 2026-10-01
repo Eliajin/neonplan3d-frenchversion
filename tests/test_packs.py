@@ -188,3 +188,13 @@ def test_turned_parts_and_stairs_holes_are_accepted() -> None:
     with pytest.raises(packs.PackError):
         item["parts"][0]["rot"] = 400
         packs.validate_payload({**PAYLOAD, "items": [item]})
+
+
+def test_feature_packs_need_no_items_but_a_pack_needs_something() -> None:
+    """A feature pack unlocks Pro features without furniture; an empty pack is refused."""
+    pro = {**PAYLOAD, "id": "test.pro", "items": [], "features": ["camera_cockpit", "weather"]}
+    assert packs.validate_payload(pro)["features"] == ["camera_cockpit", "weather"]
+    with pytest.raises(packs.PackError):
+        packs.validate_payload({**PAYLOAD, "items": []})
+    with pytest.raises(packs.PackError):
+        packs.validate_payload({**pro, "features": ["time_travel"]})

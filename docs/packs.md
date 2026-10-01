@@ -82,6 +82,15 @@ dessen öffentlicher Schlüssel zusätzlich in `PACK_PUBLIC_KEYS` eingetragen un
   dann mit einem Media Player verknüpfen; die Vorderseite (+z) zeigt die Farbe der laufenden App und
   ihr Bild, wie die eingebauten Fernseher.
 
+## Feature-Packs (NeonPlan Pro)
+
+Ein Pack darf statt Möbeln (oder zusätzlich) `features` tragen, zum Beispiel
+`"features": ["camera_cockpit", "weather"]` mit `"items": []`. Ist so ein Pack installiert, sind die
+Pro-Funktionen frei: `camera_cockpit` (durch die Kamera schauen, Bewegungsspur) und `weather`
+(Wetter draußen). Ohne Pack zeigen die Schalter ein Schloss und ein Hinweis führt zum Shop. Das
+Pro-Pack wird wie jedes Pack signiert, gebunden und über die Shop-Verbindung installiert
+(`private/packs/defs/pro.py`, Produkt-Schlüssel `pro`).
+
 ## Shop-Bilder
 
 `cd frontend && node pack-images.mjs <pack.json>... --out <ordner>` rendert mit der echten 3D-Grafik

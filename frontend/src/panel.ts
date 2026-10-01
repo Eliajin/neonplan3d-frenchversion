@@ -17,6 +17,7 @@ import { furnitureName } from "./furniture-names.ts";
 import { confirmEntities, defaultHeight, entityName, kindOf } from "./devices.ts";
 import { canLift, type LampMount } from "./model.ts";
 import { mountBase } from "./packs.ts";
+import { hasFeature } from "./features.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
 
 type Mode = "view" | "editor";
@@ -640,7 +641,7 @@ export class Floorplan3dPanel extends LitElement {
               prefs.set("trail", this._trail ? "1" : "0");
             }}
           >
-            ${this.t("trail_short")}
+            ${hasFeature("camera_cockpit") ? "" : "🔒 "}${this.t("trail_short")}
           </button>
           <button
             class="fp3d-chip"
@@ -651,7 +652,7 @@ export class Floorplan3dPanel extends LitElement {
               prefs.set("weather", this._weather ? "1" : "0");
             }}
           >
-            ${this.t("weather_short")}
+            ${hasFeature("weather") ? "" : "🔒 "}${this.t("weather_short")}
           </button>
           ${this.isAdmin
             ? html`<button

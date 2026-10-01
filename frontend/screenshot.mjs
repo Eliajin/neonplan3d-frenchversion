@@ -143,6 +143,7 @@ const shots = [
   { name: "phone-floor", query: "", width: 420, height: 800, click: "Erdgeschoss" },
   { name: "card-portrait-room", query: "?card&floor=eg", width: 700, height: 1000, click: "Wohnzimmer" },
   { name: "view-alert-banner", query: "?alerts", width: 1280, height: 800, click: "Erdgeschoss" },
+  { name: "view-pro-locked", query: "?nopro", width: 1280, height: 800, click: "Erdgeschoss", then: "Wohnzimmer", viewScript: "v.lookThrough('camera.wohnzimmer');" },
   { name: "view-weather-rain", query: "?weather=pouring", width: 1280, height: 800, wait: 1200 },
   { name: "view-weather-snow", query: "?weather=snowy", width: 1280, height: 800, wait: 1200 },
   { name: "view-trail", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Spur", wait: 1500 },

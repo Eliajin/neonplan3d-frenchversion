@@ -74,6 +74,8 @@ export interface FurniturePack {
   release?: number;
   /** Fingerprint of the installation the pack is bound to (null = any). */
   instance?: string | null;
+  /** Pro features the pack unlocks (see features.ts). */
+  features?: string[];
   items: PackItem[];
   imported_at?: number;
 }

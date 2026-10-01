@@ -4,6 +4,7 @@
 import { css, html, LitElement, nothing, type TemplateResult } from "lit";
 import { areaEntities, entityName, groupByDevice, isUnavailable, kindOf, roomPanelEntities, type DeviceKind } from "../devices.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
+import { hasFeature } from "../features.ts";
 import { iconPath } from "../icons.ts";
 import { openMoreInfo, stateText } from "../markers.ts";
 import type { Floor, Room } from "../model.ts";
@@ -418,7 +419,7 @@ export class Fp3dRoomPanel extends LitElement {
             title=${this.t("through_camera")}
             @click=${() => this.dispatchEvent(new CustomEvent("camera-look", { detail: { entity: st.entity_id }, bubbles: true, composed: true }))}
           >
-            ${this.t("through_camera")}
+            ${hasFeature("camera_cockpit") ? "" : "🔒 "}${this.t("through_camera")}
           </button>`
         : nothing}
     </div>`;

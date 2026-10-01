@@ -28,6 +28,7 @@ import { getPacks, mountBase, packItem, packsVersion } from "../packs.ts";
 import { parkedVehicles, parkingEntities } from "../parking.ts";
 import { TRAIL_ICON, TRAIL_WINDOW_MS, trailEvents, trailPoints, trailSources, trailTime, type HistoryRow } from "../trail.ts";
 import { limitEffects, weatherEntity, weatherState } from "../weather.ts";
+import { hasFeature, PRO_URL, type Feature } from "../features.ts";
 import { searchIndex, searchItems, type SearchItem } from "../search.ts";
 import { coverPositionable, lightAbilities } from "./quick-menu.ts";
 import "./quick-menu.ts";
@@ -62,6 +63,7 @@ export class Fp3dView3d extends LitElement {
     weather: { type: Boolean },
     weatherEntityId: { attribute: false },
     _flash: { state: true },
+    _proHint: { state: true },
     selectedFurniture: { attribute: false },
     selectedDevice: { attribute: false },
     _sky: { state: true },
@@ -117,6 +119,8 @@ export class Fp3dView3d extends LitElement {
   declare weatherEntityId: string | null;
   /** A lightning flash lights the stage for a moment. */
   private declare _flash: boolean;
+  /** A Pro feature was asked for without the Pro pack: a hint with the shop link. */
+  private declare _proHint: Feature | null;
   private flashTimer: ReturnType<typeof setTimeout> | undefined;
   private cloud = 0;
   /** Entities that ask before a tap switches them. */
@@ -224,6 +228,7 @@ export class Fp3dView3d extends LitElement {
     this.weather = true;
     this.weatherEntityId = null;
     this._flash = false;
+    this._proHint = null;
     this.showEnergy = true;
     this.flows = null;
     this.selectedFurniture = null;
@@ -508,13 +513,13 @@ export class Fp3dView3d extends LitElement {
     const elevation = typeof sun?.elevation === "number" ? sun.elevation : null;
     v.setSun(elevation !== null && typeof sun?.azimuth === "number" ? { elevation, azimuth: sun.azimuth } : null);
     // the weather outside: clouds darken the sky, rain, snow and fog fall over the plot
-    const raw = this.weather && !this.dimmed ? weatherState(hass, weatherEntity(hass, this.weatherEntityId ?? b.settings.weather_entity)) : null;
+    const raw = this.weather && !this.dimmed && hasFeature("weather") ? weatherState(hass, weatherEntity(hass, this.weatherEntityId ?? b.settings.weather_entity)) : null;
     const weather = raw ? limitEffects(raw, b.settings.weather_effects) : null;
     this.cloud = weather?.cloud ?? 0;
     this._sky = (elevation === null ? 0 : Math.min(1, Math.max(0, (elevation + 4) / 16))) * (1 - 0.45 * this.cloud);
     // with the feature on, the viewer always gets the weather (the sun and moon disc shows on clear days too)
     const disc = weather ? weather.sky : (b.settings.weather_effects ?? ["sky"]).includes("sky");
-    v.setWeather(this.weather && !this.dimmed ? { ...(weather ?? { rain: 0, snow: 0, fog: 0, cloud: 0, wind: 0 }), sky: this.skyColor(), disc } : null);
+    v.setWeather(this.weather && !this.dimmed && hasFeature("weather") ? { ...(weather ?? { rain: 0, snow: 0, fog: 0, cloud: 0, wind: 0 }), sky: this.skyColor(), disc } : null);
     this.watchLightning(!!weather?.lightning);
     this.applyTint();
     const hasEnergy = summary.grid !== null || summary.solar !== null || summary.battery !== null || summary.tariff !== null;
@@ -716,7 +721,8 @@ export class Fp3dView3d extends LitElement {
   private watchTrail(): void {
     clearInterval(this.trailTimer);
     this.trailTimer = undefined;
-    if (!this.trail) {
+    if (this.trail && !hasFeature("camera_cockpit")) this._proHint = "camera_cockpit";
+    if (!this.trail || !hasFeature("camera_cockpit")) {
       this.trailRows = {};
       this.syncDevices(true);
       return;
@@ -1080,6 +1086,11 @@ export class Fp3dView3d extends LitElement {
     const v = this.viewer;
     const b = this.building;
     if (!v || !b) return;
+    if (!hasFeature("camera_cockpit")) {
+      this._menu = null;
+      this._proHint = "camera_cockpit";
+      return;
+    }
     const floorId = b.floors.find((f) => f.placements.some((p) => p.entity_id === entityId))?.id;
     if (!floorId) return;
     this._menu = null;
@@ -1102,6 +1113,20 @@ export class Fp3dView3d extends LitElement {
     if (!t) return;
     this._through = null;
     this.viewer?.flyTo(t.back);
+  }
+
+  /** The hint shown when a Pro feature is used without the Pro pack. */
+  private renderProHint() {
+    if (!this._proHint || !this.hass) return nothing;
+    return html`<div class="fp3d-pro" role="dialog">
+      <b>${translate(this.hass, "pro_title")}</b>
+      <span>${translate(this.hass, `pro_feature_${this._proHint}` as I18nKey)}</span>
+      <span class="fp3d-sub">${translate(this.hass, "pro_locked")}</span>
+      <div>
+        <a class="fp3d-chip fp3d-chip-on" href=${PRO_URL} target="_blank" rel="noopener">${translate(this.hass, "pro_shop")}</a>
+        <button class="fp3d-chip" @click=${() => (this._proHint = null)}>${translate(this.hass, "close")}</button>
+      </div>
+    </div>`;
   }
 
   private renderThrough() {
@@ -1142,6 +1167,7 @@ export class Fp3dView3d extends LitElement {
         .hass=${this.hass}
         .entity=${m.entity}
         ?confirmSwitch=${this.confirmSet.has(m.entity)}
+        ?pro=${hasFeature("camera_cockpit")}
         @close=${() => (this._menu = null)}
         @camera-look=${(e: CustomEvent<{ entity: string }>) => this.lookThrough(e.detail.entity)}
       ></fp3d-quick-menu>`;
@@ -1257,7 +1283,7 @@ export class Fp3dView3d extends LitElement {
       style=${style}
     >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.renderEnergy()} ${this.renderLegend()}
-      ${this.renderAlerts()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderSwipe()} ${this.renderThrough()} ${this.renderMenu()}
+      ${this.renderAlerts()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderSwipe()} ${this.renderThrough()} ${this.renderProHint()} ${this.renderMenu()}
       ${this.showStats && this._stats
         ? html`<span class="fp3d-stats"
             ><b>${this._stats.fps ? translate(this.hass, "stats_fps", { fps: this._stats.fps, ms: this._stats.worstMs }) : translate(this.hass, "stats_idle")}</b>
@@ -1733,6 +1759,29 @@ export class Fp3dView3d extends LitElement {
         inset: 0;
         z-index: 4;
         pointer-events: none;
+      }
+      .fp3d-pro {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 6;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-width: 320px;
+        padding: 16px 18px;
+        border-radius: 14px;
+        background: var(--fp3d-chrome-solid);
+        border: 1px solid var(--fp3d-accent);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+      }
+      .fp3d-pro div {
+        display: flex;
+        gap: 8px;
+      }
+      .fp3d-pro a {
+        text-decoration: none;
       }
       .fp3d-flash::after {
         content: "";
