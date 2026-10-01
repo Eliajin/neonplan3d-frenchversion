@@ -662,8 +662,10 @@ export class Fp3dView3d extends LitElement {
           screens.set(f.id, { color: [0.3, 0.85, 1], level: 0.8 });
         }
         if (st && hasScreen(f.type)) {
-          const color = kindOf(st.entity_id) === "media" ? appColor(st) : isActive(st) ? ([0.22, 0.88, 1] as [number, number, number]) : null;
-          const picture = kindOf(st.entity_id) === "media" ? ((st.attributes.entity_picture as string | undefined) ?? null) : null;
+          // without the "screens" feature a screen is only lit or dark: no app colour, no picture
+          const live = hasFeature("screens");
+          const color = live && kindOf(st.entity_id) === "media" ? appColor(st) : isActive(st) || st.state === "playing" ? ([0.22, 0.88, 1] as [number, number, number]) : null;
+          const picture = live && kindOf(st.entity_id) === "media" ? ((st.attributes.entity_picture as string | undefined) ?? null) : null;
           if (color) screens.set(f.id, { color, level: st.state === "playing" ? 1 : 0.6, picture });
         }
         if (taken.has(id)) continue;
@@ -687,12 +689,13 @@ export class Fp3dView3d extends LitElement {
         });
       }
     }
-    // picture rules: the first rule whose entity is in its state puts its picture on the screen
+    // picture rules: the first rule whose entity is in its state puts its picture on the screen (a Pro feature)
     this.cameraScreens = 0;
     const fridges = fridgeDoors(hass, b.floors);
+    const rulesOn = hasFeature("screens");
     for (const floor of b.floors) {
       for (const f of floor.furniture) {
-        if (!f.pictures?.length || !hasScreen(f.type)) continue;
+        if (!rulesOn || !f.pictures?.length || !hasScreen(f.type)) continue;
         // a fridge's screen sits on its right door: no picture while that door stands open
         if (f.type === "fridge_smart" && fridges.get(f.id)?.right) continue;
         const rule = f.pictures.find((r) => pictureRuleMatches(hass, r));

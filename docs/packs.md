@@ -85,11 +85,13 @@ dessen öffentlicher Schlüssel zusätzlich in `PACK_PUBLIC_KEYS` eingetragen un
 ## Feature-Packs (NeonPlan Pro)
 
 Ein Pack darf statt Möbeln (oder zusätzlich) `features` tragen, zum Beispiel
-`"features": ["camera_cockpit", "weather"]` mit `"items": []`. Ist so ein Pack installiert, sind die
-Pro-Funktionen frei: `camera_cockpit` (durch die Kamera schauen, Bewegungsspur) und `weather`
-(Wetter draußen). Ohne Pack zeigen die Schalter ein Schloss und ein Hinweis führt zum Shop. Das
-Pro-Pack wird wie jedes Pack signiert, gebunden und über die Shop-Verbindung installiert
-(`private/packs/defs/pro.py`, Produkt-Schlüssel `pro`).
+`"features": ["weather"]` mit `"items": []`. Ist so ein Pack installiert, ist die Pro-Funktion frei:
+`camera_cockpit` (durch die Kamera schauen, Bewegungsspur), `weather` (Wetter draußen) oder
+`screens` (Bildschirme live: App-Farbe und Cover des Media Players, Bildregeln, Kamera-Livebild auf
+Bildschirmen – ohne das Feature ist ein Bildschirm nur an oder aus). Ohne Pack zeigen die Schalter
+ein Schloss und ein Hinweis führt zum Shop. Die Pro-Packs werden wie jedes Pack signiert, gebunden
+und über die Shop-Verbindung installiert (`private/packs/defs/pro_*.py`, Produkt-Schlüssel
+`pro_camera`, `pro_weather`, `pro_screens`); jede Erweiterung wird einzeln verkauft.
 
 ## Shop-Bilder
 

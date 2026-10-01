@@ -8,6 +8,7 @@ import { furnitureSymbol } from "./furniture2d.ts";
 import { closeGaps, suggestedThickness } from "../geometry/gaps.ts";
 import { keepInRoom, snapToWall } from "../geometry/snap.ts";
 import { weatherEntity } from "../weather.ts";
+import { hasFeature, PRO_URL } from "../features.ts";
 import { TOGGLE_KINDS } from "../devices.ts";
 import { storedImageIds } from "../transfer.ts";
 import { DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS,
@@ -3005,6 +3006,12 @@ export class Fp3dEditor extends LitElement {
   private renderPictureRules(f: Furniture) {
     const admin = this.isAdmin;
     const rules = f.pictures ?? [];
+    if (!hasFeature("screens")) {
+      return html`<div class="fp3d-wide">
+        <div class="fp3d-sub">${this.t("screen_pictures")}</div>
+        <p class="fp3d-sub">🔒 ${this.t("pro_feature_screens")} – ${this.t("pro_locked")} <a href=${PRO_URL} target="_blank" rel="noopener">${this.t("pro_shop")}</a></p>
+      </div>`;
+    }
     const set = (next: ScreenPicture[]) => this.updateFurniture({ pictures: next });
     const entities = this.entityOptions(() => true);
     const scalar = (v: unknown) => ["string", "number", "boolean"].includes(typeof v);

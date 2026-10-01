@@ -6,6 +6,8 @@ test("features come from installed packs that list them; unknown names are ignor
   assert.deepEqual([...unlockedFeatures([])], []);
   const packs = [{ features: ["weather", "time_travel"] }, { features: undefined }, { features: ["camera_cockpit"] }];
   assert.deepEqual([...unlockedFeatures(packs)].sort(), ["camera_cockpit", "weather"]);
+  assert.equal(hasFeature("screens", [{ features: ["screens"] }]), true);
+  assert.equal(hasFeature("screens", [{ features: ["screens"] }]), true);
   assert.equal(hasFeature("weather", [{ features: ["weather"] }]), true);
   assert.equal(hasFeature("camera_cockpit", [{ features: ["weather"] }]), false);
 });

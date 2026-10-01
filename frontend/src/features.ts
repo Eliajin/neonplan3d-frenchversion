@@ -4,9 +4,9 @@
  */
 import { getPacks } from "./packs.ts";
 
-export type Feature = "camera_cockpit" | "weather";
+export type Feature = "camera_cockpit" | "weather" | "screens";
 
-export const FEATURES: readonly Feature[] = ["camera_cockpit", "weather"];
+export const FEATURES: readonly Feature[] = ["camera_cockpit", "weather", "screens"];
 
 /** The shop page where the Pro pack is sold. */
 export const PRO_URL = "https://mastershort.de/neonplan3d/";
