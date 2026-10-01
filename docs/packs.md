@@ -139,10 +139,9 @@ der Bestell-Mail, auf der Danke-Seite und im Kundenkonto steht. In NeonPlan 3D w
 Installierte Packs brauchen den Shop nie wieder: die Signatur wird lokal geprüft. Fällt der Shop aus
 oder wird die Verbindung getrennt, bleibt alles, nur Updates kommen nicht mehr von selbst.
 
-Ein Schlüssel darf mit bis zu drei Installationen verbunden sein und dreimal im Jahr neu gebunden
-werden (Umzug auf neue Hardware); darüber antwortet der Shop mit `activation_limit`. Downloads von
-der Website sind an die zuletzt aktivierte Installation gebunden; wer noch nie aktiviert hat, bekommt
-die Datei nur mit Namen signiert.
+Ein Schlüssel ist mit höchstens drei Installationen gleichzeitig verbunden. Kommt eine neue dazu
+(Umzug auf neue Hardware), fällt die älteste heraus. Bis zu fünf neue Verbindungen sind in 365 Tagen
+möglich; darüber antwortet der Shop mit `activation_limit`.
 
 Serverseite (`tools/shop/ms-np-license.php`, neben `ms-np-sign.php`):
 

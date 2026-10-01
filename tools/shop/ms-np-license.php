@@ -27,7 +27,9 @@ const MS_NP_LICENSE_META = '_ms_np_license';
 const MS_NP_INSTANCES_META = '_ms_np_instances';
 /** How many different installations a key may be bound to at once, and how many new bindings a year allows. */
 const MS_NP_MAX_INSTANCES = 3;
-const MS_NP_BINDINGS_PER_YEAR = 3;
+const MS_NP_BINDINGS_PER_YEAR = 5;
+/** Meta key of the log of new bindings (timestamps), so moves are counted even after the oldest binding dropped out. */
+const MS_NP_BIND_LOG_META = '_ms_np_bind_log';
 /** Requests per hour and IP before the API answers 429. */
 const MS_NP_RATE_LIMIT = 120;
 const MS_NP_SHOP_PAGE = 'https://mastershort.de/neonplan3d/';
@@ -252,30 +254,31 @@ function ms_np_pack_url(string $pack_key): string
 
 // --------------------------------------------------------------------------- binding
 
-/** Where a key's installations are kept: user meta, or the first order of a guest. */
-function ms_np_instances(array $owner): array
+/** Where a key's installations (and its binding log) are kept: user meta, or the first order of a guest. */
+function ms_np_instances(array $owner, string $meta = MS_NP_INSTANCES_META): array
 {
     if ($owner['user_id']) {
-        $list = get_user_meta($owner['user_id'], MS_NP_INSTANCES_META, true);
+        $list = get_user_meta($owner['user_id'], $meta, true);
     } else {
-        $list = $owner['orders'] ? $owner['orders'][0]->get_meta(MS_NP_INSTANCES_META) : [];
+        $list = $owner['orders'] ? $owner['orders'][0]->get_meta($meta) : [];
     }
     return is_array($list) ? $list : [];
 }
 
-function ms_np_save_instances(array $owner, array $list): void
+function ms_np_save_instances(array $owner, array $list, string $meta = MS_NP_INSTANCES_META): void
 {
     if ($owner['user_id']) {
-        update_user_meta($owner['user_id'], MS_NP_INSTANCES_META, $list);
+        update_user_meta($owner['user_id'], $meta, $list);
     } elseif ($owner['orders']) {
-        $owner['orders'][0]->update_meta_data(MS_NP_INSTANCES_META, $list);
+        $owner['orders'][0]->update_meta_data($meta, $list);
         $owner['orders'][0]->save();
     }
 }
 
 /**
- * Binds an installation to the key: already bound -> fine; otherwise a new binding when the year's
- * allowance is left (the oldest binding makes room beyond MS_NP_MAX_INSTANCES). False at the limit.
+ * Binds an installation to the key. Already bound: fine. A new one is allowed while fewer than
+ * MS_NP_BINDINGS_PER_YEAR new bindings happened in the last 365 days; at most MS_NP_MAX_INSTANCES stay
+ * bound at once, the oldest one drops out (a move to new hardware just works). False at the limit.
  */
 function ms_np_bind_instance(array $owner, string $instance): bool
 {
@@ -286,17 +289,23 @@ function ms_np_bind_instance(array $owner, string $instance): bool
         }
     }
     $year_ago = time() - 365 * DAY_IN_SECONDS;
-    $recent = count(array_filter($list, fn ($e) => (int) ($e['at'] ?? 0) > $year_ago));
-    // bindings dropped to make room still count for the year: kept in 'log'
-    $log = array_filter(array_map(fn ($e) => (int) ($e['at'] ?? 0), $list), fn ($t) => $t > $year_ago);
-    if ($recent >= MS_NP_BINDINGS_PER_YEAR || count($log) >= MS_NP_BINDINGS_PER_YEAR) {
+    // the log counts every new binding of the year, also ones that dropped out of the list since;
+    // bindings from before the log existed count through their own timestamps
+    $log = array_map('intval', ms_np_instances($owner, MS_NP_BIND_LOG_META));
+    if (!$log) {
+        $log = array_map(fn ($e) => (int) ($e['at'] ?? 0), $list);
+    }
+    $log = array_values(array_filter($log, fn ($t) => $t > $year_ago));
+    if (count($log) >= MS_NP_BINDINGS_PER_YEAR) {
         return false;
     }
     $list[] = ['fp' => $instance, 'at' => time()];
     while (count($list) > MS_NP_MAX_INSTANCES) {
         array_shift($list);
     }
+    $log[] = time();
     ms_np_save_instances($owner, $list);
+    ms_np_save_instances($owner, $log, MS_NP_BIND_LOG_META);
     return true;
 }
 
