@@ -73,7 +73,7 @@ import type { WallMode } from "../viewer/viewer3d.ts";
 import { furnitureName } from "../furniture-names.ts";
 import { furnitureSize, isElectric, mountBase, packItem, packItemName, packType, setPacks, type FurniturePack } from "../packs.ts";
 
-type Tool = "select" | "rect" | "polygon" | "measure" | "opening" | "furniture" | "outdoor" | "meter";
+type Tool = "select" | "rect" | "polygon" | "measure" | "opening" | "furniture" | "outdoor" | "hole" | "meter";
 
 type Drag =
   | { kind: "pan"; last: [number, number] }
@@ -85,7 +85,7 @@ type Drag =
   | { kind: "aim"; entityId: string; base: Building; moved: boolean }
   | { kind: "resize"; id: string; corner: [1 | -1, 1 | -1]; base: Building; moved: boolean }
   | { kind: "room"; roomId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
-  | { kind: "rect"; start: Vec2; end: Vec2; outdoor?: boolean }
+  | { kind: "rect"; start: Vec2; end: Vec2; outdoor?: boolean; hole?: boolean }
   | { kind: "outdoor"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "tap"; startScreen: [number, number]; last: [number, number]; panning: boolean };
 
@@ -749,9 +749,9 @@ export class Fp3dEditor extends LitElement {
     }
     const world = this.toWorld(...local);
     const target = e.target as Element;
-    if (this._tool === "rect" || this._tool === "outdoor") {
+    if (this._tool === "rect" || this._tool === "outdoor" || this._tool === "hole") {
       const start = this.snap(world, undefined, e.altKey);
-      this.drag = { kind: "rect", start, end: start, outdoor: this._tool === "outdoor" };
+      this.drag = { kind: "rect", start, end: start, outdoor: this._tool === "outdoor", hole: this._tool === "hole" };
       return;
     }
     if (this._tool === "polygon" || this._tool === "measure") {
@@ -1039,6 +1039,7 @@ export class Fp3dEditor extends LitElement {
           const hi: Vec2 = [Math.max(x0, x1), Math.max(z0, z1)];
           const pts: Vec2[] = [lo, [hi[0], lo[1]], hi, [lo[0], hi[1]]];
           if (drag.outdoor) this.addOutdoor(pts);
+          else if (drag.hole) this.addHole(lo, hi);
           else this.addRoom(pts);
         }
         this._guides = {};
@@ -1232,6 +1233,25 @@ export class Fp3dEditor extends LitElement {
       </div>
       <p class="fp3d-sub">${this.t("measure_hint")}</p>
     </section>`;
+  }
+
+  /** A floor opening (stairwell, gallery): a hole in this floor's floor, drawn as a rectangle. */
+  private addHole(lo: Vec2, hi: Vec2): void {
+    if (!this.floor) return;
+    const item: Furniture = {
+      id: uid("hole"),
+      type: "stairwell",
+      x: round((lo[0] + hi[0]) / 2),
+      z: round((lo[1] + hi[1]) / 2),
+      w: round(hi[0] - lo[0]),
+      d: round(hi[1] - lo[1]),
+      h: 0.02,
+      rotation: 0,
+      variant: null,
+    };
+    this.change((_, floor) => floor.furniture.push(item));
+    this.selectItem("furniture", item.id);
+    this._tool = "select";
   }
 
   private addOutdoor(points: Vec2[]): void {
@@ -1748,7 +1768,7 @@ export class Fp3dEditor extends LitElement {
         <div class="fp3d-main">
           <div class="fp3d-toolbar">
             <div class="fp3d-seg" role="group" aria-label=${this.t("tool_select")}>
-              ${(["select", "rect", "polygon", "measure", "opening", "furniture", "outdoor"] as Tool[]).map(
+              ${(["select", "rect", "polygon", "measure", "opening", "furniture", "outdoor", "hole"] as Tool[]).map(
                 (tool) => html`<button
                   aria-pressed=${this._tool === tool}
                   ?disabled=${!floor || (!this.isAdmin && tool !== "select")}

@@ -387,7 +387,7 @@ export const FURNITURE_GROUPS: Record<string, FurnitureType[]> = {
   kitchen: ["kitchen", "kitchen_wall", "kitchen_tall", "island", "sink", "stove", "dishwasher", "fridge", "fridge_smart"],
   sleeping: ["bed", "bunk_bed", "nightstand", "wardrobe", "dresser"],
   bath: ["bathtub", "shower", "wc", "washbasin", "washer", "dryer"],
-  work: ["desk", "office_chair", "tall_cabinet", "coat_rack", "radiator", "stairs", "stairwell", "robot_vacuum"],
+  work: ["desk", "office_chair", "tall_cabinet", "coat_rack", "radiator", "stairs", "robot_vacuum"],
   vehicles: ["parking"],
 };
 

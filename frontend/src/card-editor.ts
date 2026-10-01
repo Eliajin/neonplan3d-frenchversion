@@ -185,10 +185,32 @@ export class Floorplan3dCardEditor extends LitElement {
           : nothing}
       </div>
       <p class="hint">${this.t("card_idle_hint")}</p>
-      ${this.toggle("idle_orbit", "card_idle_orbit", "card_idle_orbit_hint")}
+      ${this.toggle("idle_orbit", "card_idle_orbit", "card_idle_orbit_hint")}`;
+  }
+
+  /** Warnings, scenes and the Pro add-ons (motion trail, weather with its entity). */
+  private renderFeatures() {
+    const v = this.value;
+    const weathers = Object.keys(this.hass?.states ?? {})
+      .filter((id) => id.startsWith("weather."))
+      .sort();
+    return html`<h3>${this.t("card_section_features")}</h3>
       ${this.toggle("alerts", "card_alerts", "card_alerts_hint")} ${this.toggle("alert_jump", "card_alert_jump", "card_alert_jump_hint")}
-      ${this.toggle("scenes", "card_scenes", "card_scenes_hint")} ${this.toggle("motion_trail", "card_motion_trail", "card_motion_trail_hint")}
-      ${this.toggle("weather", "card_weather", "card_weather_hint")}`;
+      ${this.toggle("scenes", "card_scenes", "card_scenes_hint")}
+      ${this.toggle("motion_trail", "card_motion_trail", "card_motion_trail_hint")}
+      ${this.toggle("weather", "card_weather", "card_weather_hint")}
+      ${v.weather !== false
+        ? html`<div class="grid">
+            <label class="field wide"
+              >${this.t("weather_entity")}
+              <select @change=${(e: Event) => this.set("weather_entity", (e.target as HTMLSelectElement).value || undefined)}>
+                <option value="" ?selected=${!v.weather_entity}>${this.t("card_weather_plan")}</option>
+                ${weathers.map((id) => html`<option value=${id} ?selected=${id === v.weather_entity}>${String(this.hass?.states[id]?.attributes.friendly_name ?? id)}</option>`)}
+              </select>
+            </label>
+          </div>`
+        : nothing}
+      <p class="hint">${this.t("card_pro_hint")}</p>`;
   }
 
   protected render() {
@@ -255,6 +277,7 @@ export class Floorplan3dCardEditor extends LitElement {
       ${this.toggle("energy", "card_energy")} ${this.toggle("room_panel", "card_room_panel", "card_room_panel_hint")}
       ${this.toggle("fullscreen_button", "card_fullscreen_button", "card_fullscreen_button_hint")}
       ${this.toggle("explode", "card_explode")} ${this.toggle("stats", "card_stats", "card_stats_hint")}
+      ${this.renderFeatures()}
       ${this.renderKiosk()}
     `;
   }

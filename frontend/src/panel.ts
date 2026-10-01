@@ -654,19 +654,6 @@ export class Floorplan3dPanel extends LitElement {
           >
             ${hasFeature("weather") ? "" : "🔒 "}${this.t("weather_short")}
           </button>
-          ${this.isAdmin
-            ? html`<button
-                class="fp3d-chip ${this._furnish ? "fp3d-chip-on" : ""}"
-                aria-pressed=${this._furnish}
-                title=${this.t("furnish_hint")}
-                @click=${() => {
-                  this._furnish = !this._furnish;
-                  this._selFurniture = null;
-                }}
-              >
-                ${this.t("furnish")}
-              </button>`
-            : nothing}
           ${this._roomId || (this._floorId && b.floors.length > 1)
             ? html`<button class="fp3d-chip" @click=${() => this.back()}>${this.t("back")}</button>`
             : nothing}
