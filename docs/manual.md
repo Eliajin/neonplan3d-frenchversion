@@ -569,6 +569,12 @@ The middle row of tiles shows the three Pro add-ons. Active ones carry a ✓, lo
 | Kids, Office & gaming, Garden & terrace, Garage & workshop, Fitness, Smart home & tech | Furniture and devices for each area |
 | Vehicles | Cars, vans, motorbikes and more for parking spots |
 | Stairs & railings | Straight, L- and U-shaped stairs, spiral stairs, space-saver stairs, outdoor steps, landing, railings in metal, glass and wood |
+| Home cinema & hi-fi | Screen, projector, speakers, subwoofer, AV receiver, turntable, cinema seats – devices glow while playing |
+| Utility & building services | Boiler, heat pump, buffer tank, ventilation, meter cabinet, water softener, chest freezer, ironing station |
+| Pets | Cat tree, dog bed, feeder, water fountain, litter box, cages, aquarium and terrarium with light |
+| Architecture & fit-out | Columns, beams, chimney, fireplace, glass partition, sliding wall, light cove, LED niche, platform |
+
+Devices in packs have a small glowing part (display, status LED): linked to a media player, a switch or a light it lights up while the device runs; an aquarium glows in its light's colour.
 
 At the bottom of the page you find your installed packs with **Remove**. Below is **Import furniture packs …** for pack files: free sampler packs from the newsletter, downloads from the website or installations without internet. You can pick several files at once.
 

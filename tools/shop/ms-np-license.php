@@ -203,6 +203,11 @@ function ms_np_key_in_account(): void
  */
 function ms_np_find_license(string $key): ?array
 {
+    // tester codes (ms-np-testers.php): a key without an order
+    $extra = apply_filters('ms_np_find_license_extra', null, $key);
+    if (is_array($extra)) {
+        return $extra;
+    }
     $users = get_users(['meta_key' => MS_NP_LICENSE_META, 'meta_value' => $key, 'number' => 1, 'fields' => 'ID']);
     if ($users) {
         $user_id = (int) $users[0];
@@ -225,6 +230,10 @@ function ms_np_find_license(string $key): ?array
 /** Pack keys the customer owns, from all paid orders. */
 function ms_np_owned_pack_keys(array $owner): array
 {
+    // tester codes carry their packs themselves
+    if (isset($owner['packs'])) {
+        return $owner['packs'];
+    }
     $keys = [];
     foreach ($owner['orders'] as $order) {
         foreach (ms_np_order_pack_keys($order) as $key) {
@@ -290,6 +299,11 @@ function ms_np_pack_url(string $pack_key): string
 /** Where a key's installations (and its binding log) are kept: user meta, or the first order of a guest. */
 function ms_np_instances(array $owner, string $meta = MS_NP_INSTANCES_META): array
 {
+    // tester codes keep their bindings elsewhere
+    $pre = apply_filters('ms_np_pre_instances', null, $owner, $meta);
+    if (is_array($pre)) {
+        return $pre;
+    }
     if ($owner['user_id']) {
         $list = get_user_meta($owner['user_id'], $meta, true);
     } else {
@@ -300,6 +314,9 @@ function ms_np_instances(array $owner, string $meta = MS_NP_INSTANCES_META): arr
 
 function ms_np_save_instances(array $owner, array $list, string $meta = MS_NP_INSTANCES_META): void
 {
+    if (apply_filters('ms_np_pre_save_instances', false, $owner, $list, $meta)) {
+        return;
+    }
     if ($owner['user_id']) {
         update_user_meta($owner['user_id'], $meta, $list);
     } elseif ($owner['orders']) {
@@ -452,10 +469,24 @@ function ms_np_apply_remembered_coupon(): void
     if ($code === '') {
         return;
     }
-    WC()->session->set('ms_np_coupon', '');
-    if (!WC()->cart->has_discount($code)) {
-        WC()->cart->apply_coupon($code);
+    if (WC()->cart->has_discount($code) || WC()->cart->apply_coupon($code)) {
+        // forget the code only once it is in the cart
+        WC()->session->set('ms_np_coupon', '');
     }
+}
+
+/**
+ * A loyalty code is bound to the buyer's e-mail; a guest's cart does not know it yet, so the binding
+ * waits until an e-mail is known (checkout checks it in full).
+ */
+add_filter('woocommerce_coupon_get_email_restrictions', 'ms_np_loyalty_guest_restrictions', 10, 2);
+function ms_np_loyalty_guest_restrictions($emails, $coupon)
+{
+    if (!$coupon || $coupon->get_meta('_ms_np_loyalty') !== '1' || is_admin() || !function_exists('WC') || !WC()->customer) {
+        return $emails;
+    }
+    $known = WC()->customer->get_billing_email() ?: (is_user_logged_in() ? wp_get_current_user()->user_email : '');
+    return $known ? $emails : [];
 }
 
 // ------------------------------------------------------------------------------ offers
@@ -494,12 +525,14 @@ function ms_np_all_offers(): array
             'keys' => $keys,
             'id' => count($keys) > 1 ? 'bundle-' . $id : $keys[0],
             'name' => mb_substr($product->get_name(), 0, 80),
-            'teaser' => mb_substr(trim(wp_strip_all_tags($product->get_short_description())), 0, 200),
+            // an own teaser (_ms_np_teaser) wins over the short description
+            'teaser' => mb_substr(trim(wp_strip_all_tags((string) ($product->get_meta('_ms_np_teaser') ?: $product->get_short_description()))), 0, 200),
             'image' => is_string($image) && strpos($image, 'https://') === 0 ? $image : null,
             'url' => (string) get_permalink($id),
             'kind' => count($keys) > 1 ? 'bundle' : (strpos($keys[0], 'pro_') === 0 ? 'pro' : 'pack'),
             'price' => trim(html_entity_decode(wp_strip_all_tags(wc_price((float) $product->get_price())), ENT_QUOTES, 'UTF-8')),
-            'new' => $created && $created->getTimestamp() > $new_after,
+            // _ms_np_new = 1 / 0 sets "new" by hand; without it the product's age decides
+            'new' => $product->meta_exists('_ms_np_new') ? $product->get_meta('_ms_np_new') === '1' : ($created && $created->getTimestamp() > $new_after),
         ];
     }
     set_transient('ms_np_offers', $out, 10 * MINUTE_IN_SECONDS);
