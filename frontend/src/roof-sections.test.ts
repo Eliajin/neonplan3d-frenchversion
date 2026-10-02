@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding, newFloor, type Room, type RoofSection } from "./model.ts";
-import { ridgeHeight, roofSectionsFromRooms, sectionFrame, sectionProfile } from "./roof-sections.ts";
+import { ridgeHeight, roofSectionsFromRooms, sectionFrame, sectionOverhang, sectionProfile, wallTopUnder } from "./roof-sections.ts";
 import { buildRoof } from "./viewer/roof.ts";
 
 const near = (a: number, b: number, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);
@@ -93,4 +93,20 @@ test("every shape builds geometry", () => {
     const ys = part.solid.p.filter((_, i) => i % 3 === 1);
     assert.ok(Math.max(...ys) <= top + 0.26, shape);
   }
+});
+
+test("a lean-to has no overhang where it meets the taller house, and sits on the walls below", () => {
+  const b = emptyBuilding();
+  // a two-storey house (0..10) and a single-storey garage beside it (10..14)
+  b.floors = [
+    { ...newFloor("eg", "EG", 0), rooms: [rect("house", 0, 0, 10, 8), rect("garage", 10, 0, 14, 6)] },
+    { ...newFloor("og", "OG", 2.75), rooms: [rect("up", 0, 0, 10, 8)] },
+  ];
+  near(wallTopUnder(b, 10, 0, 14, 6)!, 2.5);
+  near(wallTopUnder(b, 0, 0, 10, 8)!, 2.75 + 2.5);
+  // pent roof on the garage, ridge along z, side a at x = 10 (the house)
+  const lean = section({ x0: 10, z0: 0, x1: 14, z1: 6, shape: "pent", axis: "z", flip: true, eave_a: 2.5, eave_b: 2.5, base: 2.5 });
+  const o = sectionOverhang(b, lean, 0.4);
+  // flipped: side a is at x = 14 (open), side b at x = 10 against the house
+  assert.deepEqual([o.a, o.b, o.u0, o.u1], [0.4, 0, 0.4, 0.4]);
 });

@@ -319,7 +319,7 @@ The robot vacuum item links to the `vacuum` entity. While the robot cleans, it d
 
 ### 4.17 Outdoor areas and outdoor lights
 
-With **Outdoor** you draw lawn, terrace, path, driveway, pool, flower bed, hedge or fence. Path lights, garden spots and outdoor wall lights light the outdoor areas and the facade.
+With **Outdoor** you draw lawn, terrace, path, driveway, pool, flower bed, hedge or fence. A selected outdoor area is resized at its corners; a rectangle stays a rectangle. Path lights, garden spots and outdoor wall lights light the outdoor areas and the facade.
 
 ![The garden at night](images/view-garden.jpg)
 
@@ -343,7 +343,8 @@ A simple house gets a flat or gable roof over the whole top floor under **Settin
 - With the lock **🔓 Fix** (or the key **L**) a finished section stays put and no longer slips when you tap it; **🔒 Floor plan** locks all sections too.
 - Each section has a **shape** (gable, hip, pent, flat) and a **ridge direction** (↔ or ↕).
 - **Eave** and **pitch** are set for both sides separately. All heights count from the ground. A side with a lower eave reaches further down, e.g. a catslide over a low extension. A pent roof rises from the first side; **Swap sides** turns it round.
-- **Top of walls** is the height where the walls below the roof end. Gables and knee walls are built from there up under the roof.
+- **Top of walls** is the height where the walls below the roof end. A new section takes it from the rooms below, whatever floor the plan shows. Gables and knee walls are built from there up under the roof, so the space under a pent roof is closed too.
+- Where a section meets a taller part of the house, e.g. a pent roof against the house wall, the overhang is left out there; the roof ends at the wall.
 - The **ridge height** is shown at the bottom of the form. Sections may overlap: the lower roof runs under the higher one, as with a real extension.
 - **Create again from the rooms** replaces all sections with a new proposal, **Back to one roof** switches to the simple roof.
 

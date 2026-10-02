@@ -5,7 +5,7 @@
 
 import { Color } from "three";
 import type { Building, Floor, RoofSection } from "../model.ts";
-import { sectionFrame, sectionProfile } from "../roof-sections.ts";
+import { sectionFrame, sectionOverhang, sectionProfile, type SectionOverhang } from "../roof-sections.ts";
 import { DEG, GeoBuffer, LineBuffer, pushPrism, shade } from "./geo.ts";
 
 const ROOF = 0x1a2338;
@@ -112,7 +112,7 @@ function buildSections(b: Building, sections: readonly RoofSection[], overhang: 
     const floor = [...floors].reverse().find((f) => f.elevation < sec.base - 0.05) ?? floors[0];
     let part = parts.get(floor.id);
     if (!part) parts.set(floor.id, (part = { floor, base: 0, solid: new GeoBuffer(), lines: new LineBuffer() }));
-    pushSection(part.solid, part.lines, sec, sec.overhang ?? overhang, floor.elevation);
+    pushSection(part.solid, part.lines, sec, sectionOverhang(b, sec, sec.overhang ?? overhang), floor.elevation);
   }
   return [...parts.values()];
 }
@@ -121,13 +121,15 @@ function buildSections(b: Building, sections: readonly RoofSection[], overhang: 
  * One section: its slopes with their thickness and rim, the ridge (and hips), and the walls from the
  * section's base up under the roof (gable ends and knee walls). `yOff` is the level of its floor.
  */
-export function pushSection(solid: GeoBuffer, lines: LineBuffer, s: RoofSection, overhang: number, yOff: number): void {
+export function pushSection(solid: GeoBuffer, lines: LineBuffer, s: RoofSection, overhang: SectionOverhang | number, yOff: number): void {
   const fr = sectionFrame(s);
   const pr = sectionProfile(s);
-  const o = Math.max(0, overhang);
+  const ov = typeof overhang === "number" ? { u0: overhang, u1: overhang, a: overhang, b: overhang } : overhang;
+  const oa = Math.max(0, ov.a);
+  const ob = Math.max(0, ov.b);
   const w = fr.w;
-  const U0 = fr.u0 - o;
-  const U1 = fr.u1 + o;
+  const U0 = fr.u0 - Math.max(0, ov.u0);
+  const U1 = fr.u1 + Math.max(0, ov.u1);
   const P = (u: number, v: number, y: number): number[] => {
     const [x, z] = fr.at(u, v);
     return [x, y - yOff, z];
@@ -146,7 +148,7 @@ export function pushSection(solid: GeoBuffer, lines: LineBuffer, s: RoofSection,
   const ridges: [Q, Q][] = [];
   if (s.shape === "flat") {
     const y = s.eave_a;
-    const poly = [fr.at(U0, -o), fr.at(U1, -o), fr.at(U1, w + o), fr.at(U0, w + o)];
+    const poly = [fr.at(U0, -oa), fr.at(U1, -oa), fr.at(U1, w + ob), fr.at(U0, w + ob)];
     pushPrism(solid, poly, y - yOff, y - yOff + 0.25, ROOF, ROOF_TOP, { bottom: true });
     for (let i = 0; i < 4; i++) {
       const a = poly[i];
@@ -157,7 +159,7 @@ export function pushSection(solid: GeoBuffer, lines: LineBuffer, s: RoofSection,
     faces = [];
     rim = [];
   } else if (s.shape === "pent") {
-    const c = [at(U0, -o), at(U1, -o), at(U1, w + o), at(U0, w + o)];
+    const c = [at(U0, -oa), at(U1, -oa), at(U1, w + ob), at(U0, w + ob)];
     faces = [c];
     rim = c;
     ridges.push([c[2], c[3]]);
@@ -166,10 +168,10 @@ export function pushSection(solid: GeoBuffer, lines: LineBuffer, s: RoofSection,
     const d = Math.min((fr.u1 - fr.u0) / 2, Math.min(pr.vr, w - pr.vr) || w / 2);
     const rs: Q = [fr.u0 + d, pr.vr, pr.rh];
     const re: Q = [fr.u1 - d, pr.vr, pr.rh];
-    const a0 = at(U0, -o);
-    const a1 = at(U1, -o);
-    const b1 = at(U1, w + o);
-    const b0 = at(U0, w + o);
+    const a0 = at(U0, -oa);
+    const a1 = at(U1, -oa);
+    const b1 = at(U1, w + ob);
+    const b0 = at(U0, w + ob);
     faces = [
       [a0, a1, re, rs],
       [rs, re, b1, b0],
@@ -181,10 +183,10 @@ export function pushSection(solid: GeoBuffer, lines: LineBuffer, s: RoofSection,
   } else {
     const r0: Q = [U0, pr.vr, pr.rh];
     const r1: Q = [U1, pr.vr, pr.rh];
-    const a0 = at(U0, -o);
-    const a1 = at(U1, -o);
-    const b1 = at(U1, w + o);
-    const b0 = at(U0, w + o);
+    const a0 = at(U0, -oa);
+    const a1 = at(U1, -oa);
+    const b1 = at(U1, w + ob);
+    const b0 = at(U0, w + ob);
     faces = [
       [a0, a1, r1, r0],
       [r0, r1, b1, b0],

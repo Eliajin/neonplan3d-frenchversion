@@ -9,6 +9,7 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 ### New
 
 - **Roof sections:** roofs made of several parts (L/T houses, barns, extensions), each with shape (gable, hip, pent, flat), ridge direction, eave and pitch per side; proposed from the rooms; new Roof tool in the editor.
+- **Outdoor areas** are resized at their corners.
 
 ## 1.4.0
 

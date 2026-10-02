@@ -11,7 +11,7 @@ import { weatherEntity } from "../weather.ts";
 import { SHOW_ENERGY, SHOW_PRESENCE } from "../flags.ts";
 import { hasFeature, manualUrl, shopUrl } from "../features.ts";
 import { TOGGLE_KINDS } from "../devices.ts";
-import { ridgeHeight, roofSectionsFromRooms, sectionFrame, sectionProfile } from "../roof-sections.ts";
+import { ridgeHeight, roofSectionsFromRooms, sectionFrame, sectionProfile, wallTopUnder } from "../roof-sections.ts";
 import { storedImageIds } from "../transfer.ts";
 import { DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS,
   normalizeBuilding,
@@ -99,6 +99,7 @@ type Drag =
   | { kind: "room"; roomId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "rect"; start: Vec2; end: Vec2; outdoor?: boolean; hole?: boolean; roof?: boolean }
   | { kind: "roofmove"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
+  | { kind: "outvertex"; id: string; index: number; base: Building; moved: boolean }
   | { kind: "roofcorner"; id: string; corner: [0 | 1, 0 | 1]; base: Building; moved: boolean }
   | { kind: "freewall"; start: Vec2; end: Vec2 }
   | { kind: "wallmove"; id: string; end: "a" | "b" | null; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
@@ -112,7 +113,7 @@ interface Guides {
 }
 
 /** Drags that change the document live (restored when cancelled, recorded in the history when done). */
-const EDIT_DRAGS = new Set(["vertex", "room", "device", "opening", "furniture", "rotate", "resize", "outdoor", "roofmove", "roofcorner"]);
+const EDIT_DRAGS = new Set(["vertex", "room", "device", "opening", "furniture", "rotate", "resize", "outdoor", "roofmove", "roofcorner", "outvertex"]);
 
 const HISTORY = 100;
 const SNAP_PX = 10;
@@ -964,6 +965,12 @@ export class Fp3dEditor extends LitElement {
       this.drag = this.isAdmin ? { kind: "wallmove", id, end: null, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
       return;
     }
+    const outVertexEl = target.closest("[data-out-vertex]");
+    if (outVertexEl && this.isAdmin) {
+      const [id, i] = outVertexEl.getAttribute("data-out-vertex")!.split(":");
+      this.drag = { kind: "outvertex", id, index: Number(i), base: this._doc, moved: false };
+      return;
+    }
     const outdoorEl = target.closest("[data-outdoor]");
     if (outdoorEl && !target.closest("[data-room]") && !this.roomAt(world)) {
       const id = outdoorEl.getAttribute("data-outdoor")!;
@@ -1099,6 +1106,34 @@ export class Fp3dEditor extends LitElement {
           (doc) => {
             const sec = doc.settings.roof.sections?.find((x) => x.id === drag.id);
             if (sec) Object.assign(sec, { x0: round(src.x0 + dx), x1: round(src.x1 + dx), z0: round(src.z0 + dz), z1: round(src.z1 + dz) });
+          },
+          drag.base,
+          false,
+        );
+        break;
+      }
+      case "outvertex": {
+        drag.moved = true;
+        const p = this.snap(world, undefined, e.altKey);
+        const src = drag.base.floors.find((f) => f.id === this._floorId)?.outdoor.find((a) => a.id === drag.id);
+        if (!src) return;
+        const rect = isAxisRect(src.points);
+        this.change(
+          (_, floor) => {
+            const a = floor.outdoor.find((x) => x.id === drag.id);
+            if (!a) return;
+            const pts = src.points.map((q) => [...q] as Vec2);
+            const i = drag.index;
+            const old = src.points[i];
+            pts[i] = [round(p[0]), round(p[1])];
+            // a rectangle stays a rectangle: the corners sharing an x or a z with the dragged one follow
+            if (rect)
+              src.points.forEach((q, j) => {
+                if (j === i) return;
+                if (Math.abs(q[0] - old[0]) < 1e-6) pts[j][0] = round(p[0]);
+                if (Math.abs(q[1] - old[1]) < 1e-6) pts[j][1] = round(p[1]);
+              });
+            a.points = pts;
           },
           drag.base,
           false,
@@ -1815,7 +1850,8 @@ export class Fp3dEditor extends LitElement {
 
   private addRoofSection(lo: Vec2, hi: Vec2): void {
     if (!this.isAdmin) return;
-    const top = this.floorTop;
+    // eaves on the walls of the rooms below (a garage), whatever floor the plan shows
+    const top = round(wallTopUnder(this._doc, lo[0], lo[1], hi[0], hi[1]) ?? this.floorTop);
     const pitch = this._doc.settings.roof.pitch || 35;
     const sec: RoofSection = {
       id: uid("roof"),
@@ -2543,6 +2579,7 @@ export class Fp3dEditor extends LitElement {
               ${floor && walls ? this.renderOpenings(floor, walls.walls) : nothing} ${floor ? this.renderMeter(floor) : nothing}
               ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
               ${this.room && this.isAdmin && this._tool === "select" && !this._openingId && !this._furnitureId && !this.isFixedItem("room", this.room.id) ? this.renderHandles(this.room) : nothing}
+              ${floor ? this.renderOutdoorHandles(floor) : nothing}
               ${this._tool === "roof" ? this.renderRoofSections() : nothing} ${this.renderDraft()} ${this.renderGuides()}
             </svg>
             ${this.renderContext()}
@@ -2661,6 +2698,16 @@ export class Fp3dEditor extends LitElement {
     </div>`;
   }
 
+
+  /** Corner handles of the selected outdoor area (a rectangle stays a rectangle while dragging). */
+  private renderOutdoorHandles(floor: Floor) {
+    const a = this._outdoorId ? floor.outdoor.find((x) => x.id === this._outdoorId) : undefined;
+    if (!a || !this.isAdmin || this._tool !== "select" || this._doc.settings.lock_plan) return nothing;
+    return svg`${a.points.map((p, i) => {
+      const [x, y] = this.toScreen(p);
+      return svg`<g class="fp3d-vertex" data-out-vertex=${`${a.id}:${i}`}><circle cx=${x} cy=${y} r="16" class="fp3d-hit" /><circle cx=${x} cy=${y} r="6" /></g>`;
+    })}`;
+  }
 
   private renderOutdoor(floor: Floor) {
     return svg`<g>${floor.outdoor.map((a) => {

@@ -85,6 +85,7 @@ const PACK_MOUNT_SCRIPT = `
 
 const shots = [
   { name: "view-house", query: "?fp3d_stats", width: 1280, height: 800 },
+  { name: "promo-house", query: "", width: 1280, height: 800 },
   { name: "view-stacked", query: "", width: 1280, height: 800, click: "Gestapelt" },
   { name: "view-floor-og", query: "", width: 1280, height: 800, click: "Obergeschoss" },
   { name: "view-floor-eg", query: "?fp3d_stats", width: 1280, height: 800, click: "Erdgeschoss" },
@@ -126,9 +127,13 @@ const shots = [
   { name: "view-dryer-on-washer", query: "", width: 1280, height: 800, editor: true, editorScript: "const f = e._doc.floors[0]; const w = f.furniture.find((m) => m.type === 'washer'); f.furniture.push({ ...structuredClone(w), id: 'dryer_demo', type: 'dryer', entity: null, power: null, mount_y: w.h }); e.setDoc(structuredClone(e._doc));", then3d: "Bad" },
   { name: "editor-device-extras", query: "", width: 1280, height: 1500, editor: true, editorScript: "e._roomId = 'garage'; e._devSource = 'other'; e._deviceQuery = 'licht'; const r = e._doc.floors[0].rooms.find((x) => x.id === 'garage'); r.climate = { temperature: null, humidity: 'none', co2: null }; e.setDoc(structuredClone(e._doc));", scrollSide: true },
   { name: "view-wall-cabinet-low", query: "", width: 1280, height: 800, editor: true, editorScript: "const f = e._doc.floors[0]; const k = f.furniture.find((m) => m.type === 'kitchen_wall'); if (k) { f.furniture.push({ ...structuredClone(k), id: 'kw_low', x: k.x + k.w + 0.1, mount_y: 1.0 }); } e.setDoc(structuredClone(e._doc));", then3d: "Küche" },
-  { name: "editor-roof-tool", query: "", width: 1500, height: 900, wait: 0, editor: true, editorScript: FARM_SCRIPT + "e._floorId = e._doc.floors[0].id; setTimeout(() => { e._tool = 'roof'; e._roofId = 'scheune'; e.updateRoofSection({ locked: true }); e.fit(); }, 1500);", afterWait: 3000 },
+  { name: "editor-roof-tool", query: "", width: 1500, height: 900, wait: 0, editor: true, editorScript: FARM_SCRIPT + "e._floorId = e._doc.floors[0].id; setTimeout(() => { e._tool = 'roof'; e._roofId = 'scheune'; e.updateRoofSection({ locked: true }); }, 1500); setTimeout(() => e.fit(), 2600);", afterWait: 3500 },
   { name: "editor-roof-overview", query: "", width: 1280, height: 900, editor: true, editorScript: FARM_SCRIPT + "e._floorId = e._doc.floors[0].id; e._tool = 'roof'; e._roofId = null; setTimeout(() => e.fit(), 300);" },
   { name: "view-roof-proposal", query: "", width: 1280, height: 800, editor: true, editorScript: FARM_SCRIPT + "setTimeout(() => { e._doc.settings.roof.sections = []; e.useRoofSections(); }, 300);", then3d: "Alle Etagen", then3dAlso: "Gestapelt", camera: { theta: 2.3, phi: 0.95, radius: 52 } },
+  { name: "promo-roof-day", query: "", width: 1280, height: 800, editor: true, editorScript: FARM_SCRIPT, then3d: "Alle Etagen", then3dAlso: ["Gestapelt", "Tag"], camera: { theta: 2.3, phi: 0.95, radius: 52 } },
+  { name: "promo-parapet", query: "", width: 1280, height: 800, click: "Obergeschoss", then: "Kinderzimmer" },
+  { name: "editor-outdoor-handles", query: "", width: 1280, height: 800, editor: true, editorScript: "const a = e._doc.floors[0].outdoor.find((x) => x.type === 'terrace'); e._tool = 'select'; e._outdoorId = a.id; e._roomId = null;" },
+  { name: "view-roof-garage-pent", query: "", width: 1280, height: 800, editor: true, editorScript: "e.useRoofSections(); setTimeout(() => { const g = e._doc.settings.roof.sections.find((s) => s.x0 > 9.5); e._tool = 'roof'; e._roofId = g.id; e.updateRoofSection({ shape: 'pent', axis: 'z', flip: true, pitch_a: 25, pitch_b: 25, eave_a: 2.6, eave_b: 2.6 }); }, 600);", afterWait: 1500, then3d: "Alle Etagen", then3dAlso: ["Gestapelt"], camera: { theta: 0.6, phi: 1.15, radius: 24 } },
   { name: "view-roof-farmhouse-front", query: "", width: 1280, height: 800, editor: true, editorScript: FARM_SCRIPT, then3d: "Alle Etagen", then3dAlso: "Gestapelt", camera: { theta: 2.3, phi: 0.95, radius: 52 } },
   { name: "view-roof-farmhouse", query: "", width: 1280, height: 800, editor: true, editorScript: FARM_SCRIPT, then3d: "Alle Etagen", then3dAlso: "Gestapelt" },
   { name: "view-tv-plug", query: "", width: 1280, height: 800, editor: true, editorScript: "const f = e._doc.floors[0].furniture.find((x) => x.type === 'tv_board'); f.entity = 'switch.kaffeemaschine'; f.pictures = []; e._roomId = 'wohnen'; e._furnitureId = f.id; e.setDoc(structuredClone(e._doc));", then3d: "Wohnzimmer" },
@@ -292,7 +297,7 @@ for (const shot of shots.filter((s) => !only || only.includes(s.name))) {
     if (shot.then3d) {
       await clickText("3D");
       await clickText(shot.then3d);
-      if (shot.then3dAlso) await clickText(shot.then3dAlso);
+      for (const t of [shot.then3dAlso ?? []].flat()) await clickText(t);
       if (shot.camera) {
         // turn the camera (radius, theta, phi around the house) for a view from another side
         await page.evaluate((cam) => {

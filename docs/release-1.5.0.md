@@ -8,6 +8,8 @@
   - Höhen zählen vom Boden; Giebel und Drempel werden bis unters Dach hochgezogen. Dachflächen dürfen sich überschneiden, das niedrigere Dach läuft unter das höhere.
   - Im Plan aufziehen, verschieben, an den Ecken ändern; die Firsthöhe steht im Formular. Daneben zeigt die 3D-Ansicht sofort das ganze Haus mit Dach, die Etage wählst du direkt im Werkzeug.
   - Fertige Dachflächen lassen sich **fixieren** (Schloss oder Taste L), **🔒 Grundriss** sperrt sie mit.
+  - Ein Pultdach an der Hauswand endet an der Wand (kein Überstand ins Haus), und der Raum unter der Schräge wird bis unters Dach geschlossen.
+- **Außenflächen an den Ecken ziehen:** Terrasse, Rasen & Co. lassen sich jetzt im Plan an den Ecken größer und kleiner ziehen.
 - Alle Dachformen sind kostenlos. Bestehende Dächer bleiben, wie sie sind.
 
 Nach dem Update Home Assistant neu starten und die Seite neu laden.
@@ -24,6 +26,8 @@ Nach dem Update Home Assistant neu starten und die Seite neu laden.
   - Heights count from the ground; gables and knee walls are built up under the roof. Sections may overlap, the lower roof runs under the higher one.
   - Draw them in the plan, move them, resize them at the corners; the ridge height is shown in the form. The 3D view beside it shows the whole house with its roof at once, the floor is chosen right in the tool.
   - Finished sections can be **fixed** (lock or key L), **🔒 Floor plan** locks them too.
+  - A pent roof against the house wall ends at the wall (no overhang into the house), and the space under the slope is closed up to the roof.
+- **Resize outdoor areas at their corners:** terrace, lawn & co. can now be dragged bigger or smaller in the plan.
 - All roof shapes are free. Existing roofs stay as they are.
 
 Restart Home Assistant after updating and reload the page.

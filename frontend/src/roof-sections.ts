@@ -53,6 +53,41 @@ export function sectionProfile(s: Pick<RoofSection, "x0" | "z0" | "x1" | "z1" | 
   return { vr, rh, y: (v) => (v <= vr ? ea + v * ta : eb + (w - v) * tb) };
 }
 
+/** Overhang per edge of a section: along the ridge at both ends (u0, u1) and across at both sides (a, b). */
+export interface SectionOverhang {
+  u0: number;
+  u1: number;
+  a: number;
+  b: number;
+}
+
+/**
+ * Overhang per edge: none where the section meets a taller part of the house (a room right outside
+ * that edge whose walls rise above the section's wall tops), so a lean-to roof ends at the wall
+ * instead of running into the house.
+ */
+export function sectionOverhang(b: Building, s: RoofSection, overhang: number): SectionOverhang {
+  const fr = sectionFrame(s);
+  const taller = b.floors.flatMap((f) => f.rooms.filter((r) => r.points.length >= 3 && f.elevation + f.height > s.base + 0.1));
+  const blocked = (pts: Vec2[]) => pts.some((p) => taller.some((r) => pointInPolygon(p, r.points)));
+  const d = 0.35;
+  const along = [0.15, 0.5, 0.85].map((t) => fr.u0 + (fr.u1 - fr.u0) * t);
+  const across = [0.15, 0.5, 0.85].map((t) => fr.w * t);
+  return {
+    a: blocked(along.map((u) => fr.at(u, -d))) ? 0 : overhang,
+    b: blocked(along.map((u) => fr.at(u, fr.w + d))) ? 0 : overhang,
+    u0: blocked(across.map((v) => fr.at(fr.u0 - d, v))) ? 0 : overhang,
+    u1: blocked(across.map((v) => fr.at(fr.u1 + d, v))) ? 0 : overhang,
+  };
+}
+
+/** Wall tops below a rectangle: the highest floor with a room under its middle (null = none). */
+export function wallTopUnder(b: Building, x0: number, z0: number, x1: number, z1: number): number | null {
+  const c: Vec2 = [(x0 + x1) / 2, (z0 + z1) / 2];
+  const tops = b.floors.filter((f) => f.rooms.some((r) => r.points.length >= 3 && pointInPolygon(c, r.points))).map((f) => f.elevation + f.height);
+  return tops.length ? Math.max(...tops) : null;
+}
+
 /** Height of the ridge (or of the high edge of a pent roof) above the ground. */
 export function ridgeHeight(s: RoofSection): number {
   return sectionProfile(s).rh;

@@ -319,7 +319,7 @@ Das Möbel Saugroboter wird mit der `vacuum`-Entität verknüpft. Saugt der Robo
 
 ### 4.17 Außenflächen und Außenleuchten
 
-Mit **Außen** ziehst du Rasen, Terrasse, Weg, Einfahrt, Pool, Beet, Hecke oder Zaun auf. Wegleuchten, Garten-Spots und Außen-Wandleuchten beleuchten die Außenflächen und die Fassade.
+Mit **Außen** ziehst du Rasen, Terrasse, Weg, Einfahrt, Pool, Beet, Hecke oder Zaun auf. Eine ausgewählte Außenfläche änderst du an ihren Ecken; ein Rechteck bleibt dabei ein Rechteck. Wegleuchten, Garten-Spots und Außen-Wandleuchten beleuchten die Außenflächen und die Fassade.
 
 ![Garten bei Nacht](images/view-garden.jpg)
 
@@ -343,7 +343,8 @@ Ein einfaches Haus bekommt unter **Einstellungen → Dach** ein Flach- oder Satt
 - Mit dem Schloss **🔓 Fixieren** (oder der Taste **L**) sitzt eine fertige Dachfläche fest und verrutscht nicht mehr beim Antippen; **🔒 Grundriss** sperrt alle Dachflächen mit.
 - Jede Dachfläche hat eine **Form** (Sattel, Walm, Pult, Flach) und eine **Firstrichtung** (↔ oder ↕).
 - **Traufe** und **Neigung** stellst du für beide Seiten getrennt ein. Alle Höhen zählen vom Boden. Eine Seite mit tieferer Traufe zieht weiter herunter, so entsteht etwa ein Abschleppdach über einem niedrigen Anbau. Ein Pultdach steigt von der ersten Seite an; **Seiten tauschen** dreht es um.
-- **Wandoberkante** ist die Höhe, auf der die Wände unter dem Dach enden. Von dort werden Giebel und Drempel bis unter das Dach hochgezogen.
+- **Wandoberkante** ist die Höhe, auf der die Wände unter dem Dach enden. Eine neue Dachfläche übernimmt sie von den Räumen darunter, egal welche Etage der Plan gerade zeigt. Von dort werden Giebel und Drempel bis unter das Dach hochgezogen, so ist auch der Raum unter einem Pultdach geschlossen.
+- Wo eine Dachfläche an einen höheren Teil des Hauses stößt, etwa ein Pultdach an der Hauswand, entfällt dort der Überstand; das Dach endet an der Wand.
 - Unten im Formular steht die **Firsthöhe**. Dachflächen dürfen sich überschneiden: Das niedrigere Dach läuft unter das höhere, wie bei einem echten Anbau.
 - **Neu aus den Räumen erzeugen** ersetzt alle Dachflächen durch einen neuen Vorschlag, **Zurück zu einem Dach** schaltet auf das einfache Dach zurück.
 
