@@ -2386,14 +2386,22 @@ export class FloorplanViewer {
 
   private grabFurniture(x: number, y: number): boolean {
     if (!this.furnish) return false;
-    // a device: its pin was pressed, or its lamp model is under the pointer
+    // a device whose pin was pressed; the pin of a furniture item (the washer's watts) moves the item
     const pending = this.pendingDevice;
     this.pendingDevice = null;
-    const picked = pending ? null : this.pick(x, y);
-    const deviceId = pending ?? (picked && "entity" in picked ? picked.entity : null);
-    if (deviceId) return this.grabDevice(deviceId, x, y);
+    if (pending) {
+      const owner = this.devices.find((m) => m.id === pending)?.furnitureId;
+      const fv = owner ? this.floors.find((v) => v.floor.furniture.some((m) => m.id === owner)) : undefined;
+      if (!owner || !fv) return this.grabDevice(pending, x, y);
+      return this.grabItem(fv, owner, x, y);
+    }
+    // furniture first: a washing machine or a lamp with a linked entity is still furniture to move
+    // (its entity would otherwise be grabbed like a placed device, and nothing would move)
     const hit = this.furnitureAt(x, y);
     if (!hit) {
+      // a placed device's model (a camera) under the pointer
+      const picked = this.pick(x, y);
+      if (picked && "entity" in picked) return this.grabDevice(picked.entity, x, y);
       // a tap on empty space clears the selection, a drag still turns the view
       if (this.selectedFurniture) {
         this.selectFurniture(null);
@@ -2405,10 +2413,14 @@ export class FloorplanViewer {
       }
       return false;
     }
-    const f = hit.fv.floor.furniture.find((m) => m.id === hit.id);
-    const p = this.floorPoint(hit.fv, x, y);
+    return this.grabItem(hit.fv, hit.id, x, y);
+  }
+
+  private grabItem(fv: FloorView, id: string, x: number, y: number): boolean {
+    const f = fv.floor.furniture.find((m) => m.id === id);
+    const p = this.floorPoint(fv, x, y);
     if (!f || !p) return false;
-    this.grab = { floorId: hit.fv.floor.id, id: f.id, offset: [f.x - p[0], f.z - p[1]], x: f.x, z: f.z, moved: false };
+    this.grab = { floorId: fv.floor.id, id: f.id, offset: [f.x - p[0], f.z - p[1]], x: f.x, z: f.z, moved: false };
     this.selectFurniture(f.id);
     this.options.onFurnitureSelect?.(f.id);
     return true;

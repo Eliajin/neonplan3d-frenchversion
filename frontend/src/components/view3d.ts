@@ -686,6 +686,8 @@ export class Fp3dView3d extends LitElement {
           active: st ? isActive(st) : (power ?? 0) > 5,
           unavailable: st ? isUnavailable(st) : false,
           glow: null,
+          // its pin grabs the item when furnishing
+          furnitureId: f.id,
           fromFurniture: true,
         });
       }
