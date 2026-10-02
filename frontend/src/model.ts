@@ -222,6 +222,8 @@ export interface RoofSection {
   flip?: boolean;
   /** Fixed: cannot be moved or resized by accident (the plan lock fixes every section too). */
   locked?: boolean;
+  /** A canopy (terrace roof, carport): posts and beams instead of walls, a see-through roof. */
+  open?: boolean;
 }
 
 export interface RoofSettings {

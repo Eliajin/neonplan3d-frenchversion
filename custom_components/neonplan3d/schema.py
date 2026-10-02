@@ -215,6 +215,8 @@ ROOF_SECTION_SCHEMA = vol.Schema(
         vol.Optional("overhang", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=2))),
         vol.Optional("flip", default=False): bool,
         vol.Optional("locked", default=False): bool,
+        # a canopy (terrace roof, carport): posts instead of walls, a see-through roof
+        vol.Optional("open", default=False): bool,
     },
     extra=vol.ALLOW_EXTRA,
 )

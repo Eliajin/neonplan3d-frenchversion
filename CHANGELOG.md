@@ -4,11 +4,12 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 [releases page](https://github.com/Mastershort/neonplan3d/releases). Ideas and votes:
 [Discussions → Ideas](https://github.com/Mastershort/neonplan3d/discussions/categories/ideas).
 
-## 1.5.0 – unreleased
+## 1.5.0
 
 ### New
 
 - **Roof sections:** roofs made of several parts (L/T houses, barns, extensions), each with shape (gable, hip, pent, flat), ridge direction, eave and pitch per side; proposed from the rooms; new Roof tool in the editor.
+- **Canopies** (terrace roof, carport): posts and beams, see-through roof.
 - **Outdoor areas** are resized at their corners.
 
 ## 1.4.0

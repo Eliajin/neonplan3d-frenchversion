@@ -110,3 +110,18 @@ test("a lean-to has no overhang where it meets the taller house, and sits on the
   // flipped: side a is at x = 14 (open), side b at x = 10 against the house
   assert.deepEqual([o.a, o.b, o.u0, o.u1], [0.4, 0, 0.4, 0.4]);
 });
+
+test("a canopy over a terrace draws see-through panels and posts instead of walls", () => {
+  const b = emptyBuilding();
+  b.floors = [{ ...newFloor("eg", "EG", 0), rooms: [rect("house", 0, 0, 10, 8)] }];
+  // a terrace roof in front of the house, rising to the house wall (side b at z = 8 … flipped: a = z 11)
+  const canopy = section({ x0: 2, z0: 8, x1: 8, z1: 11, shape: "pent", axis: "x", flip: true, eave_a: 2.4, eave_b: 2.4, pitch_a: 6, pitch_b: 6, base: 2.4, open: true });
+  b.settings.roof = { type: "custom", pitch: 35, overhang: 0.4, sections: [canopy] };
+  const [part] = buildRoof(b);
+  assert.ok(part.glass.count > 0, "see-through panels");
+  // the posts reach down to the ground
+  const ys = part.solid.p.filter((_, i) => i % 3 === 1);
+  near(Math.min(...ys), 0);
+  // the side at the house wall has no overhang
+  assert.equal(sectionOverhang(b, canopy, 0.15).b, 0);
+});

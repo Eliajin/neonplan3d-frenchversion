@@ -347,6 +347,9 @@ Ein einfaches Haus bekommt unter **Einstellungen → Dach** ein Flach- oder Satt
 - Wo eine Dachfläche an einen höheren Teil des Hauses stößt, etwa ein Pultdach an der Hauswand, entfällt dort der Überstand; das Dach endet an der Wand.
 - Unten im Formular steht die **Firsthöhe**. Dachflächen dürfen sich überschneiden: Das niedrigere Dach läuft unter das höhere, wie bei einem echten Anbau.
 - **Neu aus den Räumen erzeugen** ersetzt alle Dachflächen durch einen neuen Vorschlag, **Zurück zu einem Dach** schaltet auf das einfache Dach zurück.
+- **Überdachung:** Für ein Terrassendach oder einen Carport ziehst du eine Dachfläche über eine Fläche ohne Raum. Sie wird automatisch zur Überdachung: ein flaches Pultdach auf 2,4 m, getragen von Pfosten und Balken statt Wänden, mit durchsichtiger Dachfläche. An der Hauswand liegt sie auf. Den Schalter **Überdachung** gibt es auch im Formular jeder Dachfläche.
+
+![Eine Terrassenüberdachung vor dem Haus](images/view-canopy.jpg)
 
 ![Das Werkzeug Dach mit einer ausgewählten Dachfläche](images/editor-roof.jpg)
 

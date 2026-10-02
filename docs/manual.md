@@ -347,6 +347,9 @@ A simple house gets a flat or gable roof over the whole top floor under **Settin
 - Where a section meets a taller part of the house, e.g. a pent roof against the house wall, the overhang is left out there; the roof ends at the wall.
 - The **ridge height** is shown at the bottom of the form. Sections may overlap: the lower roof runs under the higher one, as with a real extension.
 - **Create again from the rooms** replaces all sections with a new proposal, **Back to one roof** switches to the simple roof.
+- **Canopy:** For a terrace roof or a carport, drag a section over an area without a room. It becomes a canopy by itself: a flat pent roof at 2.4 m, carried by posts and beams instead of walls, with a see-through roof. At the house wall it rests on the wall. The **Canopy** switch is in the form of every section, too.
+
+![A terrace roof in front of the house](images/view-canopy.jpg)
 
 ![The Roof tool with a selected roof section](images/editor-roof.jpg)
 

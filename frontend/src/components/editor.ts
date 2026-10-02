@@ -1830,11 +1830,7 @@ export class Fp3dEditor extends LitElement {
     return this._roofId ? this._doc.settings.roof.sections?.find((x) => x.id === this._roofId) : undefined;
   }
 
-  /** Wall tops of the floor shown in the plan: where a new section's eaves start. */
-  private get floorTop(): number {
-    const f = this.floor;
-    return f ? round(f.elevation + f.height) : 2.5;
-  }
+
 
   /** Switch to a roof of sections; without sections yet, propose them from the rooms. */
   private useRoofSections(regenerate = false): void {
@@ -1850,23 +1846,28 @@ export class Fp3dEditor extends LitElement {
 
   private addRoofSection(lo: Vec2, hi: Vec2): void {
     if (!this.isAdmin) return;
-    // eaves on the walls of the rooms below (a garage), whatever floor the plan shows
-    const top = round(wallTopUnder(this._doc, lo[0], lo[1], hi[0], hi[1]) ?? this.floorTop);
-    const pitch = this._doc.settings.roof.pitch || 35;
+    // eaves on the walls of the rooms below (a garage), whatever floor the plan shows; over no room
+    // (a terrace, a carport) a canopy: a flat pent roof on posts, 2.4 m above the ground floor
+    const walls = wallTopUnder(this._doc, lo[0], lo[1], hi[0], hi[1]);
+    const ground = Math.min(...this._doc.floors.map((f) => f.elevation));
+    const canopy = walls === null;
+    const top = round(walls ?? ground + 2.4);
+    const pitch = canopy ? 6 : this._doc.settings.roof.pitch || 35;
     const sec: RoofSection = {
       id: uid("roof"),
       x0: round(lo[0]),
       z0: round(lo[1]),
       x1: round(hi[0]),
       z1: round(hi[1]),
-      shape: "gable",
+      shape: canopy ? "pent" : "gable",
       axis: hi[0] - lo[0] >= hi[1] - lo[1] ? "x" : "z",
       eave_a: top,
       eave_b: top,
       pitch_a: pitch,
       pitch_b: pitch,
       base: top,
-      overhang: null,
+      overhang: canopy ? 0.15 : null,
+      ...(canopy ? { open: true } : {}),
     };
     this.change((doc) => {
       doc.settings.roof.type = "custom";
@@ -1922,7 +1923,7 @@ export class Fp3dEditor extends LitElement {
       } else if (sec.shape === "gable") ridge = line(fr.at(fr.u0, pr.vr), fr.at(fr.u1, pr.vr));
       else if (sec.shape === "pent") ridge = line(fr.at(fr.u0, fr.w), fr.at(fr.u1, fr.w));
       const [cx, cy] = this.toScreen(fr.at((fr.u0 + fr.u1) / 2, fr.w / 2));
-      const label = `${this.roofFixed(sec) ? "🔒 " : ""}${i + 1} · ${this.t(`roof_shape_${sec.shape}` as I18nKey)} · ${formatNumber(this.hass, ridgeHeight(sec), 1)} m`;
+      const label = `${this.roofFixed(sec) ? "🔒 " : ""}${i + 1} · ${sec.open ? this.t("roof_open_short") : this.t(`roof_shape_${sec.shape}` as I18nKey)} · ${formatNumber(this.hass, ridgeHeight(sec), 1)} m`;
       return svg`<g data-roof=${sec.id} class=${`fp3d-roof-sec${sel ? " fp3d-roof-sel" : ""}`}>
           <polygon points=${pts.map((p) => p.join(",")).join(" ")} />
           <g class="fp3d-roof-ridge">${ridge}</g>
@@ -1999,6 +2000,10 @@ export class Fp3dEditor extends LitElement {
               <button aria-pressed=${sec.axis === "x"} ?disabled=${!admin} @click=${() => set({ axis: "x" })}>${this.t("roof_axis_x")}</button>
               <button aria-pressed=${sec.axis === "z"} ?disabled=${!admin} @click=${() => set({ axis: "z" })}>${this.t("roof_axis_z")}</button>
             </div>`}
+        <label class="fp3d-check fp3d-wide" title=${this.t("roof_open_hint")}
+          ><input type="checkbox" .checked=${!!sec.open} ?disabled=${!admin} @change=${(e: Event) => set({ open: (e.target as HTMLInputElement).checked })} />
+          ${this.t("roof_open")}</label
+        >
         <div class="fp3d-form">
           ${flat
             ? num(this.t("roof_height"), sec.eave_a, (v) => set({ eave_a: v, eave_b: v }))

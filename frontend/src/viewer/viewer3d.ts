@@ -430,7 +430,7 @@ export class FloorplanViewer {
   private readonly haloTexture: CanvasTexture;
   /** Roof over the top floor (house view only), its opacity and the camera distance of the house view. */
   /** The roof: one group with a part per floor it sits on (each part follows its floor). */
-  private roof: { group: Group; parts: { group: Group; floorId: string; base: number }[]; solid: MeshBasicMaterial; lines: LineBasicMaterial } | null = null;
+  private roof: { group: Group; parts: { group: Group; floorId: string; base: number }[]; solid: MeshBasicMaterial; lines: LineBasicMaterial; glass: MeshBasicMaterial } | null = null;
   private roofO = 0;
   /** Robot vacuums: their info from Home Assistant, how they move, and their meshes. */
   private robots = new Map<string, { info: RobotInfo; motion: RobotMotion; group: Group; led: MeshBasicMaterial }>();
@@ -1547,6 +1547,7 @@ export class FloorplanViewer {
       this.roof.group.traverse((o) => ((o as Mesh).geometry as BufferGeometry | undefined)?.dispose());
       this.roof.solid.dispose();
       this.roof.lines.dispose();
+      this.roof.glass.dispose();
       this.scene.remove(this.roof.group);
       this.roof = null;
     }
@@ -1555,16 +1556,19 @@ export class FloorplanViewer {
     const group = new Group();
     const solid = themed(new MeshBasicMaterial({ vertexColors: true, transparent: true, side: DoubleSide }), this.themeUniform);
     const lines = themed(new LineBasicMaterial({ vertexColors: true, transparent: true, blending: lineBlending(this.theme), depthWrite: false }), this.themeUniform, true);
+    // canopies: faint see-through panels that do not hide what is below
+    const glass = themed(new MeshBasicMaterial({ vertexColors: true, transparent: true, side: DoubleSide, depthWrite: false }), this.themeUniform);
     const parts = geos.map((geo) => {
       const part = new Group();
       part.add(new Mesh(geo.solid.geometry(), solid), new LineSegments(geo.lines.geometry(), lines));
+      if (geo.glass.count) part.add(new Mesh(geo.glass.geometry(), glass));
       part.renderOrder = 8;
       group.add(part);
       return { group: part, floorId: geo.floor.id, base: geo.base };
     });
     group.renderOrder = 8;
     this.scene.add(group);
-    this.roof = { group, parts, solid, lines };
+    this.roof = { group, parts, solid, lines, glass };
     this.placeRoof();
   }
 
@@ -1590,6 +1594,7 @@ export class FloorplanViewer {
     roof.solid.opacity = this.roofO;
     roof.solid.depthWrite = this.roofO > 0.9;
     roof.lines.opacity = this.roofO;
+    roof.glass.opacity = this.roofO * 0.28;
     return this.roofO !== before && this.roofO !== target;
   }
 

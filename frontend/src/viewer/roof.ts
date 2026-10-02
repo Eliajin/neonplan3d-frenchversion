@@ -14,6 +14,10 @@ const GABLE = 0x141d31;
 const RIDGE = shade(0x37e0ff, 0.9);
 const EAVE = shade(0x5b7cff, 0.45);
 const THICK = 0.14;
+/** Canopy: see-through panels and a light frame of posts and beams. */
+const GLASS = 0x8fd8ff;
+const FRAME = 0xc9d3e6;
+const FRAME_TOP = 0xe3e9f5;
 
 /** Roof geometry that sits on a floor: y = 0 is `base` above the floor's own level. */
 export interface RoofGeometry {
@@ -21,6 +25,8 @@ export interface RoofGeometry {
   base: number;
   solid: GeoBuffer;
   lines: LineBuffer;
+  /** See-through roof panels of canopies (drawn with their own, fainter material). */
+  glass: GeoBuffer;
 }
 
 /** The floor the roof sits on: the highest one with rooms. */
@@ -63,7 +69,7 @@ function buildSingleRoof(b: Building): RoofGeometry | null {
       lines.seg([a[0], e, a[1]], [c[0], e, c[1]], RIDGE);
       lines.seg([a[0], 0, a[1]], [c[0], 0, c[1]], EAVE);
     }
-    return { floor, base: floor.height, solid, lines };
+    return { floor, base: floor.height, solid, lines, glass: new GeoBuffer() };
   }
   // gable: the ridge runs along the longer side, or along the shorter one (terraced houses)
   const longX = x1 - x0 >= z1 - z0;
@@ -98,7 +104,7 @@ function buildSingleRoof(b: Building): RoofGeometry | null {
     solid.tri(P(u, hw, -THICK), P(u, -hw, -THICK), P(u, 0, rw - THICK), g);
   }
   lines.seg(P(u0, 0, rise + 0.004), P(u1, 0, rise + 0.004), RIDGE);
-  return { floor, base: floor.height, solid, lines };
+  return { floor, base: floor.height, solid, lines, glass: new GeoBuffer() };
 }
 
 /** Roof sections, grouped by the floor whose wall tops are nearest below each section's base. */
@@ -111,8 +117,8 @@ function buildSections(b: Building, sections: readonly RoofSection[], overhang: 
     // the floor the section sits on: the highest one that starts below its walls' top
     const floor = [...floors].reverse().find((f) => f.elevation < sec.base - 0.05) ?? floors[0];
     let part = parts.get(floor.id);
-    if (!part) parts.set(floor.id, (part = { floor, base: 0, solid: new GeoBuffer(), lines: new LineBuffer() }));
-    pushSection(part.solid, part.lines, sec, sectionOverhang(b, sec, sec.overhang ?? overhang), floor.elevation);
+    if (!part) parts.set(floor.id, (part = { floor, base: 0, solid: new GeoBuffer(), lines: new LineBuffer(), glass: new GeoBuffer() }));
+    pushSection(part.solid, part.lines, sec, sectionOverhang(b, sec, sec.overhang ?? overhang), floor.elevation, part.glass);
   }
   return [...parts.values()];
 }
@@ -121,7 +127,7 @@ function buildSections(b: Building, sections: readonly RoofSection[], overhang: 
  * One section: its slopes with their thickness and rim, the ridge (and hips), and the walls from the
  * section's base up under the roof (gable ends and knee walls). `yOff` is the level of its floor.
  */
-export function pushSection(solid: GeoBuffer, lines: LineBuffer, s: RoofSection, overhang: SectionOverhang | number, yOff: number): void {
+export function pushSection(solid: GeoBuffer, lines: LineBuffer, s: RoofSection, overhang: SectionOverhang | number, yOff: number, glass: GeoBuffer = solid): void {
   const fr = sectionFrame(s);
   const pr = sectionProfile(s);
   const ov = typeof overhang === "number" ? { u0: overhang, u1: overhang, a: overhang, b: overhang } : overhang;
@@ -194,7 +200,14 @@ export function pushSection(solid: GeoBuffer, lines: LineBuffer, s: RoofSection,
     rim = [a0, a1, r1, b1, b0, r0];
     ridges.push([r0, r1]);
   }
+  // a canopy has thin see-through panels; a closed roof its tiles with their thickness below
+  const open = !!s.open;
+  const pane = new Color(GLASS);
   for (const f of faces) {
+    if (open) {
+      for (let i = 1; i + 1 < f.length; i++) glass.tri(P(f[0][0], f[0][1], f[0][2]), P(f[i][0], f[i][1], f[i][2]), P(f[i + 1][0], f[i + 1][1], f[i + 1][2]), pane);
+      continue;
+    }
     fan(f.map(([u, v, y]) => P(u, v, y)), top);
     fan(f.map(([u, v, y]) => P(u, v, y - THICK)), under);
   }
@@ -202,8 +215,12 @@ export function pushSection(solid: GeoBuffer, lines: LineBuffer, s: RoofSection,
   for (let i = 0; i < rim.length; i++) {
     const [ua, va, ya] = rim[i];
     const [ub, vb, yb] = rim[(i + 1) % rim.length];
-    fan([P(ua, va, ya), P(ub, vb, yb), P(ub, vb, yb - THICK), P(ua, va, ya - THICK)], under);
-    lines.seg(P(ua, va, ya), P(ub, vb, yb), EAVE);
+    if (!open) fan([P(ua, va, ya), P(ub, vb, yb), P(ub, vb, yb - THICK), P(ua, va, ya - THICK)], under);
+    lines.seg(P(ua, va, ya), P(ub, vb, yb), open ? RIDGE : EAVE);
+  }
+  if (open) {
+    pushCanopyFrame(solid, lines, fr, pr, ov, P, yOff);
+    return;
   }
   for (const [[ua, va, ya], [ub, vb, yb]] of ridges) lines.seg(P(ua, va, ya + 0.004), P(ub, vb, yb + 0.004), RIDGE);
   // walls up under the roof, from the section's base: the gable ends (not under a hip) …
@@ -222,6 +239,72 @@ export function pushSection(solid: GeoBuffer, lines: LineBuffer, s: RoofSection,
   } else if (s.eave_a > base + 0.02) {
     for (const [ua, va, ub, vb] of [[fr.u0, 0, fr.u1, 0], [fr.u1, 0, fr.u1, w], [fr.u1, w, fr.u0, w], [fr.u0, w, fr.u0, 0]])
       fan([P(ua, va, base), P(ub, vb, base), P(ub, vb, s.eave_a), P(ua, va, s.eave_a)], g);
+  }
+}
+
+/**
+ * Posts and beams of a canopy: a beam under each free edge of the roof, posts at its corners and at
+ * most 3.5 m apart along the free sides; an edge against the house (no overhang) rests on the wall.
+ */
+function pushCanopyFrame(
+  solid: GeoBuffer,
+  lines: LineBuffer,
+  fr: ReturnType<typeof sectionFrame>,
+  pr: ReturnType<typeof sectionProfile>,
+  ov: { u0: number; u1: number; a: number; b: number },
+  P: (u: number, v: number, y: number) => number[],
+  yOff: number,
+): void {
+  const w = fr.w;
+  const POST = 0.12;
+  const BEAM = 0.16;
+  const freeA = ov.a > 0;
+  const freeB = ov.b > 0;
+  const freeU0 = ov.u0 > 0;
+  const freeU1 = ov.u1 > 0;
+  const box = (u0: number, u1: number, v0: number, v1: number, y0: number, y1: number) => {
+    const poly = [fr.at(u0, v0), fr.at(u1, v0), fr.at(u1, v1), fr.at(u0, v1)];
+    // the frame may be flipped: keep the outline counter-clockwise
+    const area = (poly[1][0] - poly[0][0]) * (poly[2][1] - poly[0][1]) - (poly[2][0] - poly[0][0]) * (poly[1][1] - poly[0][1]);
+    pushPrism(solid, area < 0 ? [...poly].reverse() : poly, y0 - yOff, y1 - yOff, FRAME, FRAME_TOP, { bottom: true });
+  };
+  const ground = yOff;
+  // beams along the free long sides (a, b), under the roof at their height
+  for (const [v, free] of [[0, freeA], [w, freeB]] as const) {
+    if (!free) continue;
+    const y = pr.y(v) - 0.03;
+    const vv = v === 0 ? 0 : w - POST;
+    box(fr.u0, fr.u1, vv, vv + POST, y - BEAM, y);
+    lines.seg(P(fr.u0, v, y - BEAM), P(fr.u1, v, y - BEAM), EAVE);
+  }
+  // beams along the free ends (u0, u1), following the slope
+  for (const [u, free] of [[fr.u0, freeU0], [fr.u1 - POST, freeU1]] as const) {
+    if (!free) continue;
+    for (let i = 0; i < 6; i++) {
+      const v0 = (w * i) / 6;
+      const v1 = (w * (i + 1)) / 6;
+      const y = Math.min(pr.y(v0), pr.y(v1)) - 0.03;
+      box(u, u + POST, v0, v1, y - BEAM, y);
+    }
+  }
+  // posts: corners where both edges are free (a corner at the house wall rests on the wall), and
+  // along a free long side at most 3.5 m apart
+  const posts: [number, number][] = [];
+  for (const [v, free] of [[0, freeA], [w - POST, freeB]] as const) {
+    if (!free) continue;
+    const span = fr.u1 - fr.u0 - POST;
+    const n = Math.max(1, Math.ceil(span / 3.5));
+    for (let i = 0; i <= n; i++) {
+      const u = fr.u0 + (span * i) / n;
+      if ((i === 0 && !freeU0) || (i === n && !freeU1)) continue;
+      posts.push([u, v]);
+    }
+  }
+  // a pent roof against the house with only its ends free still needs posts at its outer corners
+  if (!freeA && !freeB) for (const u of [fr.u0, fr.u1 - POST]) if ((u === fr.u0 && freeU0) || (u !== fr.u0 && freeU1)) posts.push([u, w / 2 - POST / 2]);
+  for (const [u, v] of posts) {
+    const top = pr.y(v + POST / 2) - 0.03 - BEAM;
+    box(u, u + POST, v, v + POST, ground, top);
   }
 }
 

@@ -68,7 +68,7 @@ export interface SectionOverhang {
  */
 export function sectionOverhang(b: Building, s: RoofSection, overhang: number): SectionOverhang {
   const fr = sectionFrame(s);
-  const taller = b.floors.flatMap((f) => f.rooms.filter((r) => r.points.length >= 3 && f.elevation + f.height > s.base + 0.1));
+  const taller = b.floors.flatMap((f) => f.rooms.filter((r) => r.points.length >= 3 && f.elevation + f.height > s.base + 0.05));
   const blocked = (pts: Vec2[]) => pts.some((p) => taller.some((r) => pointInPolygon(p, r.points)));
   const d = 0.35;
   const along = [0.15, 0.5, 0.85].map((t) => fr.u0 + (fr.u1 - fr.u0) * t);
