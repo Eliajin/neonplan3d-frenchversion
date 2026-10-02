@@ -2050,7 +2050,7 @@ function formatPower(hass: HomeAssistant | undefined, w: number): string {
 /** Marker height above furniture: in front of a screen, above wall units, else just above the top. */
 function markerHeight(f: Furniture): number {
   if (f.type === "tv_board") return f.h + 0.9;
-  if (f.type === "tv_wall") return 1.3 + f.h / 2 + 0.25;
-  if (f.type === "kitchen_wall") return 1.45 + f.h + 0.25;
+  // wall TV and wall cabinet: above the item (their height above the floor comes from mountBase)
+  if (f.type === "tv_wall" || f.type === "kitchen_wall") return f.h + 0.25;
   return f.h + 0.35;
 }

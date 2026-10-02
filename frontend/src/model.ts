@@ -520,6 +520,23 @@ export function step(p: Vec2, length: number, dir: Direction): Vec2 {
 }
 
 /** Height of the highest furniture top under a point (0 = the floor). */
+/**
+ * Height of the bottom of a built-in model as drawn (a wall cabinet hangs at 1.45 m, a wall TV is
+ * centred at 1.3 m, a radiator stands on short brackets); the mount height replaces it.
+ */
+export function builtinBase(f: Pick<Furniture, "type" | "h">): number {
+  switch (f.type) {
+    case "kitchen_wall":
+      return 1.45;
+    case "tv_wall":
+      return Math.max(0, 1.3 - f.h / 2);
+    case "radiator":
+      return 0.12;
+    default:
+      return 0;
+  }
+}
+
 export function surfaceHeight(floor: Floor, x: number, z: number): number {
   let top = 0;
   for (const f of floor.furniture) {

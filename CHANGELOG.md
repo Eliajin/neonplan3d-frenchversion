@@ -12,11 +12,10 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 - **Place all** is a small link that asks first.
 - **Room climate per room:** chosen sensors for temperature, humidity and CO₂; automatic skips device temperatures (3D printer, heat pump flow).
 
-## 1.3.1
-
 ### Fixes
 
 - Built-in furniture follows its height above floor in 3D (a dryer on the washing machine, #13).
+- The height above floor counts from the floor: wall cabinets (1.45 m), wall TVs and radiators can be set lower too.
 
 ## 1.3.0
 

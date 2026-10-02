@@ -2,7 +2,7 @@
 // furniture has the type "pack:<pack id>:<item id>". Every bundle (main, editor, 3D) keeps its own
 // registry, filled with setPacks() from the packs the backend returns.
 
-import { ELECTRIC_FURNITURE, FURNITURE_SIZE, surfaceHeight, WALL_LAMP_Y, type Floor, type Furniture } from "./model.ts";
+import { builtinBase, ELECTRIC_FURNITURE, FURNITURE_SIZE, surfaceHeight, WALL_LAMP_Y, type Floor, type Furniture } from "./model.ts";
 import type { LampModel } from "./viewer/viewer3d.ts";
 
 export interface PackPart {
@@ -162,6 +162,7 @@ export function mountBase(floor: Floor, f: Pick<Furniture, "type" | "x" | "z" | 
     case "ceiling":
       return Math.max(0, floor.height - f.h);
     default:
-      return 0;
+      // built-in models: where they are drawn by default (a wall cabinet at 1.45 m)
+      return item ? 0 : builtinBase(f);
   }
 }

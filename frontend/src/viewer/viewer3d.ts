@@ -2529,7 +2529,7 @@ export class FloorplanViewer {
         ? f.type === "lamp_pendant"
           ? H - f.h - 0.1
           : H - h
-        : (f.mount_y ?? 0) + (f.type === "radiator" ? 0.12 : f.type === "kitchen_wall" ? 1.45 : 0);
+        : mountBase(fv.floor, f);
     const a = f.rotation * DEG;
     const c = Math.cos(a);
     const sn = Math.sin(a);

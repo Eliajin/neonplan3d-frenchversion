@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Furniture } from "../model.ts";
-import { setPacks, type FurniturePack } from "../packs.ts";
+import { mountBase, setPacks, type FurniturePack } from "../packs.ts";
+import { newFloor } from "../model.ts";
 import { pushFurniture } from "./furniture.ts";
 import { GeoBuffer, LineBuffer } from "./geo.ts";
 
@@ -64,4 +65,17 @@ test("a built-in item lifted by its mount height (a dryer on the washer) leaves 
   assert.ok(Math.abs(lifted.max - floor.max - 0.85) < 1e-6);
   // no contact shadow on the floor under a lifted item
   assert.equal(lifted.shadow, 0);
+});
+
+test("the mount height is absolute: a wall cabinet hangs at 1.45 m and can go lower", () => {
+  const cab = { id: "c", type: "kitchen_wall", x: 0, z: 0, w: 0.8, d: 0.35, h: 0.7, rotation: 0, variant: null } as Furniture;
+  const floor = newFloor("eg", "EG", 0);
+  const minY = (f: Furniture) => {
+    const buf = new GeoBuffer();
+    pushFurniture(buf, new LineBuffer(), new GeoBuffer(), f, mountBase(floor, f));
+    return Math.min(...buf.p.filter((_, i) => i % 3 === 1));
+  };
+  assert.equal(mountBase(floor, cab), 1.45);
+  assert.ok(Math.abs(minY(cab) - 1.45) < 1e-6);
+  assert.ok(Math.abs(minY({ ...cab, mount_y: 1.0 }) - 1.0) < 1e-6);
 });

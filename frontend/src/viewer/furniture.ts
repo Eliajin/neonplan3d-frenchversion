@@ -5,6 +5,7 @@
 
 import { Color } from "three";
 import type { Furniture, Vec2 } from "../model.ts";
+import { builtinBase } from "../model.ts";
 import { mountBase, packItem, packScreen, type PackItem } from "../packs.ts";
 import type { Floor } from "../model.ts";
 import { ALWAYS, DEG, EDGE_TOP, GeoBuffer, LineBuffer, pushLoft, pushLyingCyl, pushPrism, shade } from "./geo.ts";
@@ -710,7 +711,7 @@ export function screenRect(f: Furniture, floor?: Floor): { x0: number; x1: numbe
     return { x0: x0 + inset, x1: x1 - inset, y0: base + part.y * h + inset, y1: base + (part.y + part.h) * h - inset, z: (part.z + part.d / 2) * d };
   }
   // built-in models are lifted as a whole by their mount height
-  const lift = floor && f.type !== "fridge_smart" ? mountBase(floor, f) : 0;
+  const lift = floor && f.type !== "fridge_smart" ? mountBase(floor, f) - builtinBase(f) : 0;
   const r = builtInScreen(f, w, d, h, floor);
   return r ? { ...r, y0: r.y0 + lift, y1: r.y1 + lift } : null;
 }
@@ -763,12 +764,14 @@ function contactShadow(shadow: GeoBuffer, tf: Tf, w: number, d: number, strength
 export function pushFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f: Furniture, base = 0): void {
   // pack items place their parts at `base` themselves; built-in models are drawn on the floor and
   // lifted as a whole (a dryer on the washer, a shelf on the wall), without a shadow on the floor
-  if (packItem(f.type) || base < 0.001) return buildFurniture(buf, lines, shadow, f, base);
+  // the mount height is absolute: a wall cabinet drawn at 1.45 m moves by the difference (up or down)
+  const lift = packItem(f.type) ? 0 : base - builtinBase(f);
+  if (packItem(f.type) || Math.abs(lift) < 0.001) return buildFurniture(buf, lines, shadow, f, base);
   const p0 = buf.p.length;
   const l0 = lines.p.length;
-  buildFurniture(buf, lines, new GeoBuffer(), f, 0);
-  for (let i = p0 + 1; i < buf.p.length; i += 3) buf.p[i] += base;
-  for (let i = l0 + 1; i < lines.p.length; i += 3) lines.p[i] += base;
+  buildFurniture(buf, lines, base < 0.05 ? shadow : new GeoBuffer(), f, 0);
+  for (let i = p0 + 1; i < buf.p.length; i += 3) buf.p[i] += lift;
+  for (let i = l0 + 1; i < lines.p.length; i += 3) lines.p[i] += lift;
 }
 
 function buildFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f: Furniture, base: number): void {
