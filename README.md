@@ -8,7 +8,7 @@
 
 [![Open your Home Assistant instance and open the NeonPlan 3D repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Mastershort&repository=neonplan3d&category=integration)
 
-![The house in the neon 3D view](docs/images/view-house.jpg)
+[![NeonPlan 3D: the house turns, the view flies into the ground floor, lights go off and on, then the kitchen with its room panel](docs/images/demo.webp)](https://mastershort.github.io/neonplan3d/)
 
 📖 **Manual:** [English](https://mastershort.de/en/neonplan3d/manual/?lang=en) · [Deutsch](https://mastershort.de/neonplan3d/anleitung/?lang=de) (also in this repository: [manual.md](docs/manual.md), [anleitung.md](docs/anleitung.md))
 
