@@ -104,6 +104,8 @@ async def test_activate_install_and_update(hass: HomeAssistant, hass_ws_client, 
     assert status["packs"] == [
         {"id": "shop.living", "name": "Wohnzimmer", "release": 1, "url": "https://shop/x", "installed": None}
     ]
+    # an older shop sends no offers and no loyalty code
+    assert status["offers"] == [] and status["loyalty"] is None
     sent = aioclient_mock.mock_calls[-1][2]
     assert sent == {"key": "NP-ABCD-EFGH-2345-6789", "instance": fp}
 
@@ -113,9 +115,21 @@ async def test_activate_install_and_update(hass: HomeAssistant, hass_ws_client, 
     assert result["result"]["licensee"] == "Anna" and result["result"]["release"] == 1
     assert [p["id"] for p in hass.data[DOMAIN].packs] == ["shop.living"]
 
-    # the daily check finds release 2 and installs it
+    # the daily check finds release 2 and installs it; the shop now also announces offers and a code
     aioclient_mock.clear_requests()
     catalog["packs"][0]["release"] = 2
+    catalog["offers"] = [
+        {
+            "id": "kino",
+            "name": "Heimkino",
+            "teaser": "Lautsprecher",
+            "url": "https://shop/kino",
+            "kind": "pack",
+            "new": True,
+        },
+        {"id": "bad", "name": "No link", "url": "http://insecure"},
+    ]
+    catalog["loyalty"] = {"code": "NP-TREUE-AB12CD", "percent": 10}
     aioclient_mock.post(f"{lic.SHOP_API}/catalog", json=catalog)
     aioclient_mock.post(
         f"{lic.SHOP_API}/pack", text=_sign(private, keys, {**PAYLOAD, "instance": fp, "licensee": "Anna", "release": 2})
@@ -127,6 +141,9 @@ async def test_activate_install_and_update(hass: HomeAssistant, hass_ws_client, 
     await client.send_json_auto_id({"type": "neonplan3d/license/get"})
     status = (await client.receive_json())["result"]
     assert status["packs"][0]["installed"] == 2 and status["error"] is None
+    assert [o["id"] for o in status["offers"]] == ["kino"] and status["offers"][0]["new"]
+    assert status["offers"][0]["image"] is None and status["offers"][0]["kind"] == "pack"
+    assert status["loyalty"] == {"code": "NP-TREUE-AB12CD", "percent": 10}
 
     # the shop refuses a key: the error comes through with the shop's code
     aioclient_mock.clear_requests()
@@ -136,10 +153,11 @@ async def test_activate_install_and_update(hass: HomeAssistant, hass_ws_client, 
     result = await client.receive_json()
     assert not result["success"] and result["error"]["code"] == "activation_limit"
 
-    # forgetting the key keeps the packs
+    # forgetting the key keeps the packs and drops offers and code
     await client.send_json_auto_id({"type": "neonplan3d/license/remove"})
     status = (await client.receive_json())["result"]
     assert not status["active"] and len(hass.data[DOMAIN].packs) == 1
+    assert status["offers"] == [] and status["loyalty"] is None
 
 
 async def test_a_pack_bound_elsewhere_is_refused_on_import(hass: HomeAssistant, hass_ws_client, monkeypatch) -> None:

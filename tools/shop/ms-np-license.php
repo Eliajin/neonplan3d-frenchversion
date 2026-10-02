@@ -10,13 +10,23 @@
  * hardware is fine, handing it around is not).
  *
  * REST API (used by the integration, custom_components/neonplan3d/license.py):
- *   POST /wp-json/neonplan/v1/catalog  {key, instance}        -> {licensee, packs: [{id, name, release, url}]}
+ *   POST /wp-json/neonplan/v1/catalog  {key, instance}        -> {licensee, packs: [{id, name, release, url}],
+ *                                                                 offers: [{id, name, teaser, image, url, kind, price, new}],
+ *                                                                 loyalty: {code, percent} | null}
  *   POST /wp-json/neonplan/v1/pack     {key, instance, pack}  -> the signed pack file (JSON)
  * Errors are JSON {code, message} with HTTP 4xx; codes: invalid_key, activation_limit, not_owned, not_found.
  *
  * Setup: same as ms-np-sign.php (seed in wp-config.php, <pack>.canonical.json next to the pack files,
  * products carry _ms_np_key = pack key or a comma-separated list for the bundle); drop this file next to
  * ms-np-sign.php. Both files share the helpers ms_np_put_licensee / ms_np_put_instance.
+ *
+ * Offers: every published product with a _ms_np_key and a price (no free sampler) that the customer does
+ * not own yet; the product's short description is the teaser, its picture the image. Products from the
+ * last MS_NP_NEW_DAYS days count as new.
+ *
+ * Loyalty: with the first paid pack order every customer gets a personal coupon (MS_NP_LOYALTY_PERCENT on
+ * every further pack and Pro add-on, not on bundles), bound to the buyer's e-mail. It shows in the order
+ * mail, the account and in NeonPlan 3D; a shop link with ?np_coupon=CODE puts it into the cart.
  */
 
 if (!defined('ABSPATH')) {
@@ -33,6 +43,11 @@ const MS_NP_BIND_LOG_META = '_ms_np_bind_log';
 /** Requests per hour and IP before the API answers 429. */
 const MS_NP_RATE_LIMIT = 120;
 const MS_NP_SHOP_PAGE = 'https://mastershort.de/neonplan3d/';
+/** Loyalty discount in percent on further purchases, and the meta key of the customer's coupon code. */
+const MS_NP_LOYALTY_PERCENT = 10;
+const MS_NP_COUPON_META = '_ms_np_coupon';
+/** Products this young show as "new" in NeonPlan 3D. */
+const MS_NP_NEW_DAYS = 45;
 
 // ------------------------------------------------------------------------------------ keys
 
@@ -121,6 +136,7 @@ function ms_np_on_order_paid(int $order_id): void
     $order = wc_get_order($order_id);
     if ($order) {
         ms_np_ensure_license($order);
+        ms_np_coupon_for_order($order);
     }
 }
 
@@ -135,12 +151,27 @@ function ms_np_key_in_mail(WC_Order $order, bool $sent_to_admin, bool $plain_tex
     if ($key === '') {
         return;
     }
+    $coupon = ms_np_coupon_for_order($order);
     if ($plain_text) {
-        echo "\n" . 'NeonPlan 3D – Lizenzschlüssel: ' . $key . "\n" . 'In NeonPlan 3D unter Erweiterungen > Shop-Verbindung eintragen; die gekauften Packs erscheinen dann dort und bekommen Updates von selbst.' . "\n\n";
+        echo "\n" . 'NeonPlan 3D – Lizenzschlüssel: ' . $key . "\n" . 'In NeonPlan 3D unter Erweiterungen > Shop-Verbindung eintragen; die gekauften Packs erscheinen dann dort und bekommen Updates von selbst.' . "\n";
+        if ($coupon !== '') {
+            echo 'Dein Treuerabatt: ' . MS_NP_LOYALTY_PERCENT . ' % auf jedes weitere Pack und jede Pro-Erweiterung mit dem Code ' . $coupon . "\n";
+        }
+        echo "\n";
         return;
     }
     echo '<h2>NeonPlan 3D – Lizenzschlüssel</h2><p style="font-size:1.3em;font-family:monospace"><b>' . esc_html($key) . '</b></p>'
-        . '<p>In NeonPlan 3D unter <i>Erweiterungen › Shop-Verbindung</i> eintragen. Die gekauften Packs erscheinen dann dort und bekommen Updates von selbst. Alles Installierte funktioniert auch ohne Verbindung.</p>';
+        . '<p>In NeonPlan 3D unter <i>Erweiterungen › Shop-Verbindung</i> eintragen. Die gekauften Packs erscheinen dann dort und bekommen Updates von selbst. Alles Installierte funktioniert auch ohne Verbindung.</p>'
+        . ms_np_coupon_html($coupon);
+}
+
+/** The loyalty code as a short paragraph ('' without a code). */
+function ms_np_coupon_html(string $coupon): string
+{
+    if ($coupon === '') {
+        return '';
+    }
+    return '<p>🎁 Dein Treuerabatt: <b>' . MS_NP_LOYALTY_PERCENT . ' %</b> auf jedes weitere Pack und jede Pro-Erweiterung mit dem Code <b style="font-family:monospace">' . esc_html($coupon) . '</b>.</p>';
 }
 
 add_action('woocommerce_order_details_after_order_table', 'ms_np_key_in_order');
@@ -149,7 +180,7 @@ function ms_np_key_in_order(WC_Order $order): void
     $key = ms_np_ensure_license($order);
     if ($key !== '') {
         echo '<section class="ms-np-license"><h2>NeonPlan 3D – Lizenzschlüssel</h2><p style="font-size:1.3em;font-family:monospace"><b>' . esc_html($key) . '</b></p>'
-            . '<p>In NeonPlan 3D unter <i>Erweiterungen › Shop-Verbindung</i> eintragen.</p></section>';
+            . '<p>In NeonPlan 3D unter <i>Erweiterungen › Shop-Verbindung</i> eintragen.</p>' . ms_np_coupon_html(ms_np_coupon_for_order($order)) . '</section>';
     }
 }
 
@@ -158,8 +189,10 @@ function ms_np_key_in_account(): void
 {
     $key = (string) get_user_meta(get_current_user_id(), MS_NP_LICENSE_META, true);
     if ($key !== '') {
+        $owner = ms_np_find_license($key);
         echo '<section class="ms-np-license"><h3>NeonPlan 3D – Lizenzschlüssel</h3><p style="font-size:1.3em;font-family:monospace"><b>' . esc_html($key) . '</b></p>'
-            . '<p>In NeonPlan 3D unter <i>Erweiterungen › Shop-Verbindung</i> eintragen. Gekaufte Packs erscheinen dort und bekommen Updates von selbst.</p></section>';
+            . '<p>In NeonPlan 3D unter <i>Erweiterungen › Shop-Verbindung</i> eintragen. Gekaufte Packs erscheinen dort und bekommen Updates von selbst.</p>'
+            . ($owner ? ms_np_coupon_html(ms_np_ensure_coupon($owner)) : '') . '</section>';
     }
 }
 
@@ -232,7 +265,7 @@ add_action('save_post_product', 'ms_np_flush_caches');
 function ms_np_flush_caches(): void
 {
     global $wpdb;
-    $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '\_transient\_ms\_np\_url\_%' OR option_name LIKE '\_transient\_timeout\_ms\_np\_url\_%' OR option_name LIKE '\_transient\_ms\_np\_meta\_%' OR option_name LIKE '\_transient\_timeout\_ms\_np\_meta\_%'");
+    $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '\_transient\_ms\_np\_url\_%' OR option_name LIKE '\_transient\_timeout\_ms\_np\_url\_%' OR option_name LIKE '\_transient\_ms\_np\_meta\_%' OR option_name LIKE '\_transient\_timeout\_ms\_np\_meta\_%' OR option_name LIKE '\_transient\_ms\_np\_offers' OR option_name LIKE '\_transient\_timeout\_ms\_np\_offers'");
     wp_cache_flush_group('transient');
 }
 
@@ -321,6 +354,172 @@ function ms_np_latest_instance_of_key(string $key): ?string
     return $last && !empty($last['fp']) ? (string) $last['fp'] : null;
 }
 
+// ----------------------------------------------------------------------------- loyalty
+
+/** The loyalty code of an order's customer (created with the first paid pack order); '' without packs. */
+function ms_np_coupon_for_order(WC_Order $order): string
+{
+    $key = ms_np_ensure_license($order);
+    if ($key === '' || !in_array($order->get_status(), ['completed', 'processing'], true)) {
+        return '';
+    }
+    $owner = ms_np_find_license($key);
+    return $owner ? ms_np_ensure_coupon($owner) : '';
+}
+
+/**
+ * The customer's personal coupon: MS_NP_LOYALTY_PERCENT on packs and Pro add-ons (bundles excluded by
+ * ms_np_loyalty_valid_for_product), unlimited uses, only for the buyer's e-mail. Created once.
+ */
+function ms_np_ensure_coupon(array $owner): string
+{
+    if (!$owner['orders']) {
+        return '';
+    }
+    $code = (string) ($owner['user_id'] ? get_user_meta($owner['user_id'], MS_NP_COUPON_META, true) : $owner['orders'][0]->get_meta(MS_NP_COUPON_META));
+    if ($code !== '' && wc_get_coupon_id_by_code($code)) {
+        return $code;
+    }
+    $email = $owner['orders'][0]->get_billing_email();
+    if ($owner['user_id']) {
+        $user = get_userdata($owner['user_id']);
+        $email = $user && $user->user_email ? $user->user_email : $email;
+    }
+    if (!$email || !class_exists('WC_Coupon')) {
+        return '';
+    }
+    $code = 'NP-TREUE-' . substr(ms_np_new_key(), 3, 4) . substr(ms_np_new_key(), 8, 2);
+    $coupon = new WC_Coupon();
+    $coupon->set_code($code);
+    $coupon->set_discount_type('percent');
+    $coupon->set_amount(MS_NP_LOYALTY_PERCENT);
+    $coupon->set_individual_use(false);
+    $coupon->set_usage_limit(0);
+    $coupon->set_email_restrictions(array_values(array_unique(array_filter([strtolower($email), strtolower($owner['orders'][0]->get_billing_email())]))));
+    $coupon->set_description('NeonPlan 3D Treuerabatt für ' . $email);
+    $coupon->update_meta_data('_ms_np_loyalty', '1');
+    $coupon->save();
+    if ($owner['user_id']) {
+        update_user_meta($owner['user_id'], MS_NP_COUPON_META, $code);
+    } else {
+        $owner['orders'][0]->update_meta_data(MS_NP_COUPON_META, $code);
+        $owner['orders'][0]->save();
+    }
+    return $code;
+}
+
+/** Loyalty coupons leave bundles alone (they are discounted already). */
+add_filter('woocommerce_coupon_is_valid_for_product', 'ms_np_loyalty_valid_for_product', 10, 4);
+function ms_np_loyalty_valid_for_product(bool $valid, $product, $coupon, $values): bool
+{
+    if (!$valid || !$coupon || $coupon->get_meta('_ms_np_loyalty') !== '1' || !$product) {
+        return $valid;
+    }
+    $meta = (string) $product->get_meta('_ms_np_key');
+    if ($meta === '' && $product->get_parent_id()) {
+        $parent = wc_get_product($product->get_parent_id());
+        $meta = $parent ? (string) $parent->get_meta('_ms_np_key') : '';
+    }
+    return strpos($meta, ',') === false;
+}
+
+/** A shop link with ?np_coupon=CODE keeps the code and puts it into the cart as soon as it holds something. */
+add_action('wp_loaded', 'ms_np_remember_coupon', 20);
+function ms_np_remember_coupon(): void
+{
+    if (empty($_GET['np_coupon']) || !function_exists('WC') || !WC()->session) {
+        return;
+    }
+    $code = strtoupper(sanitize_text_field(wp_unslash($_GET['np_coupon'])));
+    if (!preg_match('/^[A-Z0-9-]{4,30}$/', $code)) {
+        return;
+    }
+    if (!WC()->session->has_session()) {
+        WC()->session->set_customer_session_cookie(true);
+    }
+    WC()->session->set('ms_np_coupon', $code);
+}
+
+add_action('woocommerce_add_to_cart', 'ms_np_apply_remembered_coupon', 20);
+add_action('woocommerce_before_cart', 'ms_np_apply_remembered_coupon');
+add_action('woocommerce_before_checkout_form', 'ms_np_apply_remembered_coupon');
+function ms_np_apply_remembered_coupon(): void
+{
+    if (!function_exists('WC') || !WC()->session || !WC()->cart || WC()->cart->is_empty()) {
+        return;
+    }
+    $code = (string) WC()->session->get('ms_np_coupon');
+    if ($code === '') {
+        return;
+    }
+    WC()->session->set('ms_np_coupon', '');
+    if (!WC()->cart->has_discount($code)) {
+        WC()->cart->apply_coupon($code);
+    }
+}
+
+// ------------------------------------------------------------------------------ offers
+
+/**
+ * Everything the shop sells for NeonPlan 3D (cached 10 minutes): published, visible products with a
+ * _ms_np_key and a price. Each: keys (one pack, or several for a bundle) and what NeonPlan 3D shows.
+ */
+function ms_np_all_offers(): array
+{
+    $cached = get_transient('ms_np_offers');
+    if (is_array($cached)) {
+        return $cached;
+    }
+    $ids = get_posts([
+        'post_type' => 'product',
+        'post_status' => 'publish',
+        'numberposts' => 200,
+        'fields' => 'ids',
+        'meta_query' => [['key' => '_ms_np_key', 'compare' => 'EXISTS']],
+    ]);
+    $out = [];
+    $new_after = time() - MS_NP_NEW_DAYS * DAY_IN_SECONDS;
+    foreach ($ids as $id) {
+        $product = wc_get_product($id);
+        if (!$product || $product->get_catalog_visibility() === 'hidden' || (float) $product->get_price() <= 0) {
+            continue;
+        }
+        $keys = array_values(array_filter(array_map('trim', explode(',', (string) $product->get_meta('_ms_np_key')))));
+        if (!$keys) {
+            continue;
+        }
+        $image = $product->get_image_id() ? wp_get_attachment_image_url($product->get_image_id(), 'medium_large') : '';
+        $created = $product->get_date_created();
+        $out[] = [
+            'keys' => $keys,
+            'id' => count($keys) > 1 ? 'bundle-' . $id : $keys[0],
+            'name' => mb_substr($product->get_name(), 0, 80),
+            'teaser' => mb_substr(trim(wp_strip_all_tags($product->get_short_description())), 0, 200),
+            'image' => is_string($image) && strpos($image, 'https://') === 0 ? $image : null,
+            'url' => (string) get_permalink($id),
+            'kind' => count($keys) > 1 ? 'bundle' : (strpos($keys[0], 'pro_') === 0 ? 'pro' : 'pack'),
+            'price' => trim(html_entity_decode(wp_strip_all_tags(wc_price((float) $product->get_price())), ENT_QUOTES, 'UTF-8')),
+            'new' => $created && $created->getTimestamp() > $new_after,
+        ];
+    }
+    set_transient('ms_np_offers', $out, 10 * MINUTE_IN_SECONDS);
+    return $out;
+}
+
+/** The offers a customer does not own yet (a bundle while one of its packs is missing). */
+function ms_np_offers_for(array $owned): array
+{
+    $out = [];
+    foreach (ms_np_all_offers() as $offer) {
+        if (!array_diff($offer['keys'], $owned)) {
+            continue;
+        }
+        unset($offer['keys']);
+        $out[] = $offer;
+    }
+    return $out;
+}
+
 // ------------------------------------------------------------------------------ REST
 
 add_action('rest_api_init', function (): void {
@@ -370,13 +569,20 @@ function ms_np_rest_catalog(WP_REST_Request $req)
     }
     [$owner] = $auth;
     $packs = [];
-    foreach (ms_np_owned_pack_keys($owner) as $pack_key) {
+    $owned = ms_np_owned_pack_keys($owner);
+    foreach ($owned as $pack_key) {
         $meta = ms_np_pack_meta($pack_key);
         if ($meta) {
             $packs[] = ['id' => $meta['id'], 'name' => $meta['name'], 'release' => $meta['release'], 'url' => ms_np_pack_url($pack_key)];
         }
     }
-    return new WP_REST_Response(['licensee' => mb_substr($owner['name'], 0, 80), 'packs' => $packs]);
+    $coupon = ms_np_ensure_coupon($owner);
+    return new WP_REST_Response([
+        'licensee' => mb_substr($owner['name'], 0, 80),
+        'packs' => $packs,
+        'offers' => ms_np_offers_for($owned),
+        'loyalty' => $coupon !== '' ? ['code' => $coupon, 'percent' => MS_NP_LOYALTY_PERCENT] : null,
+    ]);
 }
 
 function ms_np_rest_pack(WP_REST_Request $req)

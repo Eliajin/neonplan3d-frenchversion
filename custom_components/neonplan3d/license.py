@@ -105,7 +105,55 @@ async def async_fetch_catalog(hass: HomeAssistant, key: str, instance: str) -> d
                 "url": str(p.get("url") or SHOP_URL)[:300],
             }
         )
-    return {"licensee": str(data.get("licensee") or "")[:80] or None, "packs": packs}
+    return {
+        "licensee": str(data.get("licensee") or "")[:80] or None,
+        "packs": packs,
+        "offers": _offers(data.get("offers")),
+        "loyalty": _loyalty(data.get("loyalty")),
+    }
+
+
+def _https(value: Any) -> str | None:
+    """A shop link or picture: https only, short."""
+    text = str(value or "")
+    return text[:300] if text.startswith("https://") else None
+
+
+def _offers(raw: Any) -> list[dict[str, Any]]:
+    """Packs and Pro add-ons the customer does not own yet, as the shop announces them."""
+    out: list[dict[str, Any]] = []
+    if not isinstance(raw, list):
+        return out
+    for o in raw[:40]:
+        if not isinstance(o, dict) or not isinstance(o.get("id"), str) or not _https(o.get("url")):
+            continue
+        out.append(
+            {
+                "id": o["id"][:40],
+                "name": str(o.get("name") or o["id"])[:80],
+                "teaser": str(o.get("teaser") or "")[:200],
+                "image": _https(o.get("image")),
+                "url": _https(o.get("url")),
+                "kind": o.get("kind") if o.get("kind") in ("pack", "pro", "bundle") else "pack",
+                "price": str(o.get("price") or "")[:40],
+                "new": bool(o.get("new")),
+            }
+        )
+    return out
+
+
+def _loyalty(raw: Any) -> dict[str, Any] | None:
+    """The customer's loyalty code (a discount on further purchases), if the shop gives one."""
+    if not isinstance(raw, dict):
+        return None
+    code = str(raw.get("code") or "")
+    try:
+        percent = int(raw.get("percent") or 0)
+    except (TypeError, ValueError):
+        return None
+    if not re.fullmatch(r"[A-Z0-9-]{4,30}", code) or not 0 < percent <= 50:
+        return None
+    return {"code": code, "percent": percent}
 
 
 async def async_fetch_pack(hass: HomeAssistant, key: str, instance: str, pack_id: str) -> str:
@@ -127,6 +175,8 @@ def status(data: FloorplanData, instance: str) -> dict[str, Any]:
         "error": lic.get("error"),
         "shop_url": SHOP_URL,
         "packs": [{**p, "installed": installed.get(p["id"])} for p in lic.get("catalog", [])],
+        "offers": lic.get("offers", []) if key else [],
+        "loyalty": lic.get("loyalty") if key else None,
     }
 
 
@@ -139,6 +189,8 @@ async def async_activate(hass: HomeAssistant, data: FloorplanData, key: str) -> 
         "key": key,
         "licensee": catalog["licensee"],
         "catalog": catalog["packs"],
+        "offers": catalog["offers"],
+        "loyalty": catalog["loyalty"],
         "checked_at": time.time(),
         "error": None,
     }
@@ -148,7 +200,15 @@ async def async_activate(hass: HomeAssistant, data: FloorplanData, key: str) -> 
 
 async def async_remove(hass: HomeAssistant, data: FloorplanData) -> dict[str, Any]:
     """Forget the key; installed packs stay."""
-    data.license = {"key": None, "licensee": None, "catalog": [], "checked_at": None, "error": None}
+    data.license = {
+        "key": None,
+        "licensee": None,
+        "catalog": [],
+        "offers": [],
+        "loyalty": None,
+        "checked_at": None,
+        "error": None,
+    }
     await data.async_save_license()
     return status(data, await async_instance_fingerprint(hass))
 
@@ -188,7 +248,14 @@ async def async_refresh(hass: HomeAssistant, data: FloorplanData, install_update
         await data.async_save_license()
         raise
     data.license.update(
-        {"licensee": catalog["licensee"], "catalog": catalog["packs"], "checked_at": time.time(), "error": None}
+        {
+            "licensee": catalog["licensee"],
+            "catalog": catalog["packs"],
+            "offers": catalog["offers"],
+            "loyalty": catalog["loyalty"],
+            "checked_at": time.time(),
+            "error": None,
+        }
     )
     if install_updates:
         installed = {p["id"]: int(p.get("release") or 1) for p in data.packs}

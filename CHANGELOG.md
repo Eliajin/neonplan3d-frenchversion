@@ -4,6 +4,13 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 [releases page](https://github.com/Mastershort/neonplan3d/releases). Ideas and votes:
 [Discussions → Ideas](https://github.com/Mastershort/neonplan3d/discussions/categories/ideas).
 
+## 1.6.0 – unreleased
+
+### New
+
+- **New in the shop** on the Extensions page (with a shop key) and a dot on the tab.
+- **Loyalty discount** code for further purchases, shown in NeonPlan 3D.
+
 ## 1.5.0
 
 ### New

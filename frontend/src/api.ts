@@ -83,6 +83,51 @@ export interface CatalogPack {
   installed: number | null;
 }
 
+/** A pack or Pro add-on in the shop the customer does not own yet. */
+export interface ShopOffer {
+  id: string;
+  name: string;
+  teaser: string;
+  image: string | null;
+  url: string;
+  kind: "pack" | "pro" | "bundle";
+  price: string;
+  new: boolean;
+}
+
+/** The customer's loyalty code: a discount on further purchases. */
+export interface ShopLoyalty {
+  code: string;
+  percent: number;
+}
+
+/** Ids of the offers seen on the extensions page (the tab shows a dot for new ones). */
+const SEEN_OFFERS = "neonplan3d.seenOffers";
+
+export function unseenOffers(offers: readonly ShopOffer[]): ShopOffer[] {
+  let seen: string[] = [];
+  try {
+    seen = JSON.parse(localStorage.getItem(SEEN_OFFERS) ?? "[]") as string[];
+  } catch {
+    // no storage: every offer counts as new for this page
+  }
+  return offers.filter((o) => !seen.includes(o.id));
+}
+
+export function markOffersSeen(offers: readonly ShopOffer[]): void {
+  try {
+    localStorage.setItem(SEEN_OFFERS, JSON.stringify(offers.map((o) => o.id)));
+  } catch {
+    // no storage: nothing to remember
+  }
+}
+
+/** A shop link that brings the loyalty code into the cart. */
+export function offerLink(url: string, loyalty: ShopLoyalty | null): string {
+  if (!loyalty) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}np_coupon=${encodeURIComponent(loyalty.code)}`;
+}
+
 /** The shop connection: this installation's fingerprint, the key's state and the bought packs. */
 export interface LicenseStatus {
   instance: string;
@@ -93,6 +138,9 @@ export interface LicenseStatus {
   error: string | null;
   shop_url: string;
   packs: CatalogPack[];
+  /** Packs and Pro add-ons not owned yet (empty without a key or with an older shop). */
+  offers?: ShopOffer[];
+  loyalty?: ShopLoyalty | null;
 }
 
 export function getLicense(hass: HomeAssistant): Promise<LicenseStatus> {

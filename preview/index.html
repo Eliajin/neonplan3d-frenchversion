@@ -33,6 +33,15 @@
           { id: "mastershort.kitchen", name: "Küche", release: 1, url: "https://mastershort.de/neonplan3d/", installed: 1 },
           { id: "mastershort.vehicles", name: "Fahrzeuge", release: 1, url: "https://mastershort.de/neonplan3d/", installed: null },
         ],
+        // invented offers of the demo shop and a loyalty code
+        offers: params.has("shop")
+          ? [
+              { id: "kino", name: "Heimkino & Hi-Fi", teaser: "Leinwand, Beamer, Lautsprecher, Subwoofer – verknüpfbar", image: null, url: "https://mastershort.de/neonplan3d/", kind: "pack", price: "5,90 €", new: true },
+              { id: "tiere", name: "Haustiere", teaser: "Kratzbaum, Hundekorb, Aquarium mit Licht", image: null, url: "https://mastershort.de/neonplan3d/", kind: "pack", price: "3,90 €", new: true },
+              { id: "pro_weather", name: "Wetter draußen", teaser: "Regen, Schnee und Gewitter live am Haus", image: null, url: "https://mastershort.de/neonplan3d/", kind: "pro", price: "3,90 €", new: false },
+            ]
+          : [],
+        loyalty: params.has("shop") ? { code: "NP-TREUE-DEMO42", percent: 10 } : null,
       };
       let building = params.has("empty") ? { version: 1, floors: [], settings: { wall_exterior: 0.24, wall_interior: 0.12, grid: 0.05 } } : DEMO_BUILDING;
       let revision = 1;

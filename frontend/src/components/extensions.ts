@@ -10,6 +10,8 @@ import {
   refreshLicense,
   removeLicense,
   removePack,
+  markOffersSeen,
+  offerLink,
   type CatalogPack,
   type LicenseStatus,
 } from "../api.ts";
@@ -69,7 +71,7 @@ export class Extensions extends LitElement {
           <a class="fp3d-btn" href=${manualUrl(this.hass?.language, "extensions")} target="_blank" rel="noopener">📖 ${this.t("manual")}</a>
         </div>
       </header>
-      ${this.renderShop()}
+      ${this.renderOffers()} ${this.renderShop()}
       <section class="fp3d-ext-card">
         <h3>${this.t("ext_pro")}</h3>
         <div class="fp3d-ext-pro">
@@ -129,6 +131,53 @@ export class Extensions extends LitElement {
       this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
       return getLicense(hass);
     });
+  }
+
+  /** New in the shop: packs and Pro add-ons not owned yet, and the customer's loyalty code. */
+  private renderOffers() {
+    const lic = this._license;
+    if (!lic?.active) return nothing;
+    const offers = [...(lic.offers ?? [])].sort((a, b) => Number(b.new) - Number(a.new));
+    const loyalty = lic.loyalty ?? null;
+    if (!offers.length && !loyalty) return nothing;
+    // opening the page counts as seen: the dot on the tab goes away
+    markOffersSeen(offers);
+    this.dispatchEvent(new CustomEvent("offers-seen", { bubbles: true, composed: true }));
+    return html`<section class="fp3d-ext-card fp3d-offers">
+      <h3>${this.t("offers_title")}</h3>
+      ${loyalty
+        ? html`<div class="fp3d-loyalty">
+            <span>🎁 ${this.t("offers_loyalty", { percent: loyalty.percent })}</span>
+            <code>${loyalty.code}</code>
+            <button
+              class="fp3d-btn"
+              @click=${async () => {
+                try {
+                  await navigator.clipboard.writeText(loyalty.code);
+                  this._licenseMsg = { ok: true, text: this.t("license_copied") };
+                } catch {
+                  /* no clipboard: the code stays readable */
+                }
+              }}
+            >
+              ${this.t("license_copy")}
+            </button>
+          </div>`
+        : nothing}
+      <div class="fp3d-offer-grid">
+        ${offers.map(
+          (o) => html`<a class="fp3d-offer" href=${offerLink(o.url, loyalty)} target="_blank" rel="noopener">
+            ${o.image ? html`<img src=${o.image} alt="" loading="lazy" />` : html`<div class="fp3d-offer-ph">✦</div>`}
+            <div class="fp3d-offer-body">
+              <b>${o.name}</b>
+              ${o.new ? html`<span class="fp3d-offer-new">${this.t("offers_new")}</span>` : nothing}
+              <span class="fp3d-offer-kind">${this.t(`offers_kind_${o.kind}` as I18nKey)}${o.price ? ` · ${o.price}` : ""}</span>
+              ${o.teaser ? html`<span class="fp3d-sub">${o.teaser}</span>` : nothing}
+            </div>
+          </a>`,
+        )}
+      </div>
+    </section>`;
   }
 
   /** The shop connection: fingerprint, key and the bought packs with install and update buttons. */
@@ -270,6 +319,71 @@ export class Extensions extends LitElement {
     tokens,
     controls,
     css`
+      .fp3d-loyalty {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin: 6px 0 12px;
+        padding: 10px 12px;
+        border: 1px solid color-mix(in srgb, #ffb547 55%, transparent);
+        border-radius: 12px;
+        background: color-mix(in srgb, #ffb547 10%, transparent);
+      }
+      .fp3d-loyalty code {
+        font-size: 1.05em;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+      .fp3d-offer-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 10px;
+      }
+      .fp3d-offer {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 12px;
+        color: inherit;
+        text-decoration: none;
+        background: color-mix(in srgb, var(--fp3d-accent) 4%, transparent);
+      }
+      .fp3d-offer:hover {
+        border-color: var(--fp3d-accent);
+      }
+      .fp3d-offer img,
+      .fp3d-offer-ph {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        object-fit: cover;
+      }
+      .fp3d-offer-ph {
+        display: grid;
+        place-items: center;
+        font-size: 28px;
+        color: var(--fp3d-accent);
+      }
+      .fp3d-offer-body {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding: 10px 12px;
+      }
+      .fp3d-offer-new {
+        align-self: flex-start;
+        padding: 1px 8px;
+        border-radius: 999px;
+        background: #ffb547;
+        color: #1a1200;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .fp3d-offer-kind {
+        color: var(--fp3d-accent);
+        font-size: 12px;
+      }
       :host {
         display: block;
         overflow: auto;
