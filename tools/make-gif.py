@@ -1,7 +1,7 @@
 """Turns the frames of frontend/record-gif.mjs into the README animation (GIF and WebP)."""
 
-import sys
 from pathlib import Path
+import sys
 
 from PIL import Image
 
@@ -21,5 +21,15 @@ for i, k in enumerate(range(0, len(frames), max(1, len(frames) // 4))):
 palette = sample.quantize(colors=255, method=Image.Quantize.MEDIANCUT)
 gif = [im.quantize(palette=palette, dither=Image.Dither.NONE) for im in frames]
 gif[0].save(out, save_all=True, append_images=gif[1:], duration=80, loop=0, optimize=True)
-frames[0].save(out.with_suffix(".webp"), save_all=True, append_images=frames[1:], duration=80, loop=0, quality=80, method=6)
-print(out, out.stat().st_size // 1024, "KB;", out.with_suffix(".webp").stat().st_size // 1024, "KB webp;", len(frames), "frames")
+frames[0].save(
+    out.with_suffix(".webp"), save_all=True, append_images=frames[1:], duration=80, loop=0, quality=80, method=6
+)
+print(
+    out,
+    out.stat().st_size // 1024,
+    "KB;",
+    out.with_suffix(".webp").stat().st_size // 1024,
+    "KB webp;",
+    len(frames),
+    "frames",
+)
