@@ -67,7 +67,7 @@ HACS reports new versions by itself. Restart Home Assistant after every update. 
 2. Choose **Add floor** on the right. If you have floors in Home Assistant, NeonPlan 3D offers them directly.
 3. If the floor has areas, **"Add … rooms from HA areas"** creates a room for each area. Drag the rooms into place and adjust the corners. Or draw with **Rectangle** or **Free shape**.
 4. Tap a wall with **Doors & windows** to add doors and windows.
-5. Tap a room and choose **Place all automatically** under **Devices** on the right. The lights, covers, thermostats, media players and sensors of the area now stand in the room.
+5. Tap a room and tap **Place** under **Devices** on the right for the devices you want, e.g. the lights, covers, thermostats, media players and sensors of the area. Below the list, **Place all …** puts all main devices in at once after asking.
 6. Furnish the room with **Furniture** and **Furnish …**.
 7. Switch to **3D** at the top. Done: tap a lamp, and it switches.
 
@@ -235,11 +235,11 @@ A room with an area lists all devices of that area on the right, grouped by devi
 
 Sensors appear when they measure something for the room: temperature, humidity, CO₂ and air quality, power and energy, gas and water meters, illuminance and pressure. Meters without a device class count too when their unit fits (m³, l, kWh, lx). Battery and signal sensors stay out. The value shows the decimals set in Home Assistant. If a device is missing, check in Home Assistant that it is assigned to the room's area.
 
-Below the list there are two collapsed menus with their own search: **From other areas …** shows the devices of the other areas, grouped by area; if a device already stands in another room, that is shown, and **Place** brings it here. **Without an area …** shows devices without an area, e.g. template lights, groups and helpers; here any sensor with a numeric value and a unit counts. The area in Home Assistant does not change.
+Above the list you choose the source: **This area** (default), **Other areas** (the devices of the other areas, grouped by area; if a device already stands in another room, that is shown, and **Place** brings it here) or **No area** (e.g. template lights, groups and helpers; here any sensor with a numeric value and a unit counts). The area in Home Assistant does not change.
 
 **Room climate:** In the room form, **Room climate** sets which sensors give the room's temperature, humidity and CO₂ (heatmap and room panel). *Automatic* takes the sensors of the area and the ones placed in the room, but leaves out device temperatures, e.g. of a 3D printer or a heat pump's flow. *None* hides the value.
 
-- **Place** puts a device into the room, **Place all automatically** places all main devices.
+- **Place** puts a device into the room. **Place all …** below the list puts all main devices in at once after asking; **Undo** (Ctrl+Z) takes them back in one step.
 - Lights are placed as lamps from the library, so they glow in 3D.
 - **☆** adds a device to the room panel of the 3D view without placing it.
 - Drag a placed device to its spot in the plan.

@@ -138,8 +138,7 @@ export class Fp3dEditor extends LitElement {
     _furnitureId: { state: true },
     _deviceId: { state: true },
     _deviceQuery: { state: true },
-    _devOther: { state: true },
-    _devNone: { state: true },
+    _devSource: { state: true },
     _furnQuery: { state: true },
     _libOpen: { state: true },
     _expanded: { state: true },
@@ -196,9 +195,8 @@ export class Fp3dEditor extends LitElement {
   private declare _furnitureId: string | null;
   private declare _deviceId: string | null;
   private declare _deviceQuery: string;
-  /** The extra device lists of the room form, open with their search text (null = closed). */
-  private declare _devOther: string | null;
-  private declare _devNone: string | null;
+  /** Which devices the room form lists: its own area, other areas, or entities without an area. */
+  private declare _devSource: "area" | "other" | "none";
   /** Furniture library: the search text, and which sections are open (built-in groups and packs). */
   private declare _furnQuery: string;
   private declare _libOpen: Set<string>;
@@ -261,8 +259,7 @@ export class Fp3dEditor extends LitElement {
     this._furnitureId = null;
     this._deviceId = null;
     this._deviceQuery = "";
-    this._devOther = null;
-    this._devNone = null;
+    this._devSource = "area";
     this._furnQuery = "";
     this._libOpen = new Set(["group:lights", "group:living"]);
     try {
@@ -3951,28 +3948,41 @@ export class Fp3dEditor extends LitElement {
           : nothing}
       </div>`;
     };
+    const source = admin ? this._devSource : "area";
+    const setSource = (v: "area" | "other" | "none") => {
+      this._devSource = v;
+      this._deviceQuery = "";
+    };
+    const searchField = html`<input
+      class="fp3d-search"
+      type="search"
+      placeholder=${this.t("devices_search")}
+      .value=${this._deviceQuery}
+      @input=${(e: Event) => (this._deviceQuery = (e.target as HTMLInputElement).value)}
+    />`;
+    const placeAll = () => {
+      if (confirm(this.t("devices_place_all_confirm", { n: unplacedMain.length }))) this.placeDevices(unplacedMain);
+    };
     return html`<section>
       <h3>${this.t("devices")}</h3>
       <p class="fp3d-sub">${this.t("devices_panel_hint")}</p>
-      ${!room.area_id
+      ${admin
+        ? html`<div class="fp3d-seg fp3d-dev-source">
+            <button aria-pressed=${source === "area"} @click=${() => setSource("area")}>${this.t("devices_src_area")}${ids.length ? ` (${groups.length})` : ""}</button>
+            <button aria-pressed=${source === "other"} @click=${() => setSource("other")}>${this.t("devices_src_other")}</button>
+            <button aria-pressed=${source === "none"} @click=${() => setSource("none")}>${this.t("devices_src_none")}</button>
+          </div>`
+        : nothing}
+      ${source !== "area"
+        ? html`${searchField}${this.renderDeviceExtras(room, row, source)}`
+        : !room.area_id
         ? html`<p class="fp3d-sub">${this.t("devices_none_area")}</p>`
         : !ids.length
           ? html`<p class="fp3d-sub">${this.t("devices_none")}</p>`
-          : html`${admin && unplacedMain.length
-                ? html`<button class="fp3d-btn fp3d-primary fp3d-wide-btn" @click=${() => this.placeDevices(unplacedMain)}>${this.t("devices_place_all")}</button>`
-                : nothing}
-              ${admin && (ceilingLights ?? 0) >= 2
+          : html`${admin && (ceilingLights ?? 0) >= 2
                 ? html`<button class="fp3d-btn fp3d-wide-btn" @click=${() => this.spreadCeilingLights(room)}>${this.t("lights_spread")}</button>`
                 : nothing}
-              ${ids.length > 8
-                ? html`<input
-                    class="fp3d-search"
-                    type="search"
-                    placeholder=${this.t("devices_search")}
-                    .value=${this._deviceQuery}
-                    @input=${(e: Event) => (this._deviceQuery = (e.target as HTMLInputElement).value)}
-                  />`
-                : nothing}
+              ${ids.length > 8 ? searchField : nothing}
               <div class="fp3d-room-list">
                 ${groups.map((g) => {
                   const others = g.others.filter(matches);
@@ -3995,56 +4005,37 @@ export class Fp3dEditor extends LitElement {
                   ${open ? (q ? others : g.others).map((id) => row(id, true)) : nothing}`;
                 })}
               </div>
+              ${admin && unplacedMain.length > 1
+                ? html`<button class="fp3d-link fp3d-place-all" @click=${placeAll}>${this.t("devices_place_all_n", { n: unplacedMain.length })}</button>`
+                : nothing}
               <p class="fp3d-sub">${this.t("devices_hint")}</p>`}
-      ${admin && hass ? this.renderDeviceExtras(room, row) : nothing}
     </section>`;
   }
 
-  /** Devices from other areas and without an area: two lists of their own, filled when opened. */
-  private renderDeviceExtras(room: Room, row: (id: string, extra?: boolean, nameArea?: string) => unknown) {
-    const hass = this.hass!;
+  /** Devices from other areas or without an area, for the chosen source (computed only when shown). */
+  private renderDeviceExtras(room: Room, row: (id: string, extra?: boolean, nameArea?: string) => unknown, source: "other" | "none") {
+    const hass = this.hass;
+    if (!hass) return nothing;
     const LIMIT = 50;
-    const match = (q: string, id: string, area?: string) => {
-      const t = q.trim().toLowerCase();
-      return !t || `${entityName(hass, id, area)} ${id} ${area ?? ""}`.toLowerCase().includes(t);
-    };
-    const search = (value: string, set: (v: string) => void) => html`<input
-      class="fp3d-search"
-      type="search"
-      placeholder=${this.t("devices_search")}
-      .value=${value}
-      @input=${(e: Event) => set((e.target as HTMLInputElement).value)}
-    />`;
+    const q = this._deviceQuery.trim().toLowerCase();
+    const match = (id: string, area?: string) => !q || `${entityName(hass, id, area)} ${id} ${area ?? ""}`.toLowerCase().includes(q);
     const more = (n: number) => (n > 0 ? html`<p class="fp3d-sub">${this.t("devices_narrow", { n })}</p>` : nothing);
-    let other = html``;
-    if (this._devOther !== null) {
-      const q = this._devOther;
+    if (source === "other") {
       let shown = 0;
       let hidden = 0;
       const blocks = otherAreaEntities(hass, room.area_id).map((a) => {
-        const ids = a.ids.filter((id) => match(q, id, a.name));
+        const ids = a.ids.filter((id) => match(id, a.name));
         const take = ids.slice(0, Math.max(0, LIMIT - shown));
         shown += take.length;
         hidden += ids.length - take.length;
         return take.length ? html`<div class="fp3d-dev-area">${a.name}</div>${take.map((id) => row(id, false, a.name))}` : nothing;
       });
-      other = html`${search(q, (v) => (this._devOther = v))}<div class="fp3d-room-list">${blocks}</div>${more(hidden)}`;
+      return shown ? html`<div class="fp3d-room-list">${blocks}</div>${more(hidden)}` : html`<p class="fp3d-sub">${this.t("devices_none")}</p>`;
     }
-    let none = html``;
-    if (this._devNone !== null) {
-      const ids = unassignedEntities(hass).filter((id) => match(this._devNone!, id));
-      none = html`${search(this._devNone, (v) => (this._devNone = v))}
-        <div class="fp3d-room-list">${ids.slice(0, LIMIT).map((id) => row(id))}</div>
-        ${ids.length ? more(ids.length - Math.min(ids.length, LIMIT)) : html`<p class="fp3d-sub">${this.t("devices_none")}</p>`}`;
-    }
-    return html`<details class="fp3d-points" ?open=${this._devOther !== null} @toggle=${(e: Event) => (this._devOther = (e.target as HTMLDetailsElement).open ? (this._devOther ?? "") : null)}>
-        <summary>${this.t("devices_other")}</summary>
-        ${other}
-      </details>
-      <details class="fp3d-points" ?open=${this._devNone !== null} @toggle=${(e: Event) => (this._devNone = (e.target as HTMLDetailsElement).open ? (this._devNone ?? "") : null)}>
-        <summary>${this.t("devices_unassigned")}</summary>
-        ${none}
-      </details>`;
+    const ids = unassignedEntities(hass).filter((id) => match(id));
+    return ids.length
+      ? html`<div class="fp3d-room-list">${ids.slice(0, LIMIT).map((id) => row(id))}</div>${more(ids.length - Math.min(ids.length, LIMIT))}`
+      : html`<p class="fp3d-sub">${this.t("devices_none")}</p>`;
   }
 
   /** Room climate: temperature, humidity and CO2 from chosen sensors, or picked automatically. */
@@ -4925,6 +4916,23 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-wall-low {
         opacity: 0.55;
+      }
+      .fp3d-dev-source {
+        display: flex;
+        margin: 8px 0;
+      }
+      .fp3d-dev-source button {
+        flex: 1 1 0;
+        min-width: 0;
+        padding: 6px 4px;
+        font-size: 12px;
+        line-height: 1.2;
+        white-space: normal;
+        text-align: center;
+        border-radius: 10px;
+      }
+      .fp3d-place-all {
+        margin: 10px 0 0;
       }
       .fp3d-dev-area {
         margin: 10px 0 2px;

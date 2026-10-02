@@ -67,7 +67,7 @@ HACS meldet neue Versionen von selbst. Nach jedem Update Home Assistant neu star
 2. Rechts **Etage hinzufügen** wählen. Hast du in Home Assistant Etagen angelegt, bietet NeonPlan 3D sie direkt an.
 3. Gibt es Bereiche auf der Etage, legt **„… Räume aus HA-Bereichen anlegen“** für jeden Bereich einen Raum an. Ziehe die Räume dann an die richtige Stelle und passe die Ecken an. Alternativ zeichnest du mit **Rechteck** oder **Freie Form**.
 4. Mit **Tür & Fenster** auf eine Wand tippen, um Türen und Fenster einzusetzen.
-5. Einen Raum antippen und rechts unter **Geräte** auf **Alle automatisch platzieren** tippen. Lichter, Rollläden, Thermostate, Media Player und Sensoren des Bereichs stehen dann im Raum.
+5. Einen Raum antippen und rechts unter **Geräte** bei den gewünschten Geräten **Platzieren** tippen, etwa Lichter, Rollläden, Thermostate, Media Player und Sensoren des Bereichs. Unter der Liste setzt **Alle … platzieren** nach einer Rückfrage alle Hauptgeräte auf einmal.
 6. Mit **Möbel** und **Einrichten …** den Raum möblieren.
 7. Oben auf **3D** wechseln. Fertig: Tippe auf eine Lampe, und sie schaltet.
 
@@ -235,11 +235,11 @@ Ein Raum mit Bereich listet rechts alle Geräte dieses Bereichs, nach Gerät gru
 
 Sensoren erscheinen, wenn sie etwas für den Raum messen: Temperatur, Luftfeuchte, CO₂ und Luftqualität, Leistung und Energie, Gas- und Wasserzähler, Helligkeit und Luftdruck. Zähler ohne Geräteklasse zählen mit, wenn ihre Einheit passt (m³, l, kWh, lx). Akku- und Signalsensoren bleiben außen vor. Der Wert erscheint mit den Nachkommastellen, die in Home Assistant eingestellt sind. Fehlt ein Gerät, prüfe in Home Assistant, ob es dem Bereich des Raums zugeordnet ist.
 
-Unter der Liste stehen zwei zugeklappte Menüs mit eigener Suche: **Aus anderen Bereichen …** zeigt die Geräte der übrigen Bereiche, nach Bereich gruppiert; steht ein Gerät schon in einem anderen Raum, steht das dabei, und **Platzieren** holt es hierher. **Ohne Bereich …** zeigt Geräte ohne Bereich, etwa Template-Lichter, Gruppen und Helfer; hier zählt jeder Sensor mit Zahlenwert und Einheit. Der Bereich in Home Assistant ändert sich dabei nicht.
+Über der Liste wählst du die Quelle: **Dieser Bereich** (Standard), **Andere Bereiche** (die Geräte der übrigen Bereiche, nach Bereich gruppiert; steht ein Gerät schon in einem anderen Raum, steht das dabei, und **Platzieren** holt es hierher) oder **Ohne Bereich** (etwa Template-Lichter, Gruppen und Helfer; hier zählt jeder Sensor mit Zahlenwert und Einheit). Der Bereich in Home Assistant ändert sich dabei nicht.
 
 **Raumklima:** Im Raumformular legst du unter **Raumklima** fest, welche Sensoren Temperatur, Luftfeuchte und CO₂ des Raums liefern (Heatmap und Raumfenster). *Automatisch* nimmt die Sensoren des Bereichs und die im Raum platzierten, lässt aber Gerätetemperaturen weg, etwa von einem 3D-Drucker oder den Vorlauf einer Wärmepumpe. *Keiner* blendet den Wert aus.
 
-- **Platzieren** setzt ein Gerät in den Raum, **Alle automatisch platzieren** setzt alle Hauptgeräte.
+- **Platzieren** setzt ein Gerät in den Raum. **Alle … platzieren** unter der Liste setzt nach einer Rückfrage alle Hauptgeräte auf einmal; **Rückgängig** (Strg+Z) nimmt sie in einem Schritt zurück.
 - Lichter werden dabei als Leuchten aus der Bibliothek gesetzt, damit sie in 3D leuchten.
 - **☆** nimmt ein Gerät ins Raumfenster der 3D-Ansicht auf, ohne es in den Plan zu setzen.
 - Ein platziertes Gerät ziehst du im Plan an seinen Platz.

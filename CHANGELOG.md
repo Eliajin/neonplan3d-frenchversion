@@ -8,7 +8,8 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 
 ### New
 
-- **Devices from other areas and without an area** in the room form (own search, grouped by area).
+- **Devices from other areas and without an area** in the room form (source switch, grouped by area).
+- **Place all** is a small link that asks first.
 - **Room climate per room:** chosen sensors for temperature, humidity and CO₂; automatic skips device temperatures (3D printer, heat pump flow).
 
 ## 1.3.1
