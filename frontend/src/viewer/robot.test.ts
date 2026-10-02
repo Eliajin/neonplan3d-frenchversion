@@ -33,3 +33,17 @@ test("the robot turns before it drives and drives home when returning", () => {
   // resting robots do not move
   assert.equal(stepRobot(m, { ...info, mode: "idle" }, 0.1), false);
 });
+
+test("the lanes keep clear of furniture and never cross it between lanes", () => {
+  const box: [number, number][] = [[0, 0], [5, 0], [5, 4], [0, 4]];
+  // a wardrobe along the bottom wall, a sofa in the middle of the room
+  const wardrobe: [number, number][] = [[0, 0], [2, 0], [2, 0.6], [0, 0.6]];
+  const sofa: [number, number][] = [[2, 1.8], [4, 1.8], [4, 2.7], [2, 2.7]];
+  const path = cleaningPath(box, 0.32, 0.22, [wardrobe, sofa]);
+  assert.ok(path.length >= 4);
+  const inAny = (p: [number, number]) => [wardrobe, sofa].some((o) => pointInPolygon(p, o));
+  for (let i = 1; i < path.length; i++) {
+    const [a, b] = [path[i - 1], path[i]];
+    for (let t = 0; t <= 1; t += 0.02) assert.ok(!inAny([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]), `segment ${i} crosses furniture`);
+  }
+});

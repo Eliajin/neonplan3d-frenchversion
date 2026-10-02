@@ -2,6 +2,7 @@
 
 - Die Warnung „Fenster offen bei Regen“ lässt sich einzeln abschalten: Editor → Einstellungen, bei den Wetter-Effekten.
 - Saugroboter fahren im Raum, den sie melden: Ein Sensor „Aktueller Raum“ (Roborock, Dreame …) wird am Gerät des Roboters von selbst gefunden und über den Raum- oder Bereichsnamen zugeordnet. Ohne Sensor bleibt er wie bisher im Raum seiner Station.
+- Saugroboter fahren um Schränke, Sofas, Betten und Geräte herum, unter Tischen, Schreibtischen und Stühlen aber durch.
 
 ### Behoben
 
@@ -17,6 +18,7 @@
 
 - The warning for a window open in the rain can be switched off on its own: Editor → Settings, next to the weather effects.
 - Robot vacuums clean the room they report: a "current room" sensor (Roborock, Dreame …) is found on the robot's device by itself and matched by room or area name. Without one it stays in the room of its dock as before.
+- Robot vacuums drive around cabinets, sofas, beds and appliances, but under tables, desks and chairs.
 
 ### Fixed
 

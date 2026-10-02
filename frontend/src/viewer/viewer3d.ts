@@ -2694,11 +2694,14 @@ export class FloorplanViewer {
         this.robots.set(info.id, r);
       }
       const was = r.info.mode;
-      const moved = info.mode === "cleaning" && was === "cleaning" && (r.info.roomId ?? null) !== (info.roomId ?? null);
+      const moved =
+        info.mode === "cleaning" &&
+        was === "cleaning" &&
+        ((r.info.roomId ?? null) !== (info.roomId ?? null) || JSON.stringify(r.info.obstacles ?? []) !== JSON.stringify(info.obstacles ?? []));
       r.info = info;
       if (info.mode === "cleaning" && (was !== "cleaning" || moved || !r.motion.path.length)) {
         // start the lanes at the point nearest to where the robot is
-        const path = info.room ? cleaningPath(info.room) : circlePath(info.rest);
+        const path = info.room ? cleaningPath(info.room, undefined, undefined, info.obstacles) : circlePath(info.rest);
         const path2 = path.length ? path : circlePath(info.rest);
         let best = 0;
         path2.forEach((p, i) => {

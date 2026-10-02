@@ -18,6 +18,8 @@ export interface RobotInfo {
   room: Vec2[] | null;
   /** Id of that room (a new room starts new lanes). */
   roomId?: string | null;
+  /** Footprints of the furniture standing in its way (cabinets, sofas, beds; not tables or chairs). */
+  obstacles?: Vec2[][];
 }
 
 /** Driving speed (m/s) and turning speed (rad/s). */
@@ -25,10 +27,11 @@ export const ROBOT_SPEED = 0.3;
 export const ROBOT_TURN = 2.6;
 
 /**
- * Lanes through a room, back and forth along its longer side, keeping `inset` from the walls. Each
- * lane takes the longest stretch that lies inside the outline.
+ * Lanes through a room, back and forth along its longer side, keeping `inset` from the walls and
+ * from furniture in the way. Each lane takes the longest free stretch; a lane that cannot be reached
+ * from the previous one without crossing furniture is left out.
  */
-export function cleaningPath(room: Vec2[], lane = 0.32, inset = 0.22): Vec2[] {
+export function cleaningPath(room: Vec2[], lane = 0.32, inset = 0.22, obstacles: readonly Vec2[][] = []): Vec2[] {
   const xs = room.map((p) => p[0]);
   const zs = room.map((p) => p[1]);
   const x0 = Math.min(...xs);
@@ -37,9 +40,19 @@ export function cleaningPath(room: Vec2[], lane = 0.32, inset = 0.22): Vec2[] {
   const z1 = Math.max(...zs);
   // lanes run along the longer side (fewer turns)
   const alongZ = z1 - z0 >= x1 - x0;
-  const inside = (a: number, b: number) => {
-    const p: Vec2 = alongZ ? [a, b] : [b, a];
-    return [p, [p[0] + inset, p[1]], [p[0] - inset, p[1]], [p[0], p[1] + inset], [p[0], p[1] - inset]].every((q) => pointInPolygon(q as Vec2, room));
+  const d = inset * 0.7071;
+  const free = (p: Vec2) => {
+    const around: Vec2[] = [p, [p[0] + inset, p[1]], [p[0] - inset, p[1]], [p[0], p[1] + inset], [p[0], p[1] - inset]];
+    // the diagonals too, so the robot keeps clear of furniture corners
+    const near: Vec2[] = [...around, [p[0] + d, p[1] + d], [p[0] - d, p[1] + d], [p[0] + d, p[1] - d], [p[0] - d, p[1] - d]];
+    return around.every((q) => pointInPolygon(q, room)) && !obstacles.some((o) => near.some((q) => pointInPolygon(q, o)));
+  };
+  const inside = (a: number, b: number) => free(alongZ ? [a, b] : [b, a]);
+  // a straight drive from p to q stays free
+  const clear = (p: Vec2, q: Vec2) => {
+    const n = Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / 0.05);
+    for (let i = 1; i < n; i++) if (!free([p[0] + ((q[0] - p[0]) * i) / n, p[1] + ((q[1] - p[1]) * i) / n])) return false;
+    return true;
   };
   const [a0, a1, b0, b1] = alongZ ? [x0, x1, z0, z1] : [z0, z1, x0, x1];
   const out: Vec2[] = [];
@@ -58,8 +71,20 @@ export function cleaningPath(room: Vec2[], lane = 0.32, inset = 0.22): Vec2[] {
       }
     }
     if (!best || best[1] - best[0] < 0.2) continue;
-    const [s, e] = forward ? best : [best[1], best[0]];
-    out.push(alongZ ? [a, s] : [s, a], alongZ ? [a, e] : [e, a]);
+    const ends = (dir: boolean): [Vec2, Vec2] => {
+      const [s, e] = dir ? best! : [best![1], best![0]];
+      return [alongZ ? [a, s] : [s, a], alongZ ? [a, e] : [e, a]];
+    };
+    let run = ends(forward);
+    const last = out[out.length - 1];
+    if (last && obstacles.length && !clear(last, run[0])) {
+      // the other way round, or leave the lane out when furniture is in the way either way
+      const back = ends(!forward);
+      if (!clear(last, back[0])) continue;
+      run = back;
+      forward = !forward;
+    }
+    out.push(run[0], run[1]);
     forward = !forward;
   }
   return out;

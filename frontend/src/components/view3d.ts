@@ -39,7 +39,7 @@ import { coverPositionable, lightAbilities } from "./quick-menu.ts";
 import "./quick-menu.ts";
 import { load3d } from "../load3d.ts";
 import { buildMarkers, cameraMotionSensors, openMoreInfo, placedEntities, stateText, toggleEntity } from "../markers.ts";
-import { isLamp, LAMP_MODEL, outdoorGround, pointInPolygon, surfaceHeight, type Building, type Furniture } from "../model.ts";
+import { furnitureFootprint, isLamp, LAMP_MODEL, outdoorGround, pointInPolygon, surfaceHeight, type Building, type Furniture } from "../model.ts";
 import { floorCounts, floorInfoText, personsInRooms } from "../presence.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
@@ -804,6 +804,24 @@ export class Fp3dView3d extends LitElement {
     return null;
   }
 
+  /**
+   * Furniture a robot vacuum drives around: what stands on the floor of the room (cabinets, sofas,
+   * beds, appliances). It drives under tables, desks, chairs and stools, over rugs and under anything
+   * hung on the wall.
+   */
+  private robotObstacles(floor: Building["floors"][number], room: [number, number][]): [number, number][][] {
+    const OPEN_BELOW = new Set(["rug", "table", "table_round", "coffee_table", "chair", "office_chair", "stool", "bar_stool", "bench", "desk", "robot_vacuum", "parking", "stairwell", "radiator", "tv_wall", "kitchen_wall", "led_strip"]);
+    return floor.furniture
+      .filter((m) => {
+        if (OPEN_BELOW.has(m.type) || (m.type.startsWith("lamp_") && m.type !== "lamp_floor" && m.type !== "lamp_uplight")) return false;
+        if (m.h < 0.04 || mountBase(floor, m) > 0.12) return false;
+        const item = packItem(m.type);
+        if (item && (item.hole || /table|desk|chair|stool|bench|rug|carpet|mat$/.test(m.type))) return false;
+        return pointInPolygon([m.x, m.z], room) || furnitureFootprint(m).some((p) => pointInPolygon(p, room));
+      })
+      .map((m) => furnitureFootprint(m));
+  }
+
   /** Robot vacuums (docks with a vacuum entity): where they rest and what they do. */
   private robotInfos(hass: HomeAssistant, b: Building): RobotInfo[] {
     const out: RobotInfo[] = [];
@@ -822,7 +840,8 @@ export class Fp3dView3d extends LitElement {
         const rooms = floor.rooms.filter((r) => r.points.length >= 3);
         const reported = mode === "cleaning" ? robotRoom(hass, rooms, entity, robotRoomSensor(hass, entity, f.room_sensor)) : null;
         const room = reported ?? rooms.find((r) => pointInPolygon(rest, r.points));
-        out.push({ id: f.id, floorId: floor.id, rest, restHeading: -a, mode, room: room?.points ?? null, roomId: room?.id ?? null });
+        const obstacles = mode === "cleaning" && room ? this.robotObstacles(floor, room.points) : [];
+        out.push({ id: f.id, floorId: floor.id, rest, restHeading: -a, mode, room: room?.points ?? null, roomId: room?.id ?? null, obstacles });
       }
     }
     return out;
