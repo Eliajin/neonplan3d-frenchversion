@@ -3009,6 +3009,13 @@ export class Fp3dEditor extends LitElement {
         ${window ? this.num(this.t("sill"), o.sill, (v) => this.updateOpening({ sill: Math.max(0, v) }), 0.01, 0) : nothing}
         ${this.num(this.t("opening_height"), o.height, (v) => this.updateOpening({ height: Math.max(0.3, v) }), 0.01, 0.3)}
         ${garage ? nothing : this.renderStyleSelect(o)}
+        <label class="fp3d-field fp3d-wide" title=${this.t("opening_mark_hint")}
+          >${this.t("opening_mark")}
+          <select ?disabled=${!this.isAdmin} @change=${(e: Event) => this.updateOpening({ mark: (e.target as HTMLSelectElement).value === "closed" ? "closed" : null })}>
+            <option value="" ?selected=${o.mark !== "closed"}>${this.t("opening_mark_open")}</option>
+            <option value="closed" ?selected=${o.mark === "closed"}>${this.t("opening_mark_closed")}</option>
+          </select></label
+        >
         ${garage
           ? nothing
           : html`<label class="fp3d-field fp3d-wide"

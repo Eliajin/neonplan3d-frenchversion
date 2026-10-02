@@ -73,6 +73,8 @@ OPENING_SCHEMA = vol.Schema(
         vol.Optional("position", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # the position sensor counts the other way round (0 = open)
         vol.Optional("position_inverted", default=False): bool,
+        # highlight in 3D while open (None) or while closed ("closed": a WC or a child's room door)
+        vol.Optional("mark", default=None): vol.Any(None, vol.In(["closed"])),
         vol.Optional("cover", default=None): _ENTITY_REF,
         vol.Optional("contact", default=None): _ENTITY_REF,
         vol.Optional("tilt", default=None): _ENTITY_REF,

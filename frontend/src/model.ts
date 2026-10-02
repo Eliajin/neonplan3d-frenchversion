@@ -56,6 +56,8 @@ export interface Opening {
   position?: string | null;
   /** The position sensor counts the other way round (0 = open). */
   position_inverted?: boolean;
+  /** Highlight in 3D while open (null, default) or while closed (a WC or a child's room door). */
+  mark?: "closed" | null;
   cover: EntityRef;
   contact: EntityRef;
   tilt: EntityRef;

@@ -1710,8 +1710,8 @@ export class FloorplanViewer {
         const target = this.openingTargets.get(id) ?? CLOSED;
         // nothing to do for an opening that rests at its target (the usual case)
         const near = (a: number | null | undefined, b: number | null | undefined) => (a ?? null) === (b ?? null) || (typeof a === "number" && typeof b === "number" && Math.abs(a - b) < 0.003);
-        if (near(target.open, cur.open) && near(target.open2 ?? 0, cur.open2 ?? 0) && near(target.tilt, cur.tilt) && near(target.tilt2 ?? 0, cur.tilt2 ?? 0) && near(target.cover, cur.cover)) continue;
-        const next = { ...cur, open2: cur.open2 ?? 0, tilt2: cur.tilt2 ?? 0 };
+        if (near(target.open, cur.open) && near(target.open2 ?? 0, cur.open2 ?? 0) && near(target.tilt, cur.tilt) && near(target.tilt2 ?? 0, cur.tilt2 ?? 0) && near(target.cover, cur.cover) && !!target.sensed === !!cur.sensed) continue;
+        const next = { ...cur, open2: cur.open2 ?? 0, tilt2: cur.tilt2 ?? 0, sensed: target.sensed };
         let busy = false;
         for (const key of ["open", "open2", "tilt", "tilt2"] as const) {
           const to = target[key] ?? 0;
@@ -1732,7 +1732,7 @@ export class FloorplanViewer {
             busy = true;
           }
         }
-        if (next.open !== cur.open || next.open2 !== (cur.open2 ?? 0) || next.tilt !== cur.tilt || next.tilt2 !== (cur.tilt2 ?? 0) || next.cover !== cur.cover) {
+        if (next.open !== cur.open || next.open2 !== (cur.open2 ?? 0) || next.tilt !== cur.tilt || next.tilt2 !== (cur.tilt2 ?? 0) || next.cover !== cur.cover || !!next.sensed !== !!cur.sensed) {
           fv.openings.set(id, next);
           changed = true;
         }

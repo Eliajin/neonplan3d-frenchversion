@@ -19,6 +19,8 @@ export interface OpeningState {
   tilt2?: number;
   /** Closed fraction of the blind or garage door (0 = up, 1 = down); null = no blind. */
   cover: number | null;
+  /** A sensor reports the state (contact, tilt sensor or cover); without one "closed" is a guess. */
+  sensed?: boolean;
 }
 
 export const CLOSED: OpeningState = { open: 0, open2: 0, tilt: 0, tilt2: 0, cover: null };
@@ -128,13 +130,15 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
     // local frame: x from the opening start along the wall, n from the wall axis towards the room
     const tf: Tf = (x, n, y) => [info.start[0] + info.axis[0] * x + info.toRoom[0] * n, y, info.start[1] + info.axis[1] * x + info.toRoom[1] * n];
     const mid = (info.faceRoom - info.faceOut) / 2;
+    // highlighted while open, or while closed when the opening asks for it (and a sensor knows)
+    const markClosed = info.opening.mark === "closed";
     // a passage (wall opening without a door) shows nothing but the gap in the wall
     const passage = info.opening.type === "door" && openingStyle(info.opening, info.exterior) === "passage";
     if ((info.opening.type === "door" && !passage) || info.opening.type === "garage") {
       // door frame (Zarge) around the opening, covering the reveal on both faces; an open garage door glows warm
       const n0 = -info.faceOut - 0.012;
       const n1 = info.faceRoom + 0.012;
-      const garageOpen = info.opening.type === "garage" && (st.cover ?? 1) < 0.95;
+      const garageOpen = info.opening.type === "garage" && (markClosed ? !!st.sensed && (st.cover ?? 1) >= 0.95 : (st.cover ?? 1) < 0.95);
       const frameC = garageOpen ? shade(OPEN_WARM, 0.8) : new Color(FRAME);
       const frameTop = garageOpen ? shade(OPEN_WARM, 1) : new Color(FRAME_TOP);
       splitBox(frames, tf, -0.045, 0.02, n0, n1, 0, T + 0.045, frameC, frameTop, cut, bucket);
@@ -187,7 +191,7 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
         };
         // an open leaf leaves its wall: keep it visible when the wall folds away
         const leafBucket = open > 0.05 ? ALWAYS : bucket;
-        const warm = open > 0.9;
+        const warm = markClosed ? !!st.sensed && open < 0.05 : open > 0.9;
         const leafC = warm ? shade(OPEN_WARM, 0.7) : new Color(front ? LEAF_FRONT : LEAF);
         const leafTop = warm ? shade(OPEN_WARM, 0.9) : new Color(front ? LEAF_FRONT_TOP : LEAF_TOP);
         if (style === "glass") {
@@ -247,7 +251,8 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
           ]
         : [{ atStart: info.hingeAtStart, x0: fw, x1: W - fw, open: st.open, tilt: st.tilt }];
       for (const sash of sashes) {
-        const alert = sash.open > 0.02 || sash.tilt > 0.02;
+        const ajar = sash.open > 0.02 || sash.tilt > 0.02;
+        const alert = markClosed ? !!st.sensed && !ajar : ajar;
         const sashC = alert ? shade(OPEN_WARM, 0.75) : new Color(SASH);
         const sashTop = alert ? shade(OPEN_WARM, 0.95) : frameTop;
         const sx0 = sash.x0;

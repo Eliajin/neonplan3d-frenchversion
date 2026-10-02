@@ -428,7 +428,7 @@ export function openingState(
   hass: HomeAssistant,
   e: OpeningEntities,
   type: Opening["type"] = "window",
-): { open: number; open2: number; tilt: number; tilt2: number; cover: number | null } {
+): { open: number; open2: number; tilt: number; tilt2: number; cover: number | null; sensed: boolean } {
   const on = (id: string | null | undefined) => !!id && hass.states[id]?.state === "on";
   const known = (id: string | null | undefined) => !!id && !!hass.states[id] && !isUnavailable(hass.states[id]);
   const pos = (id: string | null | undefined) => (id ? windowPosition(hass.states[id]) : null);
@@ -437,7 +437,7 @@ export function openingState(
   const open2 = pos(e.contact2) === "open" && !tilted2 ? 1 : 0;
   if (type === "door") {
     const p = pos(e.contact);
-    return { open: p === null ? DOOR_DEFAULT_OPEN : p === "closed" ? 0 : 1, open2: pos(e.contact2) === "open" ? 1 : 0, tilt: 0, tilt2: 0, cover: null };
+    return { open: p === null ? DOOR_DEFAULT_OPEN : p === "closed" ? 0 : 1, open2: pos(e.contact2) === "open" ? 1 : 0, tilt: 0, tilt2: 0, cover: null, sensed: p !== null };
   }
   // a separate tilt sensor, or a handle sensor that reports "tilted" itself
   const tilted = on(e.tilt) || pos(e.tilt) === "tilted" || pos(e.contact) === "tilted";
@@ -453,10 +453,11 @@ export function openingState(
   } else if (e.cover) cover = 0;
   if (type === "garage") {
     // a garage door without a cover shows its contact: open or closed
+    const sensed = cover !== null || known(e.contact);
     if (cover === null) cover = known(e.contact) ? (on(e.contact) ? 0 : 1) : 1;
-    return { open: 0, open2: 0, tilt: 0, tilt2: 0, cover };
+    return { open: 0, open2: 0, tilt: 0, tilt2: 0, cover, sensed };
   }
-  return { open, open2, tilt: tilted ? 1 : 0, tilt2: tilted2 ? 1 : 0, cover };
+  return { open, open2, tilt: tilted ? 1 : 0, tilt2: tilted2 ? 1 : 0, cover, sensed: known(e.contact) || known(e.tilt) };
 }
 
 /**
