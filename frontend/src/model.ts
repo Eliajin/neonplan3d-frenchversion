@@ -7,8 +7,6 @@ import type { LampModel } from "./viewer/viewer3d.ts";
 export type Vec2 = [number, number];
 
 export interface Room {
-  /** Fixed against moving by accident (null = follows the plan lock for rooms, walls, doors, windows, outdoor areas). */
-  locked?: boolean | null;
   id: string;
   name: string;
   area_id: string | null;
@@ -26,8 +24,6 @@ export type OpeningType = "door" | "window" | "garage";
 export type EntityRef = string | null;
 
 export interface Opening {
-  /** Fixed against moving by accident (null = follows the plan lock for rooms, walls, doors, windows, outdoor areas). */
-  locked?: boolean | null;
   id: string;
   room_id: string;
   /** Room edge the opening sits on (points[edge] -> points[edge + 1]); 0 in a free wall. */
@@ -79,7 +75,7 @@ export interface ScreenPicture {
 }
 
 export interface Furniture {
-  /** Fixed against moving by accident (null = follows the plan lock for rooms, walls, doors, windows, outdoor areas). */
+  /** Fixed against moving by accident. */
   locked?: boolean | null;
   id: string;
   type: string;
@@ -123,7 +119,7 @@ export const MARKER_SHOWS = ["always", "no_power", "never"] as const;
 export type MarkerShow = (typeof MARKER_SHOWS)[number];
 
 export interface Placement {
-  /** Fixed against moving by accident (null = follows the plan lock for rooms, walls, doors, windows, outdoor areas). */
+  /** Fixed against moving by accident. */
   locked?: boolean | null;
   entity_id: string;
   x: number;
@@ -173,8 +169,6 @@ export interface Floor {
 
 /** A wall drawn on its own, from a to b along its centre line. */
 export interface FreeWall {
-  /** Fixed against moving by accident (null = follows the plan lock for rooms, walls, doors, windows, outdoor areas). */
-  locked?: boolean | null;
   id: string;
   a: Vec2;
   b: Vec2;
@@ -211,10 +205,13 @@ export interface BuildingSettings {
   lock_plan?: boolean;
 }
 
-/** Whether an item is fixed: its own lock, or (for rooms, walls, doors, windows, outdoor areas) the plan lock. */
-export function isFixed(item: { locked?: boolean | null } | null | undefined, structural: boolean, settings: Pick<BuildingSettings, "lock_plan">): boolean {
+/**
+ * Whether an item is fixed: rooms, walls, doors, windows and outdoor areas follow the plan lock alone,
+ * furniture and devices their own lock.
+ */
+export function isFixed(item: object | null | undefined, structural: boolean, settings: Pick<BuildingSettings, "lock_plan">): boolean {
   if (!item) return false;
-  return item.locked ?? (structural && !!settings.lock_plan);
+  return structural ? !!settings.lock_plan : !!(item as { locked?: boolean | null }).locked;
 }
 
 export const WEATHER_EFFECTS = ["rain", "snow", "fog", "clouds", "lightning", "sky"] as const;
@@ -250,8 +247,6 @@ export function outdoorGround(floor: Floor, x: number, z: number): number {
 
 /** Area outside the house (lawn, terrace, pool, hedge …), drawn like a room. */
 export interface OutdoorArea {
-  /** Fixed against moving by accident (null = follows the plan lock for rooms, walls, doors, windows, outdoor areas). */
-  locked?: boolean | null;
   id: string;
   type: OutdoorType;
   points: Vec2[];

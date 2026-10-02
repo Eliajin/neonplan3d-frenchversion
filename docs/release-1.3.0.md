@@ -2,7 +2,7 @@
 
 ### Neu
 
-- **Fixieren und Grundriss sperren:** Räume, Möbel, Geräte, Wände, Türen, Fenster und Außenflächen lassen sich fixieren, damit sie nicht mehr versehentlich verrutschen: Schloss im Formular, Taste **L** oder **Rechtsklick** (Tablet: langes Drücken). **🔒 Grundriss** in der Werkzeugleiste sperrt den ganzen Grundriss auf einmal, Möbel und Geräte bleiben frei. Das neue Rechtsklick-Menü kann außerdem duplizieren, drehen und löschen.
+- **Grundriss sperren und Möbel fixieren:** **🔒 Grundriss** in der Werkzeugleiste sperrt Räume, Wände, Türen, Fenster und Außenflächen, damit nichts mehr versehentlich verrutscht. Möbel und Geräte fixierst du einzeln: Schloss im Formular, Taste **L** oder **Rechtsklick** (Tablet: langes Drücken). Das neue Rechtsklick-Menü kann außerdem duplizieren, drehen und löschen.
 - **Mehr Sensoren im Plan:** Neben Temperatur, Luftfeuchte, CO₂ und Leistung lassen sich jetzt auch Gas- und Wasserzähler, Energie, Helligkeit, Luftdruck und Luftqualität (Feinstaub, VOC, CO) platzieren. Zähler ohne Geräteklasse zählen mit, wenn ihre Einheit passt (m³, l, kWh, lx), etwa von AI-on-the-edge. Werte erscheinen mit den Nachkommastellen aus Home Assistant. Danke an @Lice2 (#7).
 - **Fernseher an der Steckdose:** Ein Fernseher lässt sich jetzt auch mit dem Schalter einer smarten Steckdose verknüpfen statt mit einem Media-Player. Der Bildschirm leuchtet, solange die Steckdose an ist, ein Tipp schaltet sie. Danke an @turbospielt (#5).
 - **Symbol in 3D je Gerät:** Im Formular eines Geräts oder elektrischen Möbels wählst du *Automatisch*, *Immer zeigen*, *Ohne Watt* oder *Ausblenden*. So verschwinden etwa die Watt an Steckdosen, und ein Temperatursensor ist immer zu sehen. Danke an @henninghartwig für die Idee.
@@ -20,7 +20,7 @@ Nach dem Update Home Assistant neu starten und die Seite neu laden.
 
 ### New
 
-- **Fixing and locking the floor plan:** rooms, furniture, devices, walls, doors, windows and outdoor areas can be fixed so they no longer slip by accident: lock in the form, key **L** or **right-click** (tablet: long press). **🔒 Floor plan** in the toolbar locks the whole floor plan at once, furniture and devices stay free. The new right-click menu can also duplicate, turn and delete.
+- **Locking the floor plan and fixing furniture:** **🔒 Floor plan** in the toolbar locks rooms, walls, doors, windows and outdoor areas so nothing slips by accident. Furniture and devices are fixed one by one: lock in the form, key **L** or **right-click** (tablet: long press). The new right-click menu can also duplicate, turn and delete.
 - **More sensors in the plan:** besides temperature, humidity, CO₂ and power you can now place gas and water meters, energy, illuminance, pressure and air quality (particulates, VOC, CO). Meters without a device class count too when their unit fits (m³, l, kWh, lx), e.g. from AI-on-the-edge. Values show the decimals set in Home Assistant. Thanks to @Lice2 (#7).
 - **TV on a smart plug:** a TV can now link the switch of a smart plug instead of a media player. The screen glows while the plug is on, a tap switches it. Thanks to @turbospielt (#5).
 - **Marker in 3D per device:** in the form of a device or electric furniture item choose *Automatic*, *Always show*, *Without watts* or *Hide*. Plugs lose their watts, a temperature sensor is always visible. Thanks to @henninghartwig for the idea.

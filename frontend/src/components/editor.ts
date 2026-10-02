@@ -1517,8 +1517,8 @@ export class Fp3dEditor extends LitElement {
       else if (this._furnitureId) this.deleteFurniture();
       else if (this._vertex !== null) this.deleteVertex(this._vertex);
       else this.deleteRoom();
-    } else if (e.key.toLowerCase() === "l" && !mod && this.selectedFix) {
-      const s = this.selectedFix;
+    } else if (e.key.toLowerCase() === "l" && !mod && (this._furnitureId || this._deviceId)) {
+      const s = this.selectedFix!;
       this.toggleFixed(s.kind, s.id);
     } else if (Object.hasOwn(ARROWS, e.key) && !mod && (this._tool === "select" || this._tool === "furniture")) {
       // arrow keys nudge the selection: one grid step, Shift 10 cm, Alt 1 cm
@@ -1695,7 +1695,7 @@ export class Fp3dEditor extends LitElement {
   }
 
   /** The item of a fixable kind on a floor. */
-  private fixItem(floor: Floor | undefined, kind: FixKind, id: string): { locked?: boolean | null } | undefined {
+  private fixItem(floor: Floor | undefined, kind: FixKind, id: string): object | undefined {
     if (!floor) return undefined;
     switch (kind) {
       case "room":
@@ -1719,10 +1719,11 @@ export class Fp3dEditor extends LitElement {
   }
 
   private toggleFixed(kind: FixKind, id: string): void {
-    if (!this.isAdmin) return;
+    // rooms, walls, doors, windows and outdoor areas follow the plan lock alone
+    if (!this.isAdmin || (kind !== "furniture" && kind !== "device")) return;
     const next = !this.isFixedItem(kind, id);
     this.change((_, floor) => {
-      const item = this.fixItem(floor, kind, id);
+      const item = this.fixItem(floor, kind, id) as { locked?: boolean | null } | undefined;
       if (item) item.locked = next;
     });
   }
@@ -1811,7 +1812,9 @@ export class Fp3dEditor extends LitElement {
       fn();
     };
     return html`<div class="fp3d-ctx" style=${`left:${x}px;top:${y}px`} @pointerdown=${(e: Event) => e.stopPropagation()} @contextmenu=${(e: Event) => e.preventDefault()}>
-      <button title=${this.t("fix_hint")} @click=${run(() => this.toggleFixed(c.kind, c.id))}>${fixed ? `🔓 ${this.t("unfix")}` : `🔒 ${this.t("fix")}`}</button>
+      ${c.kind === "furniture" || c.kind === "device"
+        ? html`<button title=${this.t("fix_hint")} @click=${run(() => this.toggleFixed(c.kind, c.id))}>${fixed ? `🔓 ${this.t("unfix")}` : `🔒 ${this.t("fix")}`}</button>`
+        : html`<button title=${this.t("lock_plan_hint")} @click=${run(() => this.toggleLockPlan())}>${this._doc.settings.lock_plan ? `🔓 ${this.t("plan_unlock")}` : `🔒 ${this.t("plan_lock")}`}</button>`}
       ${c.kind === "room" ? html`<button @click=${run(() => this.duplicateRoom())}>⧉ ${this.t("duplicate")}</button>` : nothing}
       ${c.kind === "furniture"
         ? html`<button @click=${run(() => this.duplicateFurniture())}>⧉ ${this.t("duplicate")}</button>
@@ -1824,6 +1827,14 @@ export class Fp3dEditor extends LitElement {
   /** Lock button in the form of an item. */
   private fixButton(kind: FixKind, id: string) {
     if (!this.isAdmin) return nothing;
+    if (kind !== "furniture" && kind !== "device") {
+      // part of the floor plan: shows the plan lock, a click releases it
+      return this._doc.settings.lock_plan
+        ? html`<button class="fp3d-btn fp3d-fix" aria-pressed="true" title=${this.t("lock_plan_hint")} @click=${() => this.toggleLockPlan()}>
+            🔒 ${this.t("plan_locked")}
+          </button>`
+        : nothing;
+    }
     const fixed = this.isFixedItem(kind, id);
     return html`<button class="fp3d-btn fp3d-fix" aria-pressed=${fixed} title=${this.t("fix_hint")} @click=${() => this.toggleFixed(kind, id)}>
       ${fixed ? `🔒 ${this.t("unfix")}` : `🔓 ${this.t("fix")}`}
@@ -2603,7 +2614,8 @@ export class Fp3dEditor extends LitElement {
         <title>${entityName(this.hass, pl.entity_id)}</title>
         <circle r="18" class="fp3d-hit" /><circle r="12" />
         <path d=${iconPath(kind)} transform="translate(-7.2 -7.2) scale(0.6)" />
-      </g>`;
+      </g>
+      ${sel && pl.locked ? svg`<text class="fp3d-lock" x=${x + 16} y=${y - 12}>🔒</text>` : nothing}`;
     })}</g>`;
   }
 
