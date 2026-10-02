@@ -17,6 +17,7 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 ### New
 
 - The warning for a window open in the rain can be switched off on its own (plan settings, weather).
+- Robot vacuums clean the room they report: a "current room" sensor (Roborock, Dreame …) is found on the robot's device and matched by room or area name.
 
 ## 1.6.0
 

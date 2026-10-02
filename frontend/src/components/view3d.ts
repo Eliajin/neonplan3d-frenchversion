@@ -17,6 +17,8 @@ import {
   type OpeningEntities, confirmEntities, fridgeDoors, hasScreen, pictureRuleMatches,
   fromCelsius,
   tempUnit,
+  robotRoom,
+  robotRoomSensor,
 } from "../devices.ts";
 import { alertColor, alertEntities, alertSources, alertText, findAlerts, type Alert, type AlertSources } from "../alerts.ts";
 import { iconPath, iconSvg } from "../icons.ts";
@@ -426,6 +428,7 @@ export class Fp3dView3d extends LitElement {
       const lights = b.floors.flatMap((f) => f.rooms.flatMap((r) => areaEntities(hass, r.area_id).filter((id) => kindOf(id) === "light")));
       const furniture = [...this.furnitureLinks.values()].flatMap((l) => [l.entity, l.power]);
       const doors = b.floors.flatMap((f) => f.furniture.flatMap((m) => [m.door_left ?? null, m.door_right ?? null]));
+      const robotRooms = b.floors.flatMap((f) => f.furniture.filter((m) => m.type === "robot_vacuum").map((m) => robotRoomSensor(hass, this.furnitureLinks.get(m.id)?.entity ?? null, m.room_sensor)));
       const pictureRules = b.floors.flatMap((f) => f.furniture.flatMap((m) => (m.pictures ?? []).flatMap((r) => [r.entity, ...(r.image.startsWith("camera:") ? [r.image.slice(7)] : [])])));
       const heat =
         this.heatMode === "none"
@@ -436,7 +439,7 @@ export class Fp3dView3d extends LitElement {
       const parking = parkingEntities(b.floors);
       const motion = trailSources(hass, b).map((s) => s.entity);
       const weather = weatherEntity(hass, this.weatherEntityId ?? b.settings.weather_entity);
-      const all = [...placed, ...cameraSensors, ...links, ...power, ...furniture, ...doors, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights, ...heat, ...warn, ...parking, ...motion, weather, "sun.sun"];
+      const all = [...placed, ...cameraSensors, ...links, ...power, ...furniture, ...doors, ...robotRooms, ...pictureRules, e.grid, e.solar, e.battery, e.battery_soc, e.tariff, ...presence, ...lights, ...heat, ...warn, ...parking, ...motion, weather, "sun.sun"];
       this.watched = [...new Set(all.filter((id): id is string => !!id))];
       force = true;
     }
@@ -815,8 +818,11 @@ export class Fp3dView3d extends LitElement {
         const a = (f.rotation * Math.PI) / 180;
         const off = f.d * 0.14;
         const rest: [number, number] = [f.x - Math.sin(a) * off, f.z + Math.cos(a) * off];
-        const room = floor.rooms.find((r) => r.points.length >= 3 && pointInPolygon(rest, r.points));
-        out.push({ id: f.id, floorId: floor.id, rest, restHeading: -a, mode, room: room?.points ?? null });
+        // the room the robot reports (a "current room" sensor), else the room of its dock
+        const rooms = floor.rooms.filter((r) => r.points.length >= 3);
+        const reported = mode === "cleaning" ? robotRoom(hass, rooms, entity, robotRoomSensor(hass, entity, f.room_sensor)) : null;
+        const room = reported ?? rooms.find((r) => pointInPolygon(rest, r.points));
+        out.push({ id: f.id, floorId: floor.id, rest, restHeading: -a, mode, room: room?.points ?? null, roomId: room?.id ?? null });
       }
     }
     return out;

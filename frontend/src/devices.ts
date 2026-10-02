@@ -809,3 +809,38 @@ export function roomPanelEntities(hass: HomeAssistant, floor: Floor, room: Room)
   const set = new Set(unique);
   return { shown: unique, more: areaEntities(hass, room.area_id).filter((id) => !set.has(id)) };
 }
+
+const ROOM_KEYS = /(^|_)(current_room|current_segment|aktueller_raum|current_area)($|_)/;
+
+/** The sensor naming the room a robot vacuum cleans: the chosen one, else one of the vacuum's device. */
+export function robotRoomSensor(hass: HomeAssistant, vacuum: string | null, chosen: string | null | undefined): string | null {
+  if (chosen === "none") return null;
+  if (chosen) return chosen;
+  const device = vacuum ? hass.entities?.[vacuum]?.device_id : null;
+  if (!device || !hass.entities) return null;
+  for (const e of Object.values(hass.entities)) {
+    if (e.device_id !== device || !e.entity_id.startsWith("sensor.")) continue;
+    if (ROOM_KEYS.test(e.translation_key ?? "") || ROOM_KEYS.test(e.entity_id.split(".")[1])) return e.entity_id;
+  }
+  return null;
+}
+
+/** A name compared without case, accents or umlaut spelling ("Küche" = "kueche" = "Kuche"). */
+export function roomKey(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/ä/g, "a").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ß/g, "ss")
+    .replace(/ae/g, "a").replace(/oe/g, "o").replace(/ue/g, "u")
+    .normalize("NFD")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/** The room a robot reports (sensor state, else the vacuum's current_room attribute), matched by room or area name. */
+export function robotRoom<R extends { name: string; area_id?: string | null }>(hass: HomeAssistant, rooms: readonly R[], vacuum: string | null, sensor: string | null): R | null {
+  const raw = sensor ? hass.states[sensor]?.state : vacuum ? hass.states[vacuum]?.attributes.current_room : undefined;
+  if (typeof raw !== "string" || !raw || raw === "unknown" || raw === "unavailable") return null;
+  const want = roomKey(raw);
+  if (!want) return null;
+  const names = (r: R) => [r.name, r.area_id ?? "", (r.area_id && hass.areas?.[r.area_id]?.name) || ""].map(roomKey).filter(Boolean);
+  return rooms.find((r) => names(r).includes(want)) ?? rooms.find((r) => names(r).some((n) => n.length >= 3 && (n.includes(want) || want.includes(n)))) ?? null;
+}

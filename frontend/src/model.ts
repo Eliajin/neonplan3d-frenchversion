@@ -102,6 +102,8 @@ export interface Furniture {
   /** Smart fridge: door sensors of the left (freezer) and right (fridge) door; the doors open in 3D while they report open. */
   door_left?: EntityRef;
   door_right?: EntityRef;
+  /** Robot vacuum: sensor naming the room it cleans right now (null = automatic, "none" = the dock's room). */
+  room_sensor?: EntityRef;
   /** Ask before switching the linked entity. */
   confirm?: boolean;
   /** Its marker in 3D: automatic (null), always shown, shown without watts, or hidden. */

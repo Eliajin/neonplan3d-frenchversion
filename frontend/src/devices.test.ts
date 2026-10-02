@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { appColor, areaEntities, otherAreaEntities, roomClimateSensors, roomClimateValue, unassignedEntities, autoPlace, entityName, fridgeDoors, furnitureEntities, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, powerSensorsOf, primaryEntities, roomPanelEntities, windowPosition } from "./devices.ts";
+import { appColor, areaEntities, otherAreaEntities, roomClimateSensors, roomClimateValue, unassignedEntities, autoPlace, entityName, fridgeDoors, furnitureEntities, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, powerSensorsOf, primaryEntities, roomPanelEntities, windowPosition, robotRoom, robotRoomSensor, roomKey } from "./devices.ts";
 import type { Floor, Opening, Room } from "./model.ts";
 import { centroid, newFloor, pointInPolygon } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -412,4 +412,34 @@ test("room climate skips device temperatures, honours a chosen sensor and placed
   assert.deepEqual(unassignedEntities(hass), ["light.gruppe", "sensor.flur_temp"]);
   assert.deepEqual(otherAreaEntities(hass, "kueche").map((a) => a.name), ["HWR"]);
   assert.deepEqual(otherAreaEntities(hass, "hwr"), []);
+});
+
+test("a robot vacuum's current room is found on its device and matched by room or area name", () => {
+  const hass = {
+    language: "de",
+    areas: { kitchen: { area_id: "kitchen", name: "Küche" } },
+    entities: {
+      "vacuum.robbi": { entity_id: "vacuum.robbi", device_id: "d1" },
+      "sensor.robbi_battery": { entity_id: "sensor.robbi_battery", device_id: "d1" },
+      "sensor.robbi_room": { entity_id: "sensor.robbi_room", device_id: "d1", translation_key: "current_room" },
+    },
+    states: {
+      "vacuum.robbi": { entity_id: "vacuum.robbi", state: "cleaning", attributes: {} },
+      "sensor.robbi_room": { entity_id: "sensor.robbi_room", state: "Kueche", attributes: {} },
+    },
+  } as unknown as HomeAssistant;
+  assert.equal(robotRoomSensor(hass, "vacuum.robbi", null), "sensor.robbi_room");
+  assert.equal(robotRoomSensor(hass, "vacuum.robbi", "none"), null);
+  const rooms = [
+    { id: "a", name: "Wohnzimmer", area_id: "living" },
+    { id: "b", name: "Kochen", area_id: "kitchen" },
+    { id: "c", name: "Gäste Bad", area_id: null },
+  ];
+  // "Kueche" matches the area name "Küche"
+  assert.equal(robotRoom(hass, rooms, "vacuum.robbi", "sensor.robbi_room")?.id, "b");
+  hass.states["sensor.robbi_room"].state = "Gaeste Bad";
+  assert.equal(robotRoom(hass, rooms, "vacuum.robbi", "sensor.robbi_room")?.id, "c");
+  hass.states["sensor.robbi_room"].state = "Keller";
+  assert.equal(robotRoom(hass, rooms, "vacuum.robbi", "sensor.robbi_room"), null);
+  assert.equal(roomKey("Büro"), roomKey("Buero"));
 });

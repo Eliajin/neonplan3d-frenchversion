@@ -309,6 +309,8 @@ The item **Parking spot** in the Parking group marks where a car stands: in the 
 
 The robot vacuum item links to the `vacuum` entity. While the robot cleans, it drives lanes through the room of its dock in 3D and then returns. The lanes are simulated because Home Assistant usually does not know the real position.
 
+Many robots do report the room they are cleaning, for example Roborock and Dreame with a "current room" sensor. NeonPlan 3D finds this sensor on the robot's device by itself; the **Current room (sensor)** field lets you pick another one. The reported name is compared with the room name and the Home Assistant area, ignoring case and the spelling of umlauts ("Kueche" matches "Küche"). When the robot changes rooms it appears there in 3D and drives its lanes. If no room matches, it stays in the room of its dock.
+
 ### 4.16 Stairs and floor openings
 
 - The **Stairs** from the library rise from the marked front edge towards the back. If they reach the floor above, they cut the stairwell into its floor.

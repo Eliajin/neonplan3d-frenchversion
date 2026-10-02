@@ -2694,8 +2694,9 @@ export class FloorplanViewer {
         this.robots.set(info.id, r);
       }
       const was = r.info.mode;
+      const moved = info.mode === "cleaning" && was === "cleaning" && (r.info.roomId ?? null) !== (info.roomId ?? null);
       r.info = info;
-      if (info.mode === "cleaning" && (was !== "cleaning" || !r.motion.path.length)) {
+      if (info.mode === "cleaning" && (was !== "cleaning" || moved || !r.motion.path.length)) {
         // start the lanes at the point nearest to where the robot is
         const path = info.room ? cleaningPath(info.room) : circlePath(info.rest);
         const path2 = path.length ? path : circlePath(info.rest);
@@ -2705,6 +2706,8 @@ export class FloorplanViewer {
         });
         r.motion.path = path2;
         r.motion.next = best;
+        // a robot reported in another room appears there instead of driving through the walls
+        if (info.room && !pointInPolygon(r.motion.pos, info.room)) r.motion.pos = [path2[best][0], path2[best][1]];
       }
       r.led.color.setHex(ROBOT_LED[info.mode]);
     }

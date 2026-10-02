@@ -309,6 +309,8 @@ Das Möbel **Stellplatz** in der Gruppe Stellplätze markiert, wo ein Auto steht
 
 Das Möbel Saugroboter wird mit der `vacuum`-Entität verknüpft. Saugt der Roboter, fährt er in 3D in Bahnen durch den Raum seiner Station und kehrt danach zurück. Die Bahn ist simuliert, weil Home Assistant die echte Position meist nicht kennt.
 
+Viele Roboter melden aber den Raum, den sie gerade saugen, zum Beispiel Roborock und Dreame mit einem Sensor „Aktueller Raum“. NeonPlan 3D findet diesen Sensor am Gerät des Roboters von selbst; im Feld **Aktueller Raum (Sensor)** kannst du auch einen anderen wählen. Der gemeldete Name wird mit dem Raumnamen und dem Home-Assistant-Bereich verglichen, Groß- und Kleinschreibung und die Schreibweise von Umlauten spielen keine Rolle („Kueche“ passt zu „Küche“). Wechselt der Roboter den Raum, erscheint er in 3D dort und fährt seine Bahnen. Passt kein Raum, bleibt er im Raum seiner Station.
+
 ### 4.16 Treppen und Bodenöffnungen
 
 - Die **Treppe** aus der Bibliothek steigt von der markierten Vorderkante nach hinten an. Reicht sie bis zur Etage darüber, schneidet sie dort die Treppenöffnung in die Decke.

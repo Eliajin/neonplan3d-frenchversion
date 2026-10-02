@@ -11,7 +11,7 @@ import { holeInRoom } from "../geometry/holes.ts";
 import { weatherEntity } from "../weather.ts";
 import { SHOW_ENERGY, SHOW_PRESENCE } from "../flags.ts";
 import { hasFeature, manualUrl, shopUrl } from "../features.ts";
-import { TOGGLE_KINDS } from "../devices.ts";
+import { robotRoomSensor, TOGGLE_KINDS } from "../devices.ts";
 import { ridgeHeight, roofSectionsFromRooms, sectionFrame, sectionProfile, wallTopUnder } from "../roof-sections.ts";
 import { storedImageIds } from "../transfer.ts";
 import { DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS,
@@ -3813,6 +3813,17 @@ export class Fp3dEditor extends LitElement {
             ${this.t("device_confirm")}</label
           >
           <div class="fp3d-form">${this.markerSelect(f.marker ?? null, (v) => this.updateFurniture({ marker: v }))}</div>`
+        : nothing}
+      ${f.type === "robot_vacuum"
+        ? html`<div class="fp3d-form fp3d-links">
+            ${this.entitySelect(
+              this.t("furn_robot_room"),
+              f.room_sensor ?? null,
+              robotRoomSensor(hass, furnitureEntities(hass, this._doc.floors).get(f.id)?.entity ?? null, null),
+              this.entityOptions((id) => id.startsWith("sensor.")),
+              (v) => this.updateFurniture({ room_sensor: v }),
+            )}
+          </div>`
         : nothing}
       ${f.type === "fridge_smart"
         ? html`<div class="fp3d-form fp3d-links">

@@ -16,6 +16,8 @@ export interface RobotInfo {
   mode: RobotMode;
   /** Outline of the room it cleans (null: circles near the dock). */
   room: Vec2[] | null;
+  /** Id of that room (a new room starts new lanes). */
+  roomId?: string | null;
 }
 
 /** Driving speed (m/s) and turning speed (rad/s). */

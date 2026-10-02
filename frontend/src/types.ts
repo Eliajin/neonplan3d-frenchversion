@@ -21,6 +21,8 @@ export interface HassEntityEntry {
   area_id?: string | null;
   hidden?: boolean;
   entity_category?: "config" | "diagnostic" | null;
+  /** The integration's key for the entity (e.g. "current_room"). */
+  translation_key?: string | null;
   /** Decimals set for a sensor in Home Assistant (null = default). */
   display_precision?: number | null;
 }
