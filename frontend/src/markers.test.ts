@@ -60,3 +60,10 @@ test("a TV shows the app that is running", () => {
   assert.equal(stateText(hass, st("media_player.tv", "playing", { media_title: "Nachrichten" })), "Nachrichten");
   assert.equal(stateText(hass, st("media_player.tv", "off", { app_name: "YouTube" })), "Aus");
 });
+
+test("sensor values use the decimals set in Home Assistant", () => {
+  const st = { entity_id: "sensor.gas", state: "1234.567", attributes: { unit_of_measurement: "m³" } };
+  const hass = { language: "en", entities: { "sensor.gas": { entity_id: "sensor.gas", display_precision: 3 } } } as unknown as HomeAssistant;
+  assert.equal(stateText(hass, st), "1,234.567 m³");
+  assert.equal(stateText({ ...hass, entities: {} } as HomeAssistant, st), "1,234.6 m³");
+});

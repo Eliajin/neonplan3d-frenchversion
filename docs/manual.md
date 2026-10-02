@@ -230,6 +230,8 @@ The **Furniture** tool opens the library with 40 built-in models in the sections
 
 A room with an area lists all devices of that area on the right, grouped by device. The main entity comes first, further ones such as LED indicators or effects sit behind **"+n more"**. A search field helps with big areas.
 
+Sensors appear when they measure something for the room: temperature, humidity, CO₂ and air quality, power and energy, gas and water meters, illuminance and pressure. Meters without a device class count too when their unit fits (m³, l, kWh, lx). Battery and signal sensors stay out. The value shows the decimals set in Home Assistant. If a device is missing, check in Home Assistant that it is assigned to the room's area.
+
 - **Place** puts a device into the room, **Place all automatically** places all main devices.
 - Lights are placed as lamps from the library, so they glow in 3D.
 - **☆** adds a device to the room panel of the 3D view without placing it.

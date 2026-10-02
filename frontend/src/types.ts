@@ -21,6 +21,8 @@ export interface HassEntityEntry {
   area_id?: string | null;
   hidden?: boolean;
   entity_category?: "config" | "diagnostic" | null;
+  /** Decimals set for a sensor in Home Assistant (null = default). */
+  display_precision?: number | null;
 }
 
 export interface HassDevice {

@@ -333,3 +333,21 @@ test("smart fridge doors follow their door sensors ('on' or 'open'; none/unset =
     ],
   );
 });
+
+test("meters and air sensors are offered, battery and signal sensors are not", () => {
+  const st = (entity_id: string, state: string, attributes: Record<string, unknown> = {}) => ({ entity_id, state, attributes });
+  const ids = ["sensor.gasmeter_value", "sensor.wasseruhr_value", "sensor.alter_zaehler", "sensor.lux", "sensor.batterie", "sensor.text"];
+  const hass = {
+    ...hassWith(),
+    entities: Object.fromEntries(ids.map((id) => [id, { entity_id: id, area_id: "keller" }])),
+    states: {
+      "sensor.gasmeter_value": st("sensor.gasmeter_value", "1234.567", { device_class: "gas", unit_of_measurement: "m³" }),
+      "sensor.wasseruhr_value": st("sensor.wasseruhr_value", "456.7", { device_class: "water", unit_of_measurement: "m³" }),
+      "sensor.alter_zaehler": st("sensor.alter_zaehler", "99.1", { unit_of_measurement: "m³" }),
+      "sensor.lux": st("sensor.lux", "320", { device_class: "illuminance", unit_of_measurement: "lx" }),
+      "sensor.batterie": st("sensor.batterie", "80", { device_class: "battery", unit_of_measurement: "%" }),
+      "sensor.text": st("sensor.text", "ok"),
+    },
+  } as HomeAssistant;
+  assert.deepEqual(areaEntities(hass, "keller").sort(), ["sensor.alter_zaehler", "sensor.gasmeter_value", "sensor.lux", "sensor.wasseruhr_value"]);
+});

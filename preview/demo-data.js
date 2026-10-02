@@ -200,6 +200,7 @@ const DEVICES = [
   entity("sensor.kuehlschrank_leistung", "kueche", "85", { friendly_name: "Kühlschrank Leistung", device_class: "power", unit_of_measurement: "W" }),
   entity("sensor.waschmaschine_leistung", "bad", "430", { friendly_name: "Waschmaschine Leistung", device_class: "power", unit_of_measurement: "W" }),
   entity("sensor.pc_leistung", "arbeitszimmer", "70", { friendly_name: "Computer Leistung", device_class: "power", unit_of_measurement: "W" }),
+  entity("sensor.gaszaehler", "garage", "4821.374", { friendly_name: "Gaszähler", device_class: "gas", unit_of_measurement: "m³" }),
   // people and their room sensors (as ESPresense or Bermuda would report them)
   entity("person.mia", null, "home", { friendly_name: "Mia" }),
   entity("person.tom", null, "home", { friendly_name: "Tom Beispiel" }),
@@ -253,6 +254,7 @@ DEMO_BUILDING.floors[0].placements = [
 
   place("light.flur", 8.8, 6.9),
 ];
+DEMO_BUILDING.floors[0].placements.push(place("sensor.gaszaehler", 12.9, 4.6));
 DEMO_BUILDING.floors[0].placements.push(
   place("sensor.kuehlschrank_leistung", 6.35, 0.8),
   place("sensor.waschmaschine_leistung", 6.4, 6.9),

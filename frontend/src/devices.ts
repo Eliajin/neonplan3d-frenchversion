@@ -37,7 +37,33 @@ const DOMAIN_KIND: Record<string, DeviceKind> = {
 };
 
 /** Sensors worth showing: room climate, and power (consumers of the energy flow). */
-const SENSOR_CLASSES = new Set(["temperature", "humidity", "power", "carbon_dioxide"]);
+/** Sensor classes worth a marker: room climate, air quality, power and energy, meters (gas, water), light. */
+const SENSOR_CLASSES = new Set([
+  "temperature",
+  "humidity",
+  "power",
+  "carbon_dioxide",
+  "energy",
+  "gas",
+  "water",
+  "volume",
+  "volume_storage",
+  "volume_flow_rate",
+  "illuminance",
+  "pressure",
+  "atmospheric_pressure",
+  "pm1",
+  "pm25",
+  "pm10",
+  "volatile_organic_compounds",
+  "volatile_organic_compounds_parts",
+  "carbon_monoxide",
+  "nitrogen_dioxide",
+  "moisture",
+  "sound_pressure",
+]);
+/** Sensors without a class still count when their unit is a meter's (e.g. older meter readers). */
+const METER_UNITS = new Set(["m³", "m3", "L", "l", "kWh", "Wh", "MWh", "lx"]);
 const BINARY_CLASSES = new Set(["door", "window", "opening", "garage_door", "motion", "occupancy", "presence", "smoke", "moisture", "gas", "carbon_monoxide"]);
 
 /** Order in lists and panels. */
@@ -75,7 +101,7 @@ export function isRelevant(hass: HomeAssistant, entityId: string): boolean {
   const st = hass.states[entityId];
   if (!st) return false;
   const dc = st.attributes.device_class as string | undefined;
-  if (kind === "sensor") return !!dc && SENSOR_CLASSES.has(dc);
+  if (kind === "sensor") return dc ? SENSOR_CLASSES.has(dc) : METER_UNITS.has(String(st.attributes.unit_of_measurement ?? ""));
   if (kind === "binary") return !!dc && BINARY_CLASSES.has(dc);
   return true;
 }

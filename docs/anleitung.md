@@ -230,6 +230,8 @@ Das Werkzeug **Möbel** öffnet rechts die Bibliothek mit 40 eingebauten Modelle
 
 Ein Raum mit Bereich listet rechts alle Geräte dieses Bereichs, nach Gerät gruppiert. Die Hauptentität steht vorn, weitere wie LED-Anzeigen oder Effekte stehen hinter **„+n mehr“**. Ein Suchfeld hilft bei großen Bereichen.
 
+Sensoren erscheinen, wenn sie etwas für den Raum messen: Temperatur, Luftfeuchte, CO₂ und Luftqualität, Leistung und Energie, Gas- und Wasserzähler, Helligkeit und Luftdruck. Zähler ohne Geräteklasse zählen mit, wenn ihre Einheit passt (m³, l, kWh, lx). Akku- und Signalsensoren bleiben außen vor. Der Wert erscheint mit den Nachkommastellen, die in Home Assistant eingestellt sind. Fehlt ein Gerät, prüfe in Home Assistant, ob es dem Bereich des Raums zugeordnet ist.
+
 - **Platzieren** setzt ein Gerät in den Raum, **Alle automatisch platzieren** setzt alle Hauptgeräte.
 - Lichter werden dabei als Leuchten aus der Bibliothek gesetzt, damit sie in 3D leuchten.
 - **☆** nimmt ein Gerät ins Raumfenster der 3D-Ansicht auf, ohne es in den Plan zu setzen.

@@ -47,7 +47,9 @@ export function stateText(hass: HomeAssistant | undefined, st: HassEntity | unde
     case "sensor": {
       const v = Number(st.state);
       const unit = (a.unit_of_measurement as string | undefined) ?? "";
-      return Number.isFinite(v) ? `${formatNumber(hass, v, 1)}${unit ? ` ${unit}` : ""}` : st.state;
+      // the decimals set in Home Assistant win (a gas meter reads 1234.567 m³)
+      const digits = hass?.entities?.[st.entity_id]?.display_precision ?? 1;
+      return Number.isFinite(v) ? `${formatNumber(hass, v, digits)}${unit ? ` ${unit}` : ""}` : st.state;
     }
     default:
       return "";
