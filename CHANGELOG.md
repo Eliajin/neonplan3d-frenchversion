@@ -10,6 +10,7 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 
 - **New in the shop** on the Extensions page (with a shop key) and a dot on the tab.
 - **Loyalty discount** code for further purchases, shown in NeonPlan 3D.
+- The Extensions page shows once what a pack update brought.
 - Screens and status lights of pack furniture can link a light (glow in its colour) or a switch.
 
 ## 1.5.0

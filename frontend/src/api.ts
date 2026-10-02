@@ -122,6 +122,35 @@ export function markOffersSeen(offers: readonly ShopOffer[]): void {
   }
 }
 
+/** A pack update installed from the shop (shown once on the extensions page). */
+export interface PackUpdate {
+  id: string;
+  name: string;
+  release: number;
+  added: number;
+  at: number;
+}
+
+const SEEN_UPDATES = "neonplan3d.seenUpdates";
+
+export function unseenUpdates(updates: readonly PackUpdate[]): PackUpdate[] {
+  let seen: string[] = [];
+  try {
+    seen = JSON.parse(localStorage.getItem(SEEN_UPDATES) ?? "[]") as string[];
+  } catch {
+    // no storage: every update counts as new for this page
+  }
+  return updates.filter((u) => !seen.includes(`${u.id}@${u.release}`));
+}
+
+export function markUpdatesSeen(updates: readonly PackUpdate[]): void {
+  try {
+    localStorage.setItem(SEEN_UPDATES, JSON.stringify(updates.map((u) => `${u.id}@${u.release}`)));
+  } catch {
+    // no storage: nothing to remember
+  }
+}
+
 /** A shop link that brings the loyalty code into the cart. */
 export function offerLink(url: string, loyalty: ShopLoyalty | null): string {
   if (!loyalty) return url;
@@ -141,6 +170,8 @@ export interface LicenseStatus {
   /** Packs and Pro add-ons not owned yet (empty without a key or with an older shop). */
   offers?: ShopOffer[];
   loyalty?: ShopLoyalty | null;
+  /** Pack updates installed from the shop, newest last. */
+  updates?: PackUpdate[];
 }
 
 export function getLicense(hass: HomeAssistant): Promise<LicenseStatus> {

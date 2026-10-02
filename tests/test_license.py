@@ -142,6 +142,8 @@ async def test_activate_install_and_update(hass: HomeAssistant, hass_ws_client, 
     status = (await client.receive_json())["result"]
     assert status["packs"][0]["installed"] == 2 and status["error"] is None
     assert [o["id"] for o in status["offers"]] == ["kino"] and status["offers"][0]["new"]
+    # the update is remembered for the extensions page
+    assert [(u["id"], u["release"]) for u in status["updates"]] == [("shop.living", 2)]
     assert status["offers"][0]["image"] is None and status["offers"][0]["kind"] == "pack"
     assert status["loyalty"] == {"code": "NP-TREUE-AB12CD", "percent": 10}
 

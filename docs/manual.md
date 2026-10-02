@@ -548,6 +548,7 @@ After that:
 - **Updates come by themselves.** Once a day NeonPlan 3D asks whether there are new purchases or newer versions and installs them. **Check now** asks right away.
 - **Everything keeps working offline.** Installed packs are checked locally, the shop is never needed for that.
 - **Disconnect** removes the key. Installed packs stay.
+- **Pack updates:** When a bought pack grows, the page shows once what was added.
 - **New in the shop:** With a shop connection the page shows the packs and Pro add-ons you do not have yet at the top, with **NEW** for fresh ones. When there is something new, a small dot lights up on the **✦ Extensions** tab. Without a key NeonPlan 3D never contacts the shop.
 - **Loyalty discount:** With your first purchase you get a personal discount code for every further pack and Pro add-on (not for bundles). It is in the order e-mail, in your account and at the top under **New in the shop**; tapping an offer puts it straight into the cart.
 

@@ -177,6 +177,7 @@ def status(data: FloorplanData, instance: str) -> dict[str, Any]:
         "packs": [{**p, "installed": installed.get(p["id"])} for p in lic.get("catalog", [])],
         "offers": lic.get("offers", []) if key else [],
         "loyalty": lic.get("loyalty") if key else None,
+        "updates": lic.get("updates", []),
     }
 
 
@@ -224,7 +225,24 @@ async def async_install(hass: HomeAssistant, data: FloorplanData, pack_id: str) 
         payload = verify_pack(text, instance=instance)
     except PackError as err:
         raise LicenseError(err.code, err.detail) from err
+    before = next((p for p in data.packs if p["id"] == payload["id"]), None)
     await data.async_add_pack(payload, parts_of(text))
+    if before and int(payload.get("release") or 1) > int(before.get("release") or 1):
+        # an update: remember what it brought, the extensions page shows it once
+        old = {i.get("id") for i in before.get("items", [])}
+        added = sum(1 for i in payload["items"] if i.get("id") not in old)
+        updates = [u for u in data.license.get("updates", []) if u.get("id") != payload["id"]]
+        updates.append(
+            {
+                "id": payload["id"],
+                "name": payload["name"],
+                "release": payload["release"],
+                "added": added,
+                "at": time.time(),
+            }
+        )
+        data.license["updates"] = updates[-10:]
+        await data.async_save_license()
     return {
         "id": payload["id"],
         "name": payload["name"],

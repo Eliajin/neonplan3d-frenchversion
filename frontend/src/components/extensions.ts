@@ -11,7 +11,9 @@ import {
   removeLicense,
   removePack,
   markOffersSeen,
+  markUpdatesSeen,
   offerLink,
+  unseenUpdates,
   type CatalogPack,
   type LicenseStatus,
 } from "../api.ts";
@@ -42,6 +44,8 @@ export class Extensions extends LitElement {
   private declare _licenseBusy: string | null;
   private declare _licenseMsg: { ok: boolean; text: string } | null;
   private licenseLoading = false;
+  /** Updates not seen before this visit (kept while the page is open). */
+  private freshUpdates: import("../api.ts").PackUpdate[] | null = null;
 
   constructor() {
     super();
@@ -71,7 +75,7 @@ export class Extensions extends LitElement {
           <a class="fp3d-btn" href=${manualUrl(this.hass?.language, "extensions")} target="_blank" rel="noopener">📖 ${this.t("manual")}</a>
         </div>
       </header>
-      ${this.renderOffers()} ${this.renderShop()}
+      ${this.renderUpdates()} ${this.renderOffers()} ${this.renderShop()}
       <section class="fp3d-ext-card">
         <h3>${this.t("ext_pro")}</h3>
         <div class="fp3d-ext-pro">
@@ -131,6 +135,22 @@ export class Extensions extends LitElement {
       this.dispatchEvent(new CustomEvent("packs-changed", { bubbles: true, composed: true }));
       return getLicense(hass);
     });
+  }
+
+  /** Packs that were updated since the last visit: what they brought (shown until the page is left). */
+  private renderUpdates() {
+    const lic = this._license;
+    if (!lic?.active) return nothing;
+    if (!this.freshUpdates) {
+      this.freshUpdates = unseenUpdates(lic.updates ?? []);
+      markUpdatesSeen(lic.updates ?? []);
+    }
+    if (!this.freshUpdates.length) return nothing;
+    return html`<section class="fp3d-ext-card fp3d-updates">
+      ${this.freshUpdates.map(
+        (u) => html`<p>✨ ${u.added > 0 ? this.t("pack_updated_added", { name: u.name, release: u.release, n: u.added }) : this.t("pack_updated", { name: u.name, release: u.release })}</p>`,
+      )}
+    </section>`;
   }
 
   /** New in the shop: packs and Pro add-ons not owned yet, and the customer's loyalty code. */
@@ -319,6 +339,13 @@ export class Extensions extends LitElement {
     tokens,
     controls,
     css`
+      .fp3d-updates {
+        border-color: color-mix(in srgb, var(--fp3d-accent) 60%, transparent);
+        background: color-mix(in srgb, var(--fp3d-accent) 8%, transparent);
+      }
+      .fp3d-updates p {
+        margin: 4px 0;
+      }
       .fp3d-loyalty {
         display: flex;
         flex-wrap: wrap;

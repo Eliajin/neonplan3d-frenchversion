@@ -18,7 +18,7 @@ import { confirmEntities, defaultHeight, entityName, kindOf } from "./devices.ts
 import { canLift, type LampMount } from "./model.ts";
 import { mountBase } from "./packs.ts";
 import { hasFeature } from "./features.ts";
-import { getLicense, unseenOffers } from "./api.ts";
+import { getLicense, unseenOffers, unseenUpdates } from "./api.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
 
 type Mode = "view" | "editor" | "extensions";
@@ -381,7 +381,7 @@ export class Floorplan3dPanel extends LitElement {
     if (this.offersChecked || !this.hass?.user?.is_admin) return;
     this.offersChecked = true;
     getLicense(this.hass)
-      .then((lic) => (this._newOffers = lic.active ? unseenOffers(lic.offers ?? []).length : 0))
+      .then((lic) => (this._newOffers = lic.active ? unseenOffers(lic.offers ?? []).length + unseenUpdates(lic.updates ?? []).length : 0))
       .catch(() => undefined);
   }
 
