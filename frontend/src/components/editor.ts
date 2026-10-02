@@ -3,7 +3,7 @@
 import { css, html, LitElement, nothing, svg, type PropertyValues, type TemplateResult } from "lit";
 import { fetchImage, listHistory, restoreSnapshot, storeImage, takeSnapshot, type Snapshot } from "../api.ts";
 import { download, exportFile, parseExport } from "../transfer.ts";
-import { areaEntities, autoPlace, defaultHeight, entityName, furnitureEntities, groupByDevice, hasScreen, isMediaFurniture, isPlaceable, kindOf, openingEntities, pictureRuleMatches, windowPosition } from "../devices.ts";
+import { areaEntities, autoPlace, CLIMATE_CLASSES, defaultHeight, entityName, entityAreaId, furnitureEntities, groupByDevice, hasScreen, isMediaFurniture, isPlaceable, isRoomClimateSensor, kindOf, openingEntities, otherAreaEntities, pictureRuleMatches, roomClimateSensors, unassignedEntities, windowPosition, type ClimateKey } from "../devices.ts";
 import { furnitureSymbol } from "./furniture2d.ts";
 import { closeGaps, suggestedThickness } from "../geometry/gaps.ts";
 import { keepInRoom, snapToWall } from "../geometry/snap.ts";
@@ -138,6 +138,8 @@ export class Fp3dEditor extends LitElement {
     _furnitureId: { state: true },
     _deviceId: { state: true },
     _deviceQuery: { state: true },
+    _devOther: { state: true },
+    _devNone: { state: true },
     _furnQuery: { state: true },
     _libOpen: { state: true },
     _expanded: { state: true },
@@ -194,6 +196,9 @@ export class Fp3dEditor extends LitElement {
   private declare _furnitureId: string | null;
   private declare _deviceId: string | null;
   private declare _deviceQuery: string;
+  /** The extra device lists of the room form, open with their search text (null = closed). */
+  private declare _devOther: string | null;
+  private declare _devNone: string | null;
   /** Furniture library: the search text, and which sections are open (built-in groups and packs). */
   private declare _furnQuery: string;
   private declare _libOpen: Set<string>;
@@ -256,6 +261,8 @@ export class Fp3dEditor extends LitElement {
     this._furnitureId = null;
     this._deviceId = null;
     this._deviceQuery = "";
+    this._devOther = null;
+    this._devNone = null;
     this._furnQuery = "";
     this._libOpen = new Set(["group:lights", "group:living"]);
     try {
@@ -2980,7 +2987,7 @@ export class Fp3dEditor extends LitElement {
             ${this.num(this.t("depth"), b.z1 - b.z0, (v) => this.setRect("d", v), 0.01, 0.05)}`
           : nothing}
       </div>
-      ${this.renderEdgeHeights(room)}
+      ${this.renderEdgeHeights(room)} ${this.renderRoomClimate(room)}
       <details class="fp3d-points" ?open=${!rect}>
         <summary>${this.t("points")} (${room.points.length})</summary>
         ${room.points.map(
@@ -3910,14 +3917,22 @@ export class Fp3dEditor extends LitElement {
       (p) => kindOf(p.entity_id) === "light" && (p.mount ?? "ceiling") === "ceiling" && pointInPolygon([p.x, p.z], room.points),
     ).length;
     const pinned = new Set(room.panel ?? []);
-    const row = (id: string, extra = false) => {
+    // where an entity from elsewhere is placed already (placing it here moves it)
+    const placedIn = new Map<string, string>();
+    for (const f of this._doc.floors)
+      for (const id of [...f.placements.map((p) => [p.entity_id, p.x, p.z] as const), ...f.furniture.filter((m) => isLamp(m.type) && m.entity).map((m) => [m.entity!, m.x, m.z] as const)]) {
+        const r = f.rooms.find((x) => pointInPolygon([id[1], id[2]], x.points));
+        if (r && r.id !== room.id) placedIn.set(id[0], r.name);
+      }
+    const row = (id: string, extra = false, nameArea = areaName) => {
       const placed = placedHere.has(id);
+      const elsewhere = placed ? undefined : placedIn.get(id);
       return html`<div class="fp3d-row fp3d-dev-row ${extra ? "fp3d-dev-extra" : ""}">
         <button class="fp3d-dev-name ${placed ? "" : "fp3d-muted"}" ?disabled=${!placed} @click=${() => this.selectItem("device", id)}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d=${iconPath(kindOf(id)!)} />
           </svg>
-          <span>${entityName(hass, id, areaName)}</span>
+          <span>${entityName(hass, id, nameArea)}${elsewhere ? html`<small class="fp3d-muted"> · ${this.t("devices_placed_in", { room: elsewhere })}</small>` : nothing}</span>
         </button>
         ${admin && !placed
           ? html`<button
@@ -3981,7 +3996,84 @@ export class Fp3dEditor extends LitElement {
                 })}
               </div>
               <p class="fp3d-sub">${this.t("devices_hint")}</p>`}
+      ${admin && hass ? this.renderDeviceExtras(room, row) : nothing}
     </section>`;
+  }
+
+  /** Devices from other areas and without an area: two lists of their own, filled when opened. */
+  private renderDeviceExtras(room: Room, row: (id: string, extra?: boolean, nameArea?: string) => unknown) {
+    const hass = this.hass!;
+    const LIMIT = 50;
+    const match = (q: string, id: string, area?: string) => {
+      const t = q.trim().toLowerCase();
+      return !t || `${entityName(hass, id, area)} ${id} ${area ?? ""}`.toLowerCase().includes(t);
+    };
+    const search = (value: string, set: (v: string) => void) => html`<input
+      class="fp3d-search"
+      type="search"
+      placeholder=${this.t("devices_search")}
+      .value=${value}
+      @input=${(e: Event) => set((e.target as HTMLInputElement).value)}
+    />`;
+    const more = (n: number) => (n > 0 ? html`<p class="fp3d-sub">${this.t("devices_narrow", { n })}</p>` : nothing);
+    let other = html``;
+    if (this._devOther !== null) {
+      const q = this._devOther;
+      let shown = 0;
+      let hidden = 0;
+      const blocks = otherAreaEntities(hass, room.area_id).map((a) => {
+        const ids = a.ids.filter((id) => match(q, id, a.name));
+        const take = ids.slice(0, Math.max(0, LIMIT - shown));
+        shown += take.length;
+        hidden += ids.length - take.length;
+        return take.length ? html`<div class="fp3d-dev-area">${a.name}</div>${take.map((id) => row(id, false, a.name))}` : nothing;
+      });
+      other = html`${search(q, (v) => (this._devOther = v))}<div class="fp3d-room-list">${blocks}</div>${more(hidden)}`;
+    }
+    let none = html``;
+    if (this._devNone !== null) {
+      const ids = unassignedEntities(hass).filter((id) => match(this._devNone!, id));
+      none = html`${search(this._devNone, (v) => (this._devNone = v))}
+        <div class="fp3d-room-list">${ids.slice(0, LIMIT).map((id) => row(id))}</div>
+        ${ids.length ? more(ids.length - Math.min(ids.length, LIMIT)) : html`<p class="fp3d-sub">${this.t("devices_none")}</p>`}`;
+    }
+    return html`<details class="fp3d-points" ?open=${this._devOther !== null} @toggle=${(e: Event) => (this._devOther = (e.target as HTMLDetailsElement).open ? (this._devOther ?? "") : null)}>
+        <summary>${this.t("devices_other")}</summary>
+        ${other}
+      </details>
+      <details class="fp3d-points" ?open=${this._devNone !== null} @toggle=${(e: Event) => (this._devNone = (e.target as HTMLDetailsElement).open ? (this._devNone ?? "") : null)}>
+        <summary>${this.t("devices_unassigned")}</summary>
+        ${none}
+      </details>`;
+  }
+
+  /** Room climate: temperature, humidity and CO2 from chosen sensors, or picked automatically. */
+  private renderRoomClimate(room: Room) {
+    const hass = this.hass;
+    if (!hass) return nothing;
+    const set = (key: ClimateKey, v: string | null) => {
+      const next = { ...(room.climate ?? {}), [key]: v };
+      const empty = Object.values(next).every((x) => x == null);
+      this.updateRoom({ climate: empty ? null : next });
+    };
+    const chosen = !!room.climate && Object.values(room.climate).some((x) => x != null);
+    const field = (key: ClimateKey, label: string) => {
+      const dc = CLIMATE_CLASSES[key];
+      const auto = roomClimateSensors(hass, this.floor ?? null, { ...room, climate: null }, key);
+      // the room's own sensors first, then all others; device temperatures (printer, heat pump) last
+      const options = this.entityOptions((id) => id.startsWith("sensor.") && hass.states[id]?.attributes.device_class === dc)
+        .map((o) => ({ ...o, rank: (entityAreaId(hass, o.id) === room.area_id ? 0 : 1) + (isRoomClimateSensor(hass, o.id) ? 0 : 2) }))
+        .sort((a, b) => a.rank - b.rank)
+        .map(({ id, label }) => ({ id, label }));
+      return this.entitySelect(label, room.climate?.[key] ?? null, auto[0] ?? null, options, (v) => set(key, v));
+    };
+    return html`<details class="fp3d-points" ?open=${chosen}>
+      <summary>${this.t("climate")}</summary>
+      <div class="fp3d-form">
+        ${field("temperature", this.t("climate_temperature"))} ${field("humidity", this.t("climate_humidity"))} ${field("co2", this.t("climate_co2"))}
+      </div>
+      <p class="fp3d-sub">${this.t("climate_hint")}</p>
+    </details>`;
   }
 
   private renderBackgroundForm(floor: Floor) {
@@ -4833,6 +4925,13 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-wall-low {
         opacity: 0.55;
+      }
+      .fp3d-dev-area {
+        margin: 10px 0 2px;
+        color: var(--fp3d-muted);
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
       }
       .fp3d-h3row {
         display: flex;

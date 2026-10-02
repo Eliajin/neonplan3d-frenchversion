@@ -6,7 +6,16 @@ import type { LampModel } from "./viewer/viewer3d.ts";
 
 export type Vec2 = [number, number];
 
+/** Sensors a room's climate is read from (null = automatic, "none" = no value). */
+export interface RoomClimate {
+  temperature?: string | null;
+  humidity?: string | null;
+  co2?: string | null;
+}
+
 export interface Room {
+  /** Room temperature, humidity and CO2: chosen sensors instead of the automatic pick. */
+  climate?: RoomClimate | null;
   id: string;
   name: string;
   area_id: string | null;

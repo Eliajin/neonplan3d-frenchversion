@@ -1,6 +1,6 @@
 // Heatmap: a room's floor takes a colour from the value of its sensors (temperature, humidity, CO₂).
 
-import { areaEntities } from "./devices.ts";
+import { roomClimateValue } from "./devices.ts";
 import type { Building } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
 
@@ -60,14 +60,11 @@ export function heatColor(mode: Exclude<HeatMode, "none">, value: number): Rgb {
 /** Average sensor value per room (rooms without a matching sensor are left out). */
 export function roomValues(hass: HomeAssistant, building: Building, mode: Exclude<HeatMode, "none">): Map<string, number> {
   const out = new Map<string, number>();
-  const dc = HEAT_SCALES[mode].deviceClass;
   for (const floor of building.floors) {
     for (const room of floor.rooms) {
-      const values = areaEntities(hass, room.area_id)
-        .filter((id) => id.startsWith("sensor.") && hass.states[id]?.attributes.device_class === dc)
-        .map((id) => Number(hass.states[id].state))
-        .filter((v) => Number.isFinite(v));
-      if (values.length) out.set(room.id, values.reduce((a, b) => a + b, 0) / values.length);
+      // the room's own climate sensors (chosen, or picked automatically without device temperatures)
+      const value = roomClimateValue(hass, floor, room, mode);
+      if (value !== null) out.set(room.id, value);
     }
   }
   return out;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { appColor, areaEntities, autoPlace, entityName, fridgeDoors, furnitureEntities, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, powerSensorsOf, primaryEntities, roomPanelEntities, windowPosition } from "./devices.ts";
+import { appColor, areaEntities, otherAreaEntities, roomClimateSensors, roomClimateValue, unassignedEntities, autoPlace, entityName, fridgeDoors, furnitureEntities, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, powerSensorsOf, primaryEntities, roomPanelEntities, windowPosition } from "./devices.ts";
 import type { Floor, Opening, Room } from "./model.ts";
 import { centroid, newFloor, pointInPolygon } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -370,4 +370,46 @@ test("an opening state knows whether a sensor reports it", () => {
   assert.equal(openingState(hass, none, "door").sensed, false);
   assert.equal(openingState(hass, none, "window").sensed, false);
   assert.equal(openingState(hass, { ...none, cover: "cover.tor" }, "garage").sensed, true);
+});
+
+test("room climate skips device temperatures, honours a chosen sensor and placed sensors", () => {
+  const st = (entity_id: string, state: string, attributes: Record<string, unknown> = {}) => ({ entity_id, state, attributes });
+  const temp = (id: string, v: string, name: string) => st(id, v, { device_class: "temperature", unit_of_measurement: "°C", friendly_name: name });
+  const hass = {
+    language: "de",
+    areas: { hwr: { area_id: "hwr", name: "HWR" } },
+    devices: { printer: { id: "printer", area_id: "hwr" }, pump: { id: "pump", area_id: "hwr" }, thermo: { id: "thermo", area_id: "hwr" } },
+    entities: {
+      "sensor.drucker_duese": { entity_id: "sensor.drucker_duese", device_id: "printer" },
+      "button.drucker_pause": { entity_id: "button.drucker_pause", device_id: "printer" },
+      "sensor.wp_vorlauf": { entity_id: "sensor.wp_vorlauf", device_id: "pump" },
+      "climate.wp": { entity_id: "climate.wp", device_id: "pump" },
+      "sensor.hwr_temperatur": { entity_id: "sensor.hwr_temperatur", device_id: "thermo" },
+      "sensor.flur_temp": { entity_id: "sensor.flur_temp" },
+      "light.gruppe": { entity_id: "light.gruppe" },
+    },
+    states: {
+      "sensor.drucker_duese": temp("sensor.drucker_duese", "215", "Drucker Düse"),
+      "button.drucker_pause": st("button.drucker_pause", "unknown"),
+      "sensor.wp_vorlauf": temp("sensor.wp_vorlauf", "45", "Wärmepumpe Vorlauf"),
+      "climate.wp": st("climate.wp", "heat"),
+      "sensor.hwr_temperatur": temp("sensor.hwr_temperatur", "19.5", "HWR Temperatur"),
+      "sensor.flur_temp": temp("sensor.flur_temp", "21", "Flur"),
+      "light.gruppe": st("light.gruppe", "on"),
+    },
+  } as unknown as HomeAssistant;
+  const room: Room = { id: "r", name: "HWR", area_id: "hwr", points: [[0, 0], [3, 0], [3, 3], [0, 3]], floor_material: "tiles" };
+  const floor = { ...newFloor("eg", "EG", 0), rooms: [room] };
+  assert.deepEqual(roomClimateSensors(hass, floor, room, "temperature"), ["sensor.hwr_temperatur"]);
+  assert.equal(roomClimateValue(hass, floor, room, "temperature"), 19.5);
+  // a sensor without an area placed in the room counts too
+  floor.placements = [{ entity_id: "sensor.flur_temp", x: 1, z: 1, y: null }];
+  assert.equal(roomClimateValue(hass, floor, room, "temperature"), 20.25);
+  // a chosen sensor wins, "none" shows no value
+  assert.deepEqual(roomClimateSensors(hass, floor, { ...room, climate: { temperature: "sensor.flur_temp" } }, "temperature"), ["sensor.flur_temp"]);
+  assert.equal(roomClimateValue(hass, floor, { ...room, climate: { temperature: "none" } }, "temperature"), null);
+  // entities without an area can be placed from their own list; other areas are listed by name
+  assert.deepEqual(unassignedEntities(hass), ["light.gruppe", "sensor.flur_temp"]);
+  assert.deepEqual(otherAreaEntities(hass, "kueche").map((a) => a.name), ["HWR"]);
+  assert.deepEqual(otherAreaEntities(hass, "hwr"), []);
 });

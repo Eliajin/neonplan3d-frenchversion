@@ -235,6 +235,10 @@ Ein Raum mit Bereich listet rechts alle Geräte dieses Bereichs, nach Gerät gru
 
 Sensoren erscheinen, wenn sie etwas für den Raum messen: Temperatur, Luftfeuchte, CO₂ und Luftqualität, Leistung und Energie, Gas- und Wasserzähler, Helligkeit und Luftdruck. Zähler ohne Geräteklasse zählen mit, wenn ihre Einheit passt (m³, l, kWh, lx). Akku- und Signalsensoren bleiben außen vor. Der Wert erscheint mit den Nachkommastellen, die in Home Assistant eingestellt sind. Fehlt ein Gerät, prüfe in Home Assistant, ob es dem Bereich des Raums zugeordnet ist.
 
+Unter der Liste stehen zwei zugeklappte Menüs mit eigener Suche: **Aus anderen Bereichen …** zeigt die Geräte der übrigen Bereiche, nach Bereich gruppiert; steht ein Gerät schon in einem anderen Raum, steht das dabei, und **Platzieren** holt es hierher. **Ohne Bereich …** zeigt Geräte ohne Bereich, etwa Template-Lichter, Gruppen und Helfer; hier zählt jeder Sensor mit Zahlenwert und Einheit. Der Bereich in Home Assistant ändert sich dabei nicht.
+
+**Raumklima:** Im Raumformular legst du unter **Raumklima** fest, welche Sensoren Temperatur, Luftfeuchte und CO₂ des Raums liefern (Heatmap und Raumfenster). *Automatisch* nimmt die Sensoren des Bereichs und die im Raum platzierten, lässt aber Gerätetemperaturen weg, etwa von einem 3D-Drucker oder den Vorlauf einer Wärmepumpe. *Keiner* blendet den Wert aus.
+
 - **Platzieren** setzt ein Gerät in den Raum, **Alle automatisch platzieren** setzt alle Hauptgeräte.
 - Lichter werden dabei als Leuchten aus der Bibliothek gesetzt, damit sie in 3D leuchten.
 - **☆** nimmt ein Gerät ins Raumfenster der 3D-Ansicht auf, ohne es in den Plan zu setzen.

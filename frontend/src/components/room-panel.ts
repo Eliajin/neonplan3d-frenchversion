@@ -2,7 +2,7 @@
 // scenes and scripts). Shown next to the 3D view when a room is selected.
 
 import { css, html, LitElement, nothing, type TemplateResult } from "lit";
-import { areaEntities, entityName, groupByDevice, isUnavailable, kindOf, roomPanelEntities, type DeviceKind } from "../devices.ts";
+import { areaEntities, entityName, groupByDevice, isUnavailable, kindOf, roomClimateSensors, roomClimateValue, roomPanelEntities, type DeviceKind } from "../devices.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { hasFeature } from "../features.ts";
 import { iconPath } from "../icons.ts";
@@ -134,8 +134,6 @@ export class Fp3dRoomPanel extends LitElement {
     const extra = groupByDevice(this.hass, more).map((g) => g.primary);
     const hiddenCount = extra.length;
     const ids = this._showAll ? [...shown, ...extra] : shown;
-    // header facts (temperature, humidity) come from the whole area
-    const areaSensors = all.filter((id) => kindOf(id) === "sensor").map((id) => this.hass.states[id]);
     const by = (kinds: DeviceKind[]) => ids.filter((id) => kinds.includes(kindOf(id)!)).map((id) => this.hass.states[id]);
     const lights = by(["light"]);
     const covers = by(["cover"]);
@@ -146,7 +144,7 @@ export class Fp3dRoomPanel extends LitElement {
     const cameras = by(["camera"]);
     this.hasCameras = cameras.length > 0;
     const scenes = by(["scene", "script"]);
-    const facts = this.facts([...sensors, ...areaSensors], climates);
+    const facts = this.facts(climates);
     const lightsOn = lights.filter((l) => l.state === "on");
     return html`<section class="fp3d-rp" aria-label=${room.name}>
       <header class="fp3d-rp-head">
@@ -208,14 +206,23 @@ export class Fp3dRoomPanel extends LitElement {
     </section>`;
   }
 
-  private facts(sensors: HassEntity[], climates: HassEntity[]): string[] {
+  /** Header facts: the room's temperature and humidity from its climate sensors (chosen or automatic). */
+  private facts(climates: HassEntity[]): string[] {
     const out: string[] = [];
-    const temp = sensors.find((s) => s.attributes.device_class === "temperature" && !isUnavailable(s));
+    const room = this.room!;
+    const value = (key: "temperature" | "humidity", fallbackUnit: string) => {
+      const v = roomClimateValue(this.hass, this.floor, room, key);
+      if (v === null) return null;
+      const first = roomClimateSensors(this.hass, this.floor, room, key)[0];
+      const unit = (this.hass.states[first]?.attributes.unit_of_measurement as string | undefined) ?? fallbackUnit;
+      return `${formatNumber(this.hass, v, 1)} ${unit}`;
+    };
     const climateTemp = climates.find((c) => typeof c.attributes.current_temperature === "number");
-    if (temp) out.push(stateText(this.hass, temp));
-    else if (climateTemp) out.push(`${formatNumber(this.hass, climateTemp.attributes.current_temperature as number, 1)} °C`);
-    const hum = sensors.find((s) => s.attributes.device_class === "humidity" && !isUnavailable(s));
-    if (hum) out.push(stateText(this.hass, hum));
+    const temp = value("temperature", "°C");
+    if (temp) out.push(temp);
+    else if (climateTemp && room.climate?.temperature !== "none") out.push(`${formatNumber(this.hass, climateTemp.attributes.current_temperature as number, 1)} °C`);
+    const hum = value("humidity", "%");
+    if (hum) out.push(hum);
     return out;
   }
 

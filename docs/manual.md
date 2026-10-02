@@ -235,6 +235,10 @@ A room with an area lists all devices of that area on the right, grouped by devi
 
 Sensors appear when they measure something for the room: temperature, humidity, CO₂ and air quality, power and energy, gas and water meters, illuminance and pressure. Meters without a device class count too when their unit fits (m³, l, kWh, lx). Battery and signal sensors stay out. The value shows the decimals set in Home Assistant. If a device is missing, check in Home Assistant that it is assigned to the room's area.
 
+Below the list there are two collapsed menus with their own search: **From other areas …** shows the devices of the other areas, grouped by area; if a device already stands in another room, that is shown, and **Place** brings it here. **Without an area …** shows devices without an area, e.g. template lights, groups and helpers; here any sensor with a numeric value and a unit counts. The area in Home Assistant does not change.
+
+**Room climate:** In the room form, **Room climate** sets which sensors give the room's temperature, humidity and CO₂ (heatmap and room panel). *Automatic* takes the sensors of the area and the ones placed in the room, but leaves out device temperatures, e.g. of a 3D printer or a heat pump's flow. *None* hides the value.
+
 - **Place** puts a device into the room, **Place all automatically** places all main devices.
 - Lights are placed as lamps from the library, so they glow in 3D.
 - **☆** adds a device to the room panel of the 3D view without placing it.

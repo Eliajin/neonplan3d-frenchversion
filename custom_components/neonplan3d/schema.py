@@ -21,8 +21,19 @@ _LENGTH = vol.All(vol.Coerce(float), vol.Range(min=0, max=100))
 _POINT = vol.All([_COORD], vol.Length(min=2, max=2))
 _ENTITY_REF = vol.Any(None, vol.All(str, vol.Length(max=255)))
 
+_SENSOR_REF = vol.Any(None, vol.All(str, vol.Length(max=255)))
+
 ROOM_SCHEMA = vol.Schema(
     {
+        # room climate read from chosen sensors (None = automatic, "none" = no value)
+        vol.Optional("climate", default=None): vol.Any(
+            None,
+            {
+                vol.Optional("temperature", default=None): _SENSOR_REF,
+                vol.Optional("humidity", default=None): _SENSOR_REF,
+                vol.Optional("co2", default=None): _SENSOR_REF,
+            },
+        ),
         vol.Required("id"): _ID,
         vol.Required("name"): _NAME,
         vol.Required("area_id"): vol.Any(None, vol.All(str, vol.Length(max=255))),

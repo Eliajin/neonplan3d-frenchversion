@@ -120,6 +120,24 @@ interface Registry {
   stateCount: number;
   areas: Map<string, string[]>;
   power: Map<string, string[]>;
+  /** Entities without an area that can be placed (any numeric sensor with a unit counts here). */
+  unassigned: string[];
+  /** Domains of each device's visible, non-config entities (to tell a 3D printer from a thermometer). */
+  domains: Map<string, Set<string>>;
+}
+
+/** Sensor classes that never make a marker, even without an area (diagnostics of the device itself). */
+const NOISE_CLASSES = new Set(["battery", "signal_strength", "timestamp", "date", "duration", "data_rate", "data_size", "frequency", "enum"]);
+
+/** A numeric sensor with a unit: offered for devices without an area even without a known class. */
+function isLooseSensor(hass: HomeAssistant, entityId: string): boolean {
+  if (kindOf(entityId) !== "sensor") return false;
+  const entry = hass.entities?.[entityId];
+  if (entry?.hidden || entry?.entity_category) return false;
+  const st = hass.states[entityId];
+  if (!st || !st.attributes.unit_of_measurement) return false;
+  if (NOISE_CLASSES.has(String(st.attributes.device_class ?? ""))) return false;
+  return Number.isFinite(Number(st.state)) || isUnavailable(st);
 }
 
 let registry: Registry | null = null;
@@ -133,13 +151,22 @@ function registryOf(hass: HomeAssistant): Registry {
   }
   const areas = new Map<string, string[]>();
   const power = new Map<string, string[]>();
+  const unassigned: string[] = [];
+  const domains = new Map<string, Set<string>>();
   for (const id of Object.keys(hass.entities ?? {})) {
-    const device = hass.entities![id].device_id;
+    const entry = hass.entities![id];
+    const device = entry.device_id;
     if (device && isPower(hass, id)) (power.get(device) ?? power.set(device, []).get(device)!).push(id);
-    if (!isRelevant(hass, id)) continue;
+    if (device && !entry.hidden && !entry.entity_category) (domains.get(device) ?? domains.set(device, new Set()).get(device)!).add(domainOf(id));
+    const relevant = isRelevant(hass, id);
     const area = entityAreaId(hass, id);
-    if (area) (areas.get(area) ?? areas.set(area, []).get(area)!).push(id);
+    if (!area) {
+      if ((relevant || isLooseSensor(hass, id)) && isPlaceable(kindOf(id))) unassigned.push(id);
+      continue;
+    }
+    if (relevant) (areas.get(area) ?? areas.set(area, []).get(area)!).push(id);
   }
+  unassigned.sort((a, b) => KIND_ORDER.indexOf(kindOf(a)!) - KIND_ORDER.indexOf(kindOf(b)!) || entityName(hass, a).localeCompare(entityName(hass, b)));
   for (const [areaId, ids] of areas) {
     const areaName = hass.areas?.[areaId]?.name;
     ids.sort((a, b) => {
@@ -148,7 +175,7 @@ function registryOf(hass: HomeAssistant): Registry {
       return ka - kb || entityName(hass, a, areaName).localeCompare(entityName(hass, b, areaName));
     });
   }
-  registry = { entities: hass.entities, devices: hass.devices, states: hass.states, stateCount: Object.keys(hass.states).length, areas, power };
+  registry = { entities: hass.entities, devices: hass.devices, states: hass.states, stateCount: Object.keys(hass.states).length, areas, power, unassigned, domains };
   return registry;
 }
 
@@ -156,6 +183,66 @@ function registryOf(hass: HomeAssistant): Registry {
 export function areaEntities(hass: HomeAssistant, areaId: string | null): string[] {
   if (!areaId || !hass.entities) return [];
   return registryOf(hass).areas.get(areaId) ?? [];
+}
+
+/** Placeable entities of every other area, by area name (for placing a device from elsewhere). */
+export function otherAreaEntities(hass: HomeAssistant, exceptArea: string | null): { areaId: string; name: string; ids: string[] }[] {
+  if (!hass.entities) return [];
+  return [...registryOf(hass).areas]
+    .filter(([areaId]) => areaId !== exceptArea)
+    .map(([areaId, ids]) => ({ areaId, name: hass.areas?.[areaId]?.name ?? areaId, ids: ids.filter((id) => isPlaceable(kindOf(id))) }))
+    .filter((a) => a.ids.length)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Placeable entities without an area (templates, groups, helpers; any numeric sensor with a unit). */
+export function unassignedEntities(hass: HomeAssistant): string[] {
+  if (!hass.entities) return [];
+  return registryOf(hass).unassigned;
+}
+
+/** Device classes of the room climate values. */
+export const CLIMATE_CLASSES = { temperature: "temperature", humidity: "humidity", co2: "carbon_dioxide" } as const;
+export type ClimateKey = keyof typeof CLIMATE_CLASSES;
+
+/** Device domains that show a device is no room sensor (a heat pump, a 3D printer, a TV …). */
+const NOT_A_ROOM_SENSOR = new Set(["climate", "water_heater", "switch", "button", "camera", "media_player", "vacuum", "light", "fan", "lawn_mower"]);
+/** Names of temperatures that are not the room's (flow, nozzle, CPU, outside …). */
+const NOT_ROOM_NAME =
+  /(vorlauf|r(ü|ue)cklauf|flow|return|d(ü|ue)se|nozzle|hotend|extruder|druckbett|heatbed|(^|[^a-z])bed($|[^a-z])|chamber|cpu|gpu|chip|soc|akku|batter|wasser|water|kessel|boiler|au(ß|ss)en|outdoor|outside|abgas|exhaust|sole|brine|verdampfer|kondensat|verdichter|compressor|motor|k(ü|ue)hl|freezer|fridge|gefrier)/i;
+
+/** Whether a sensor measures the room itself (not a device's inner temperature). */
+export function isRoomClimateSensor(hass: HomeAssistant, entityId: string): boolean {
+  const device = hass.entities?.[entityId]?.device_id;
+  const domains = device ? registryOf(hass).domains.get(device) : undefined;
+  if (domains && [...domains].some((d) => NOT_A_ROOM_SENSOR.has(d))) return false;
+  return !NOT_ROOM_NAME.test(`${entityId} ${hass.states[entityId]?.attributes.friendly_name ?? ""}`);
+}
+
+/**
+ * Sensors a room's temperature, humidity or CO2 is read from: the chosen one, or automatically the
+ * room sensors of its area plus the ones placed in the room (an area sensor placed in another room
+ * counts there instead).
+ */
+export function roomClimateSensors(hass: HomeAssistant, floor: Floor | null, room: Room, key: ClimateKey): string[] {
+  const chosen = room.climate?.[key];
+  if (chosen === "none") return [];
+  if (chosen) return hass.states[chosen] ? [chosen] : [];
+  const dc = CLIMATE_CLASSES[key];
+  const inRoom = (x: number, z: number) => pointInPolygon([x, z], room.points);
+  const placed = floor?.placements.filter((p) => p.entity_id.startsWith("sensor.")) ?? [];
+  const here = placed.filter((p) => inRoom(p.x, p.z)).map((p) => p.entity_id);
+  const elsewhere = new Set(placed.filter((p) => !inRoom(p.x, p.z)).map((p) => p.entity_id));
+  const ids = [...new Set([...areaEntities(hass, room.area_id).filter((id) => !elsewhere.has(id)), ...here])];
+  return ids.filter((id) => id.startsWith("sensor.") && hass.states[id]?.attributes.device_class === dc && isRoomClimateSensor(hass, id));
+}
+
+/** Average of a room climate value (null when no sensor reports one). */
+export function roomClimateValue(hass: HomeAssistant, floor: Floor | null, room: Room, key: ClimateKey): number | null {
+  const values = roomClimateSensors(hass, floor, room, key)
+    .map((id) => Number(hass.states[id]?.state))
+    .filter((v) => Number.isFinite(v));
+  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
 }
 
 /** Power sensors of a device, in registry order (a shared array: do not change it). */
