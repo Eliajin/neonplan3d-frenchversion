@@ -264,7 +264,7 @@ Leuchten sind Möbel mit einem verknüpften Licht. Es gibt Deckenleuchte, Einbau
 
 Fernseher, Medienwand, Schreibtisch mit Monitor, Waschmaschine, Trockner, Spülmaschine, Heizkörper, Saugroboter und viele Pack-Möbel lassen sich mit Entitäten verknüpfen:
 
-- **Gerät** oder **Fernseher (Media-Player)**: Ein Fernseher leuchtet, solange er läuft. Waschmaschine, Trockner und Spülmaschine leuchten, solange sie arbeiten. Ein Heizkörper mit Thermostat glüht beim Heizen.
+- **Gerät** oder **Fernseher (Media-Player oder Steckdose)**: Ein Fernseher leuchtet, solange er läuft. Ein älterer Fernseher an einer smarten Steckdose nimmt einfach deren Schalter; der Bildschirm leuchtet, solange die Steckdose an ist, und ein Tipp schaltet sie. Waschmaschine, Trockner und Spülmaschine leuchten, solange sie arbeiten. Ein Heizkörper mit Thermostat glüht beim Heizen.
 - **Leistungssensor (W)**: Das Möbel zeigt seine Watt.
 - **Vor dem Schalten nachfragen** wie bei Geräten.
 - **Bilder nach Zustand** bei Bildschirmen: eine Pro-Erweiterung, siehe [6.3](#63-bildschirme-live).

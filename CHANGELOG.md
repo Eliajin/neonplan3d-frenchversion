@@ -9,6 +9,7 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 ### New
 
 - **More sensors:** gas and water meters, energy, illuminance, pressure and air quality can be placed; values use Home Assistant's decimals (#7).
+- **TV on a smart plug:** TVs and media walls may link a switch instead of a media player (#5).
 
 ## 1.2.0
 

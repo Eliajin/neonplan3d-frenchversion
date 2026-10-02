@@ -3196,7 +3196,8 @@ export class Fp3dEditor extends LitElement {
         ? // a lamp can follow a light or a plain switch (e.g. a relay that switches the ceiling light)
           /^(light|switch|input_boolean)\./.test(id)
         : media
-          ? id.startsWith("media_player.")
+          ? // a media player, or the smart plug an older TV is switched with
+            /^(media_player|switch|input_boolean)\./.test(id)
           : f.type === "radiator"
             ? id.startsWith("climate.")
             : f.type === "robot_vacuum"
