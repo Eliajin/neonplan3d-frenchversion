@@ -666,7 +666,9 @@ export class Fp3dView3d extends LitElement {
         if (st && hasScreen(f.type)) {
           // without the "screens" feature a screen is only lit or dark: no app colour, no picture
           const live = hasFeature("screens");
-          const color = live && kindOf(st.entity_id) === "media" ? appColor(st) : isActive(st) || st.state === "playing" ? ([0.22, 0.88, 1] as [number, number, number]) : null;
+          // a light (an aquarium, a lit panel) glows in its own colour, other entities in the neon cyan
+          const lit = kindOf(st.entity_id) === "light" ? lightGlow(st) : null;
+          const color = live && kindOf(st.entity_id) === "media" ? appColor(st) : lit ? lit.color : isActive(st) || st.state === "playing" ? ([0.22, 0.88, 1] as [number, number, number]) : null;
           const picture = live && kindOf(st.entity_id) === "media" ? ((st.attributes.entity_picture as string | undefined) ?? null) : null;
           if (color) screens.set(f.id, { color, level: st.state === "playing" ? 1 : 0.6, picture });
         }
