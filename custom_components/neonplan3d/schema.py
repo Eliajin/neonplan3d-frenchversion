@@ -214,6 +214,7 @@ ROOF_SECTION_SCHEMA = vol.Schema(
         vol.Required("base"): _HEIGHT,
         vol.Optional("overhang", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=2))),
         vol.Optional("flip", default=False): bool,
+        vol.Optional("locked", default=False): bool,
     },
     extra=vol.ALLOW_EXTRA,
 )

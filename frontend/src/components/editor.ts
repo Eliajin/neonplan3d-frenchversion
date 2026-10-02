@@ -226,6 +226,8 @@ export class Fp3dEditor extends LitElement {
   /** A drag on a fixed item was turned into panning: the hint line says why. */
   private declare _fixedHint: boolean;
   private fixedPan = false;
+  /** Frame the 3D half again after the next render (the roof tool shows the whole house). */
+  private reframe3d = false;
   private pressTimer = 0;
   private pressStart: [number, number] | null = null;
   /** The "add floor" menu with the floors of Home Assistant is open. */
@@ -348,6 +350,9 @@ export class Fp3dEditor extends LitElement {
     if (changed.has("packs")) setPacks(this.packs ?? []);
     if (changed.has("_doc") && this._split) this.queue3d();
     if (changed.has("_split") && this._split) this._doc3d = this._doc;
+    if (changed.has("_tool") && this._tool === "roof" && !this._split && !this.narrow) this._split = true;
+    // entering or leaving the roof tool: the 3D half frames the whole house (or the floor) again
+    if (changed.has("_tool") && (this._tool === "roof" || changed.get("_tool") === "roof")) this.reframe3d = true;
     if (changed.has("building") && this.building !== this._doc) {
       this._doc = this.building;
       this._doc3d = this.building;
@@ -519,17 +524,19 @@ export class Fp3dEditor extends LitElement {
 
   private render3d() {
     return html`<div class="fp3d-editor-3d">
-      <div class="fp3d-seg fp3d-3d-walls">
-        <button aria-pressed=${this._wall3d === "auto"} @click=${() => (this._wall3d = "auto")}>${this.t("walls_auto")}</button>
-        <button aria-pressed=${this._wall3d === "cut"} @click=${() => (this._wall3d = "cut")}>${this.t("walls_cut")}</button>
-      </div>
+      ${this._tool === "roof"
+        ? nothing
+        : html`<div class="fp3d-seg fp3d-3d-walls">
+            <button aria-pressed=${this._wall3d === "auto"} @click=${() => (this._wall3d = "auto")}>${this.t("walls_auto")}</button>
+            <button aria-pressed=${this._wall3d === "cut"} @click=${() => (this._wall3d = "cut")}>${this.t("walls_cut")}</button>
+          </div>`}
       ${this.render3dBar()}
       <fp3d-view3d
         .hass=${this.hass}
         .building=${this._doc3d}
-        .floorId=${this._floorId}
+        .floorId=${this._tool === "roof" ? null : this._floorId}
         .roomId=${null}
-        .wallMode=${this._wall3d}
+        .wallMode=${this._tool === "roof" ? "auto" : this._wall3d}
         .explode=${false}
         .markerMode=${"important"}
         .heatMode=${"none"}
@@ -543,7 +550,7 @@ export class Fp3dEditor extends LitElement {
         .quality=${"auto"}
         .floorThumbs=${false}
         .roomLabels=${true}
-        .floorStack=${"single"}
+        .floorStack=${this._tool === "roof" ? "stacked" : "single"}
         .panelOpen=${false}
         .alerts=${false}
         .scenes=${false}
@@ -571,6 +578,11 @@ export class Fp3dEditor extends LitElement {
   }
 
   protected updated(): void {
+    if (this.reframe3d) {
+      this.reframe3d = false;
+      // after the 3D half got its new floor (and built the roof): frame it
+      setTimeout(() => (this.renderRoot.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void }) | null)?.resetView(), 250);
+    }
     const bg = this.floor?.background;
     if (bg && !this._images[bg.image_id] && !this.loadingImages.has(bg.image_id)) void this.loadImage(bg.image_id);
     // thumbnails of the selected screen's stored pictures
@@ -832,8 +844,10 @@ export class Fp3dEditor extends LitElement {
         const [id, cx, cz] = corner.split(":");
         this.drag = { kind: "roofcorner", id, corner: [cx === "1" ? 1 : 0, cz === "1" ? 1 : 0], base: this._doc, moved: false };
       } else if (body) {
+        const fixed = this.roofFixed(this._doc.settings.roof.sections?.find((x) => x.id === body));
+        if (fixed && this._roofId === body) this._fixedHint = true;
         this._roofId = body;
-        this.drag = this.isAdmin ? { kind: "roofmove", id: body, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
+        this.drag = this.isAdmin && !fixed ? { kind: "roofmove", id: body, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
       } else if (this.isAdmin) {
         this._roofId = null;
         const start = this.snap(world, undefined, e.altKey);
@@ -1582,6 +1596,8 @@ export class Fp3dEditor extends LitElement {
       else if (this._furnitureId) this.deleteFurniture();
       else if (this._vertex !== null) this.deleteVertex(this._vertex);
       else this.deleteRoom();
+    } else if (e.key.toLowerCase() === "l" && !mod && this._tool === "roof" && this.roofSection && !this._doc.settings.lock_plan) {
+      this.updateRoofSection({ locked: !this.roofSection.locked });
     } else if (e.key.toLowerCase() === "l" && !mod && (this._furnitureId || this._deviceId)) {
       const s = this.selectedFix!;
       this.toggleFixed(s.kind, s.id);
@@ -1761,6 +1777,20 @@ export class Fp3dEditor extends LitElement {
 
   // ------------------------------------------------------------------ roof sections
 
+  /** A section is fixed by its own lock or by the plan lock. */
+  private roofFixed(sec: RoofSection | undefined): boolean {
+    return !!sec && (!!sec.locked || !!this._doc.settings.lock_plan);
+  }
+
+  /** Floor buttons in the roof tool: the plan below shows that floor's rooms to draw along. */
+  private renderRoofFloors() {
+    const floors = [...this._doc.floors].sort((a, b) => b.elevation - a.elevation);
+    if (floors.length < 2) return nothing;
+    return html`<div class="fp3d-seg fp3d-dev-source">
+      ${floors.map((f) => html`<button aria-pressed=${f.id === this._floorId} @click=${() => (this._floorId = f.id)}>${f.name}</button>`)}
+    </div>`;
+  }
+
   private get roofSection(): RoofSection | undefined {
     return this._roofId ? this._doc.settings.roof.sections?.find((x) => x.id === this._roofId) : undefined;
   }
@@ -1856,13 +1886,13 @@ export class Fp3dEditor extends LitElement {
       } else if (sec.shape === "gable") ridge = line(fr.at(fr.u0, pr.vr), fr.at(fr.u1, pr.vr));
       else if (sec.shape === "pent") ridge = line(fr.at(fr.u0, fr.w), fr.at(fr.u1, fr.w));
       const [cx, cy] = this.toScreen(fr.at((fr.u0 + fr.u1) / 2, fr.w / 2));
-      const label = `${i + 1} · ${this.t(`roof_shape_${sec.shape}` as I18nKey)} · ${formatNumber(this.hass, ridgeHeight(sec), 1)} m`;
+      const label = `${this.roofFixed(sec) ? "🔒 " : ""}${i + 1} · ${this.t(`roof_shape_${sec.shape}` as I18nKey)} · ${formatNumber(this.hass, ridgeHeight(sec), 1)} m`;
       return svg`<g data-roof=${sec.id} class=${`fp3d-roof-sec${sel ? " fp3d-roof-sel" : ""}`}>
           <polygon points=${pts.map((p) => p.join(",")).join(" ")} />
           <g class="fp3d-roof-ridge">${ridge}</g>
           <text x=${cx} y=${cy - 14}>${label}</text>
         </g>
-        ${sel && this.isAdmin
+        ${sel && this.isAdmin && !this.roofFixed(sec)
           ? ([[0, 0], [1, 0], [1, 1], [0, 1]] as const).map(([kx, kz]) => {
               const [x, y] = this.toScreen([kx ? Math.max(sec.x0, sec.x1) : Math.min(sec.x0, sec.x1), kz ? Math.max(sec.z0, sec.z1) : Math.min(sec.z0, sec.z1)]);
               return svg`<g class="fp3d-vertex" data-roof-corner=${`${sec.id}:${kx}:${kz}`}><circle cx=${x} cy=${y} r="16" class="fp3d-hit" /><circle cx=${x} cy=${y} r="6" /></g>`;
@@ -1879,6 +1909,7 @@ export class Fp3dEditor extends LitElement {
     if (sec) return this.renderRoofSectionForm(sec);
     const sections = roof.type === "custom" ? (roof.sections ?? []) : [];
     return html`<section>
+      ${this.renderRoofFloors()}
       <h3>${this.t("roof_sections")}</h3>
       <p class="fp3d-sub">${this.t("roof_sections_hint")}</p>
       ${roof.type !== "custom"
@@ -1909,9 +1940,20 @@ export class Fp3dEditor extends LitElement {
     const pent = sec.shape === "pent";
     const n = (sections: RoofSection[]) => sections.findIndex((x) => x.id === sec.id) + 1;
     const num = (label: string, value: number, apply: (v: number) => void, step = 0.05, min = 0) => this.num(label, value, (v) => apply(Math.max(min, round(v))), step, min);
+    const planLocked = !!this._doc.settings.lock_plan;
     return html`<button class="fp3d-btn fp3d-back" @click=${() => (this._roofId = null)}>‹ ${this.t("roof_sections")}</button>
       <section>
-        <h3>${this.t("roof_section")} ${n(this._doc.settings.roof.sections ?? [])}</h3>
+        ${this.renderRoofFloors()}
+        <div class="fp3d-h3row">
+          <h3>${this.t("roof_section")} ${n(this._doc.settings.roof.sections ?? [])}</h3>
+          ${admin
+            ? planLocked
+              ? html`<button class="fp3d-btn fp3d-fix" aria-pressed="true" title=${this.t("lock_plan_hint")} @click=${() => this.toggleLockPlan()}>🔒 ${this.t("plan_locked")}</button>`
+              : html`<button class="fp3d-btn fp3d-fix" aria-pressed=${!!sec.locked} title=${this.t("fix_hint")} @click=${() => set({ locked: !sec.locked })}>
+                  ${sec.locked ? `🔒 ${this.t("unfix")}` : `🔓 ${this.t("fix")}`}
+                </button>`
+            : nothing}
+        </div>
         <div class="fp3d-seg fp3d-dev-source">
           ${ROOF_SHAPES.map((shape) => html`<button aria-pressed=${sec.shape === shape} ?disabled=${!admin} @click=${() => set({ shape })}>${this.t(`roof_shape_${shape}` as I18nKey)}</button>`)}
         </div>

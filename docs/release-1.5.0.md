@@ -6,7 +6,8 @@
   - NeonPlan 3D schlägt die Dachflächen aus deinen Räumen vor – auch über Teilen, die nur ein Erdgeschoss haben.
   - Jede Dachfläche hat ihre eigene Form (**Sattel, Walm, Pult, Flach**), Firstrichtung, Traufhöhe und Neigung – getrennt für beide Seiten. So entstehen Abschleppdächer und Pultdächer.
   - Höhen zählen vom Boden; Giebel und Drempel werden bis unters Dach hochgezogen. Dachflächen dürfen sich überschneiden, das niedrigere Dach läuft unter das höhere.
-  - Im Plan aufziehen, verschieben, an den Ecken ändern; die Firsthöhe steht im Formular.
+  - Im Plan aufziehen, verschieben, an den Ecken ändern; die Firsthöhe steht im Formular. Daneben zeigt die 3D-Ansicht sofort das ganze Haus mit Dach, die Etage wählst du direkt im Werkzeug.
+  - Fertige Dachflächen lassen sich **fixieren** (Schloss oder Taste L), **🔒 Grundriss** sperrt sie mit.
 - Alle Dachformen sind kostenlos. Bestehende Dächer bleiben, wie sie sind.
 
 Nach dem Update Home Assistant neu starten und die Seite neu laden.
@@ -21,7 +22,8 @@ Nach dem Update Home Assistant neu starten und die Seite neu laden.
   - NeonPlan 3D proposes the sections from your rooms – also over parts that only have a ground floor.
   - Each section has its own shape (**gable, hip, pent, flat**), ridge direction, eave height and pitch – separately for both sides. That gives catslides and pent roofs.
   - Heights count from the ground; gables and knee walls are built up under the roof. Sections may overlap, the lower roof runs under the higher one.
-  - Draw them in the plan, move them, resize them at the corners; the ridge height is shown in the form.
+  - Draw them in the plan, move them, resize them at the corners; the ridge height is shown in the form. The 3D view beside it shows the whole house with its roof at once, the floor is chosen right in the tool.
+  - Finished sections can be **fixed** (lock or key L), **🔒 Floor plan** locks them too.
 - All roof shapes are free. Existing roofs stay as they are.
 
 Restart Home Assistant after updating and reload the page.

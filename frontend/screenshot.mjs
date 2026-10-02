@@ -126,7 +126,7 @@ const shots = [
   { name: "view-dryer-on-washer", query: "", width: 1280, height: 800, editor: true, editorScript: "const f = e._doc.floors[0]; const w = f.furniture.find((m) => m.type === 'washer'); f.furniture.push({ ...structuredClone(w), id: 'dryer_demo', type: 'dryer', entity: null, power: null, mount_y: w.h }); e.setDoc(structuredClone(e._doc));", then3d: "Bad" },
   { name: "editor-device-extras", query: "", width: 1280, height: 1500, editor: true, editorScript: "e._roomId = 'garage'; e._devSource = 'other'; e._deviceQuery = 'licht'; const r = e._doc.floors[0].rooms.find((x) => x.id === 'garage'); r.climate = { temperature: null, humidity: 'none', co2: null }; e.setDoc(structuredClone(e._doc));", scrollSide: true },
   { name: "view-wall-cabinet-low", query: "", width: 1280, height: 800, editor: true, editorScript: "const f = e._doc.floors[0]; const k = f.furniture.find((m) => m.type === 'kitchen_wall'); if (k) { f.furniture.push({ ...structuredClone(k), id: 'kw_low', x: k.x + k.w + 0.1, mount_y: 1.0 }); } e.setDoc(structuredClone(e._doc));", then3d: "Küche" },
-  { name: "editor-roof-tool", query: "", width: 1280, height: 900, editor: true, editorScript: FARM_SCRIPT + "e._floorId = e._doc.floors[0].id; e._tool = 'roof'; e._roofId = 'scheune'; setTimeout(() => e.fit(), 300);" },
+  { name: "editor-roof-tool", query: "", width: 1500, height: 900, wait: 0, editor: true, editorScript: FARM_SCRIPT + "e._floorId = e._doc.floors[0].id; setTimeout(() => { e._tool = 'roof'; e._roofId = 'scheune'; e.updateRoofSection({ locked: true }); e.fit(); }, 1500);", afterWait: 3000 },
   { name: "editor-roof-overview", query: "", width: 1280, height: 900, editor: true, editorScript: FARM_SCRIPT + "e._floorId = e._doc.floors[0].id; e._tool = 'roof'; e._roofId = null; setTimeout(() => e.fit(), 300);" },
   { name: "view-roof-proposal", query: "", width: 1280, height: 800, editor: true, editorScript: FARM_SCRIPT + "setTimeout(() => { e._doc.settings.roof.sections = []; e.useRoofSections(); }, 300);", then3d: "Alle Etagen", then3dAlso: "Gestapelt", camera: { theta: 2.3, phi: 0.95, radius: 52 } },
   { name: "view-roof-farmhouse-front", query: "", width: 1280, height: 800, editor: true, editorScript: FARM_SCRIPT, then3d: "Alle Etagen", then3dAlso: "Gestapelt", camera: { theta: 2.3, phi: 0.95, radius: 52 } },
@@ -288,7 +288,7 @@ for (const shot of shots.filter((s) => !only || only.includes(s.name))) {
       const e = document.querySelector("neonplan3d-panel").shadowRoot.querySelector("fp3d-editor");
       new Function("e", code)(e);
     }, shot.editorScript);
-    await new Promise((r) => setTimeout(r, 1200));
+    await new Promise((r) => setTimeout(r, 1200 + (shot.afterWait ?? 0)));
     if (shot.then3d) {
       await clickText("3D");
       await clickText(shot.then3d);

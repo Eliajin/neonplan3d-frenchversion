@@ -220,6 +220,8 @@ export interface RoofSection {
   overhang?: number | null;
   /** Sides a and b swapped: side a is the high coordinate (a pent roof then rises the other way). */
   flip?: boolean;
+  /** Fixed: cannot be moved or resized by accident (the plan lock fixes every section too). */
+  locked?: boolean;
 }
 
 export interface RoofSettings {
