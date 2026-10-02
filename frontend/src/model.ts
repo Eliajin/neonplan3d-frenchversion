@@ -91,6 +91,8 @@ export interface Furniture {
   door_right?: EntityRef;
   /** Ask before switching the linked entity. */
   confirm?: boolean;
+  /** Its marker in 3D: automatic (null), always shown, shown without watts, or hidden. */
+  marker?: MarkerShow | null;
   /** Height of the bottom edge above the floor (null = default: the floor, a pack item's mount, a surface below). */
   mount_y?: number | null;
   /** Screens: pictures shown while an entity is in a state (first match wins; "*" = any state). */
@@ -107,6 +109,10 @@ export interface Furniture {
 }
 
 export type LampMount = "ceiling" | "floor" | "table" | "wall";
+
+/** How a device's marker shows in 3D (null = automatic by the marker mode). */
+export const MARKER_SHOWS = ["always", "no_power", "never"] as const;
+export type MarkerShow = (typeof MARKER_SHOWS)[number];
 
 export interface Placement {
   entity_id: string;
@@ -125,6 +131,8 @@ export interface Placement {
   tilt?: number | null;
   /** Ask before switching this device (3D tap, quick menu, room panel). */
   confirm?: boolean;
+  /** Its marker in 3D: automatic (null), always shown, shown without watts, or hidden. */
+  marker?: MarkerShow | null;
 }
 
 export interface Background {

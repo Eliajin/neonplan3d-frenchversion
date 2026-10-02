@@ -128,6 +128,8 @@ export interface DeviceMarker {
   base?: number;
   /** Show the HTML marker (false: the 3D object alone stands for the device). */
   pin?: boolean;
+  /** The marker setting of its placement or furniture item (undefined = automatic). */
+  show?: "always" | "no_power" | "never";
   /** The 3D lamp can be tapped (it has an entity). */
   pickable?: boolean;
   /** Furniture item this lamp is (for moving it in 3D). */

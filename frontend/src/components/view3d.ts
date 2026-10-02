@@ -453,7 +453,8 @@ export class Fp3dView3d extends LitElement {
     const trail = this.trail ? this.trailNow(hass, b) : [];
     v.setDevices([
       ...[...deviceMarkers, ...furniture.markers].map((m) => {
-        const power = byDevice.get(m.id) ?? null;
+        // "without watts" drops the power badge (a plug shows only on / off)
+        const power = m.show === "no_power" ? null : (byDevice.get(m.id) ?? null);
         // at night (kiosk) colour effects rest
         const marker = { ...m, power, powerText: power === null ? undefined : formatPower(hass, power), effect: this.dimmed ? false : m.effect };
         return { ...marker, pin: this.showPin(marker) };
@@ -688,6 +689,7 @@ export class Fp3dView3d extends LitElement {
           glow: null,
           // its pin grabs the item when furnishing
           furnitureId: f.id,
+          show: f.marker ?? undefined,
           fromFurniture: true,
         });
       }
@@ -873,6 +875,7 @@ export class Fp3dView3d extends LitElement {
       lightY: item ? (item.mount === "ceiling" ? base : base + f.h * 0.85) : undefined,
       effect: !!st && st.state === "on" && typeof st.attributes.effect === "string" && !/^(none|off|solid|static|normal)$/i.test(st.attributes.effect),
       variant: f.variant,
+      show: f.marker ?? undefined,
       fromFurniture: true,
     };
   }
@@ -884,8 +887,9 @@ export class Fp3dView3d extends LitElement {
   private showPin(m: DeviceMarker & { fromFurniture?: boolean }): boolean {
     // while furnishing every placed device has a pin to grab it by
     if (this.furnish && !m.fromFurniture) return true;
-    if (this.markerMode === "none") return false;
-    if (this.markerMode === "all") return true;
+    // the device's own setting wins over the marker mode (except "none", which hides every marker)
+    if (m.show === "never" || this.markerMode === "none") return false;
+    if (m.show === "always" || this.markerMode === "all") return true;
     if (m.lamp || m.model) return false;
     const kind = kindOf(m.id);
     if (kind === "light") return false;

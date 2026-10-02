@@ -52,6 +52,8 @@ import {
   type Furniture,
   type FurnitureType,
   type LampMount,
+  type MarkerShow,
+  MARKER_SHOWS,
   type OutdoorArea,
   type OutdoorType,
   type RoofType,
@@ -2855,6 +2857,17 @@ export class Fp3dEditor extends LitElement {
     </div>`;
   }
 
+  /** How the marker of a device or furniture item shows in 3D. */
+  private markerSelect(value: MarkerShow | null, onChange: (v: MarkerShow | null) => void) {
+    return html`<label class="fp3d-field fp3d-wide" title=${this.t("marker_show_hint")}
+      >${this.t("marker_show")}
+      <select ?disabled=${!this.isAdmin} @change=${(e: Event) => onChange(((e.target as HTMLSelectElement).value || null) as MarkerShow | null)}>
+        <option value="" ?selected=${!value}>${this.t("marker_show_auto")}</option>
+        ${MARKER_SHOWS.map((m) => html`<option value=${m} ?selected=${m === value}>${this.t(`marker_show_${m}` as I18nKey)}</option>`)}
+      </select></label
+    >`;
+  }
+
   private entityOptions(filter: (id: string) => boolean) {
     const areaName = (id: string) => {
       const entry = this.hass?.entities?.[id];
@@ -3216,7 +3229,8 @@ export class Fp3dEditor extends LitElement {
         ? html`<label class="fp3d-check fp3d-wide" title=${this.t("device_confirm_hint")}
             ><input type="checkbox" .checked=${!!f.confirm} ?disabled=${!this.isAdmin} @change=${(ev: Event) => this.updateFurniture({ confirm: (ev.target as HTMLInputElement).checked })} />
             ${this.t("device_confirm")}</label
-          >`
+          >
+          <div class="fp3d-form">${this.markerSelect(f.marker ?? null, (v) => this.updateFurniture({ marker: v }))}</div>`
         : nothing}
       ${f.type === "fridge_smart"
         ? html`<div class="fp3d-form fp3d-links">
@@ -3621,6 +3635,7 @@ export class Fp3dEditor extends LitElement {
               ${this.t("device_confirm")}</label
             >`
           : nothing}
+        ${this.markerSelect(pl.marker ?? null, (v) => this.updateDevice({ marker: v }))}
       </div>
       ${admin
         ? html`<div class="fp3d-actions">

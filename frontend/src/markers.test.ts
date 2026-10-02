@@ -67,3 +67,12 @@ test("sensor values use the decimals set in Home Assistant", () => {
   assert.equal(stateText(hass, st), "1,234.567 m³");
   assert.equal(stateText({ ...hass, entities: {} } as HomeAssistant, st), "1,234.6 m³");
 });
+
+test("a placement's marker setting reaches the marker", () => {
+  const b: Building = emptyBuilding();
+  b.floors = [{ ...newFloor("eg", "EG", 0), placements: [{ entity_id: "sensor.t", x: 1, z: 1, y: null, marker: "always" }, { entity_id: "switch.s", x: 2, z: 1, y: null }] }];
+  const hass = { language: "de", states: { "sensor.t": { entity_id: "sensor.t", state: "21", attributes: {} }, "switch.s": { entity_id: "switch.s", state: "on", attributes: {} } } } as unknown as HomeAssistant;
+  const [t, s] = buildMarkers(hass, b);
+  assert.equal(t.show, "always");
+  assert.equal(s.show, undefined);
+});

@@ -243,6 +243,7 @@ A selected device has:
 
 - **Marker height**, **rotation** and, for lights, the **mount**: ceiling, floor, table or wall.
 - **Ask before switching:** A tap in 3D, the quick menu and the room panel ask first. This protects, for example, a server switch from an accidental tap. A double tap on the room leaves this device out.
+- **Marker in 3D:** *Automatic* follows the None / Important / All switch of the 3D view. *Always show* shows the marker with "Important" too, e.g. for a temperature sensor. *Without watts* leaves out the power, e.g. on a smart plug. *Hide* never shows a marker. With "None" all markers stay off.
 - **To room centre** and **Remove**.
 
 ### 4.11 Lamps
@@ -266,7 +267,7 @@ TVs, media walls, desks with monitors, washing machines, dryers, dishwashers, ra
 
 - **Device** or **TV (media player or smart plug)**: A TV glows while it is on. An older TV on a smart plug simply takes the plug's switch; the screen glows while the plug is on, and a tap switches it. Washing machine, dryer and dishwasher glow while they run. A radiator with a thermostat glows while it heats.
 - **Power sensor (W)**: The item shows its watts.
-- **Ask before switching** as with devices.
+- **Ask before switching** and **Marker in 3D** as with devices.
 - **Pictures by state** on screens: a Pro add-on, see [6.3](#63-live-screens).
 
 "Automatic" means NeonPlan 3D finds the matching entity in the area by itself.

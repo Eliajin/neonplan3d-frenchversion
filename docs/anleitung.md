@@ -243,6 +243,7 @@ Ein ausgewähltes Gerät hat:
 
 - **Höhe des Symbols**, **Drehung** und bei Lichtern die **Montage**: Decke, Boden, Tisch oder Wand.
 - **Vor dem Schalten nachfragen:** Beim Antippen in 3D, im Schnellmenü und im Raumfenster erscheint erst eine Rückfrage. Das schützt etwa den Server-Schalter vor einem versehentlichen Tipp. Ein Doppeltipp auf den Raum lässt dieses Gerät aus.
+- **Symbol in 3D:** *Automatisch* folgt dem Schalter Keine / Wichtige / Alle der 3D-Ansicht. *Immer zeigen* zeigt das Symbol auch bei „Wichtige“, etwa für einen Temperatursensor. *Ohne Watt* lässt die Leistung weg, etwa an einer Steckdose. *Ausblenden* zeigt nie ein Symbol. Bei „Keine“ bleiben alle Symbole aus.
 - **In Raummitte** und **Entfernen**.
 
 ### 4.11 Leuchten
@@ -266,7 +267,7 @@ Fernseher, Medienwand, Schreibtisch mit Monitor, Waschmaschine, Trockner, Spülm
 
 - **Gerät** oder **Fernseher (Media-Player oder Steckdose)**: Ein Fernseher leuchtet, solange er läuft. Ein älterer Fernseher an einer smarten Steckdose nimmt einfach deren Schalter; der Bildschirm leuchtet, solange die Steckdose an ist, und ein Tipp schaltet sie. Waschmaschine, Trockner und Spülmaschine leuchten, solange sie arbeiten. Ein Heizkörper mit Thermostat glüht beim Heizen.
 - **Leistungssensor (W)**: Das Möbel zeigt seine Watt.
-- **Vor dem Schalten nachfragen** wie bei Geräten.
+- **Vor dem Schalten nachfragen** und **Symbol in 3D** wie bei Geräten.
 - **Bilder nach Zustand** bei Bildschirmen: eine Pro-Erweiterung, siehe [6.3](#63-bildschirme-live).
 
 Steht dort „automatisch“, sucht NeonPlan 3D die passende Entität im Bereich selbst.

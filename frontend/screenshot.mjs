@@ -95,6 +95,8 @@ const shots = [
   { name: "editor-free-wall-door", query: "", width: 1280, height: 800, editor: true, editorScript: "const o = e._doc.floors[0].openings.find((x) => x.wall); e._floorId = e._doc.floors[0].id; e._tool = 'select'; e._openingId = o.id;" },
   { name: "view-free-wall-door", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Garage" },
   { name: "editor-garage-devices", query: "", width: 1280, height: 1000, editor: true, editorState: { _roomId: "garage" }, scrollSide: true },
+  { name: "view-marker-show", query: "", width: 1280, height: 800, editor: true, editorScript: "const p = e._doc.floors[0].placements; p.find((x) => x.entity_id === 'media_player.fernseher').marker = 'no_power'; p.find((x) => x.entity_id === 'climate.wohnzimmer').marker = 'never'; e.setDoc(structuredClone(e._doc));", then3d: "Wohnzimmer" },
+  { name: "editor-marker-show", query: "", width: 1280, height: 900, editor: true, editorState: { _deviceId: "media_player.fernseher", _roomId: "wohnen" } },
   { name: "view-tv-plug", query: "", width: 1280, height: 800, editor: true, editorScript: "const f = e._doc.floors[0].furniture.find((x) => x.type === 'tv_board'); f.entity = 'switch.kaffeemaschine'; f.pictures = []; e._roomId = 'wohnen'; e._furnitureId = f.id; e.setDoc(structuredClone(e._doc));", then3d: "Wohnzimmer" },
   { name: "editor-tv-plug", query: "", width: 1280, height: 1000, editor: true, editorScript: "const f = e._doc.floors[0].furniture.find((x) => x.type === 'tv_board'); f.entity = 'switch.kaffeemaschine'; e._roomId = 'wohnen'; e._furnitureId = f.id; e.setDoc(structuredClone(e._doc));" },
   { name: "view-shared-light", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Bad" },
