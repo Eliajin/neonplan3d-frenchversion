@@ -74,3 +74,11 @@ test("an open window only warns while it rains", () => {
   hass.states["binary_sensor.fenster"].state = "off";
   assert.equal(findAlerts(hass, b, src, links).length, 0);
 });
+
+test("the rain warning can be switched off on its own", () => {
+  const { hass, b, links } = setup();
+  hass.states["weather.zuhause"].state = "rainy";
+  b.settings.rain_warning = false;
+  const alerts = findAlerts(hass, b, alertSources(hass, b), links);
+  assert.equal(alerts.filter((a) => a.kind === "window_rain").length, 0);
+});

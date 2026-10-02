@@ -249,6 +249,8 @@ export interface BuildingSettings {
   weather_entity?: string | null;
   /** Which weather effects the 3D view shows (null = all but fog). */
   weather_effects?: WeatherEffect[] | null;
+  /** Warning for a window open while it rains (default on). */
+  rain_warning?: boolean;
   /** Plan lock: rooms, walls, doors, windows and outdoor areas cannot be moved by accident. */
   lock_plan?: boolean;
 }

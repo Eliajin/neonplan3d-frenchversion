@@ -1,7 +1,7 @@
 // Turns placements and entity states into device markers for the 3D view, and formats short state
 // texts shared by markers and the room panel.
 
-import { defaultHeight, entityName, isActive, isUnavailable, kindOf, lightGlow } from "./devices.ts";
+import { defaultHeight, entityName, isActive, isUnavailable, kindOf, lightGlow, tempUnit } from "./devices.ts";
 import { formatNumber, translate, type I18nKey } from "./i18n.ts";
 import { iconSvg } from "./icons.ts";
 import type { Building } from "./model.ts";
@@ -26,7 +26,7 @@ export function stateText(hass: HomeAssistant | undefined, st: HassEntity | unde
       if (typeof a.current_position === "number" && st.state !== "opening" && st.state !== "closing") return `${a.current_position} %`;
       return translateState(hass, st.state);
     case "climate": {
-      const cur = typeof a.current_temperature === "number" ? `${formatNumber(hass, a.current_temperature, 1)} °C` : null;
+      const cur = typeof a.current_temperature === "number" ? `${formatNumber(hass, a.current_temperature, 1)} ${hass ? tempUnit(hass) : "°C"}` : null;
       if (st.state === "off") return cur ? `${cur} · ${t(hass, "state_off")}` : t(hass, "state_off");
       return cur ?? translateState(hass, st.state);
     }

@@ -14,6 +14,7 @@ import { Color, type BufferGeometry } from "three";
 import type { Floor, Opening, Room, Vec2 } from "../model.ts";
 import { furnitureFootprint, isLamp, pointInPolygon } from "../model.ts";
 import { generateWalls, locateOpening, openingHost, type Wall } from "../geometry/walls.ts";
+import { mergeHoles } from "../geometry/holes.ts";
 import { pushFurniture } from "./furniture.ts";
 import { mountBase, packItem } from "../packs.ts";
 import { pushOutdoor } from "./outdoor.ts";
@@ -499,11 +500,12 @@ export function stairHoles(floors: readonly Floor[], floor: Floor): Vec2[][] {
   // a stairwell opening placed on this floor cuts its floor; stairs below that reach up here do too
   const own = floor.furniture.filter((f) => f.type === "stairwell").map(furnitureFootprint);
   const below = floors.filter((f) => f.elevation < floor.elevation).sort((p, q) => q.elevation - p.elevation)[0];
-  if (!below) return own;
+  if (!below) return mergeHoles(own);
   const stairs = below.furniture
     .filter((f) => (f.type === "stairs" || packItem(f.type)?.hole) && below.elevation + f.h >= floor.elevation - 0.3)
     .map(furnitureFootprint);
-  return [...own, ...stairs];
+  // overlapping openings become one outline (an L-shaped stairwell made of two)
+  return mergeHoles([...own, ...stairs]);
 }
 
 /** How tall a wall stands: its own height (a low wall, a counter), never above the floor height. */

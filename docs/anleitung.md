@@ -312,7 +312,7 @@ Das Möbel Saugroboter wird mit der `vacuum`-Entität verknüpft. Saugt der Robo
 ### 4.16 Treppen und Bodenöffnungen
 
 - Die **Treppe** aus der Bibliothek steigt von der markierten Vorderkante nach hinten an. Reicht sie bis zur Etage darüber, schneidet sie dort die Treppenöffnung in die Decke.
-- Mit dem Werkzeug **Bodenöffnung** ziehst du ein Loch direkt in den Boden einer Etage auf, etwa über dem Treppenaufgang oder für eine Galerie. Von oben sieht man hindurch. Die Öffnung muss ganz in einem Raum liegen.
+- Mit dem Werkzeug **Bodenöffnung** ziehst du ein Loch direkt in den Boden einer Etage auf, etwa über dem Treppenaufgang oder für eine Galerie. Von oben sieht man hindurch. Die Öffnung muss ganz in einem Raum liegen. Mehrere Öffnungen dürfen sich überlappen, so entsteht zum Beispiel eine L-Form.
 - Weitere Treppen und Geländer bringt das Pack **Treppen & Geländer**.
 
 ![Werkzeug Bodenöffnung](images/editor-hole-tool.jpg)
@@ -441,7 +441,7 @@ Die Lupe unten links öffnet **„Wo ist …?“**. Tippe einen Gerätenamen ode
 
 ![Heatmap Temperatur](images/view-heat.jpg)
 
-**Temp.**, **Feuchte** und **CO₂** färben die Böden nach den Sensoren des Bereichs, mit einer Farbskala am Rand.
+**Temp.**, **Feuchte** und **CO₂** färben die Böden nach den Sensoren des Bereichs, mit einer Farbskala am Rand. Temperaturen erscheinen in der Einheit, die in Home Assistant eingestellt ist (°C oder °F); Sensoren in °F werden richtig umgerechnet.
 
 ### 5.7 Sonne und Tageslicht
 
@@ -461,7 +461,7 @@ NeonPlan 3D warnt kostenlos und ohne Einrichtung:
 | Alarm | Ein `alarm_control_panel` ist ausgelöst oder löst gleich aus |
 | Fenster offen bei Regen | Ein Fenster ist offen oder gekippt, und die Wetter-Entität meldet Regen, Gewitterregen, Hagel oder Schneeregen |
 
-Der betroffene Raum pulsiert rot, oben erscheint ein Banner. Ein Tipp auf die Warnung springt in den Raum.
+Der betroffene Raum pulsiert rot, oben erscheint ein Banner. Ein Tipp auf die Warnung springt in den Raum. Die Regenwarnung nimmt die Wetter-Entität aus den Plan-Einstellungen und lässt sich dort unter **Warnung: Fenster offen bei Regen** einzeln abschalten.
 
 ### 5.9 Kameras in 3D
 

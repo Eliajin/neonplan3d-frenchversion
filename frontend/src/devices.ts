@@ -238,9 +238,30 @@ export function roomClimateSensors(hass: HomeAssistant, floor: Floor | null, roo
 }
 
 /** Average of a room climate value (null when no sensor reports one). */
+/** The temperature unit Home Assistant shows ("°F" with US customary units, else "°C"). */
+export function tempUnit(hass: HomeAssistant): "°C" | "°F" {
+  return hass.config?.unit_system?.temperature === "°F" ? "°F" : "°C";
+}
+
+/** A temperature in °C, from a value in the given unit (°F, K, else taken as °C). */
+export function toCelsius(value: number, unit: unknown): number {
+  if (unit === "°F") return ((value - 32) * 5) / 9;
+  if (unit === "K") return value - 273.15;
+  return value;
+}
+
+/** A temperature in °C shown in Home Assistant's unit. */
+export function fromCelsius(hass: HomeAssistant, celsius: number): number {
+  return tempUnit(hass) === "°F" ? (celsius * 9) / 5 + 32 : celsius;
+}
+
+/** Average of the room's climate sensors; temperatures always in °C, whatever unit a sensor reports. */
 export function roomClimateValue(hass: HomeAssistant, floor: Floor | null, room: Room, key: ClimateKey): number | null {
   const values = roomClimateSensors(hass, floor, room, key)
-    .map((id) => Number(hass.states[id]?.state))
+    .map((id) => {
+      const v = Number(hass.states[id]?.state);
+      return key === "temperature" ? toCelsius(v, hass.states[id]?.attributes.unit_of_measurement) : v;
+    })
     .filter((v) => Number.isFinite(v));
   return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
 }

@@ -2,7 +2,7 @@
 // scenes and scripts). Shown next to the 3D view when a room is selected.
 
 import { css, html, LitElement, nothing, type TemplateResult } from "lit";
-import { areaEntities, entityName, groupByDevice, isUnavailable, kindOf, roomClimateSensors, roomClimateValue, roomPanelEntities, type DeviceKind } from "../devices.ts";
+import { areaEntities, entityName, groupByDevice, isUnavailable, kindOf, roomClimateSensors, roomClimateValue, roomPanelEntities, fromCelsius, tempUnit, type DeviceKind } from "../devices.ts";
 import { formatNumber, translate, type I18nKey } from "../i18n.ts";
 import { hasFeature } from "../features.ts";
 import { iconPath } from "../icons.ts";
@@ -213,6 +213,7 @@ export class Fp3dRoomPanel extends LitElement {
     const value = (key: "temperature" | "humidity", fallbackUnit: string) => {
       const v = roomClimateValue(this.hass, this.floor, room, key);
       if (v === null) return null;
+      if (key === "temperature") return `${formatNumber(this.hass, fromCelsius(this.hass, v), 1)} ${tempUnit(this.hass)}`;
       const first = roomClimateSensors(this.hass, this.floor, room, key)[0];
       const unit = (this.hass.states[first]?.attributes.unit_of_measurement as string | undefined) ?? fallbackUnit;
       return `${formatNumber(this.hass, v, 1)} ${unit}`;
@@ -220,7 +221,7 @@ export class Fp3dRoomPanel extends LitElement {
     const climateTemp = climates.find((c) => typeof c.attributes.current_temperature === "number");
     const temp = value("temperature", "°C");
     if (temp) out.push(temp);
-    else if (climateTemp && room.climate?.temperature !== "none") out.push(`${formatNumber(this.hass, climateTemp.attributes.current_temperature as number, 1)} °C`);
+    else if (climateTemp && room.climate?.temperature !== "none") out.push(`${formatNumber(this.hass, climateTemp.attributes.current_temperature as number, 1)} ${tempUnit(this.hass)}`);
     const hum = value("humidity", "%");
     if (hum) out.push(hum);
     return out;
@@ -334,7 +335,7 @@ export class Fp3dRoomPanel extends LitElement {
       ${target !== null
         ? html`<div class="fp3d-rp-stepper fp3d-rp-wide">
             <button class="fp3d-btn" aria-label=${this.t("temp_down")} @click=${() => set(target - step)}>−</button>
-            <span><small>${this.t("target_temp")}</small> ${formatNumber(this.hass, target, 1)} °C</span>
+            <span><small>${this.t("target_temp")}</small> ${formatNumber(this.hass, target, 1)} ${tempUnit(this.hass)}</span>
             <button class="fp3d-btn" aria-label=${this.t("temp_up")} @click=${() => set(target + step)}>+</button>
           </div>`
         : nothing}

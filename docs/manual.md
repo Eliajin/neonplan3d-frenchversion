@@ -312,7 +312,7 @@ The robot vacuum item links to the `vacuum` entity. While the robot cleans, it d
 ### 4.16 Stairs and floor openings
 
 - The **Stairs** from the library rise from the marked front edge towards the back. If they reach the floor above, they cut the stairwell into its floor.
-- The **Floor opening** tool draws a hole straight into a floor, e.g. above the staircase or for a gallery. From above you look through it. The opening must lie within one room.
+- The **Floor opening** tool draws a hole straight into a floor, e.g. above the staircase or for a gallery. From above you look through it. The opening must lie within one room. Several openings may overlap, for example to make an L shape.
 - More stairs and railings come with the **Stairs & railings** pack.
 
 ![The floor opening tool](images/editor-hole-tool.jpg)
@@ -441,7 +441,7 @@ The magnifier at the bottom left opens **"Where is …?"**. Type a device or roo
 
 ![Temperature heatmap](images/view-heat.jpg)
 
-**Temp.**, **Humidity** and **CO₂** colour the floors by the area's sensors, with a colour scale at the edge.
+**Temp.**, **Humidity** and **CO₂** colour the floors by the area's sensors, with a colour scale at the edge. Temperatures appear in the unit set in Home Assistant (°C or °F); sensors in °F are converted correctly.
 
 ### 5.7 Sun and daylight
 
@@ -461,7 +461,7 @@ NeonPlan 3D warns for free and without setup:
 | Alarm | An `alarm_control_panel` is triggered or about to trigger |
 | Window open in the rain | A window is open or tilted while the weather entity reports rain, lightning rain, hail or sleet |
 
-The room pulses red and a banner appears at the top. A tap on the warning jumps into the room.
+The room pulses red and a banner appears at the top. A tap on the warning jumps into the room. The rain warning uses the weather entity from the plan settings and can be switched off there on its own under **Warning: window open while it rains**.
 
 ### 5.9 Cameras in 3D
 

@@ -5,6 +5,7 @@ import { areaEntities, entityName, openingState, type OpeningEntities } from "./
 import { translate } from "./i18n.ts";
 import type { Building } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
+import { weatherEntity } from "./weather.ts";
 
 export type AlertKind = "smoke" | "gas" | "co" | "water" | "alarm" | "alarm_pending" | "window_rain";
 
@@ -27,8 +28,8 @@ export const RAIN_STATES = new Set(["rainy", "pouring", "lightning-rainy", "hail
 
 const CLASS_KIND: Record<string, AlertKind> = { smoke: "smoke", gas: "gas", carbon_monoxide: "co", moisture: "water" };
 
-/** Warning sensors per room, alarm panels and the weather entity (the first one). */
-export function alertSources(hass: HomeAssistant, building: Building): AlertSources {
+/** Warning sensors per room, alarm panels and the weather entity (the chosen one, else the first; none without the rain warning). */
+export function alertSources(hass: HomeAssistant, building: Building, weatherId?: string | null): AlertSources {
   const rooms: AlertSources["rooms"] = [];
   for (const floor of building.floors) {
     for (const room of floor.rooms) {
@@ -37,7 +38,8 @@ export function alertSources(hass: HomeAssistant, building: Building): AlertSour
     }
   }
   const ids = Object.keys(hass.states);
-  return { rooms, alarms: ids.filter((id) => id.startsWith("alarm_control_panel.")), weather: ids.find((id) => id.startsWith("weather.")) ?? null };
+  const weather = building.settings.rain_warning === false ? null : weatherEntity(hass, weatherId ?? building.settings.weather_entity);
+  return { rooms, alarms: ids.filter((id) => id.startsWith("alarm_control_panel.")), weather };
 }
 
 /** Entities whose state changes may raise or clear a warning. */

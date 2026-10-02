@@ -15,6 +15,8 @@ import {
   TOGGLE_KINDS,
   type FurnitureLinks,
   type OpeningEntities, confirmEntities, fridgeDoors, hasScreen, pictureRuleMatches,
+  fromCelsius,
+  tempUnit,
 } from "../devices.ts";
 import { alertColor, alertEntities, alertSources, alertText, findAlerts, type Alert, type AlertSources } from "../alerts.ts";
 import { iconPath, iconSvg } from "../icons.ts";
@@ -429,7 +431,7 @@ export class Fp3dView3d extends LitElement {
         this.heatMode === "none"
           ? []
           : b.floors.flatMap((f) => f.rooms.flatMap((r) => areaEntities(hass, r.area_id).filter((id) => id.startsWith("sensor."))));
-      this.alertSrc = this.alerts ? alertSources(hass, b) : null;
+      this.alertSrc = this.alerts ? alertSources(hass, b, this.weatherEntityId) : null;
       const warn = this.alertSrc ? alertEntities(this.alertSrc) : [];
       const parking = parkingEntities(b.floors);
       const motion = trailSources(hass, b).map((s) => s.entity);
@@ -1252,13 +1254,16 @@ export class Fp3dView3d extends LitElement {
   private renderLegend() {
     if (this.heatMode === "none") return nothing;
     const scale = HEAT_SCALES[this.heatMode];
-    const lo = scale.stops[0][0];
-    const hi = scale.stops[scale.stops.length - 1][0];
+    // temperatures are coloured in °C and shown in Home Assistant's unit
+    const temp = this.heatMode === "temperature";
+    const lo = temp ? fromCelsius(this.hass, scale.stops[0][0]) : scale.stops[0][0];
+    const hi = temp ? fromCelsius(this.hass, scale.stops[scale.stops.length - 1][0]) : scale.stops[scale.stops.length - 1][0];
+    const unit = temp ? tempUnit(this.hass) : scale.unit;
     const t = (k: Parameters<typeof translate>[1]) => translate(this.hass, k);
     return html`<div class="fp3d-legend">
       <b>${t(`heat_${this.heatMode}`)}</b>
       <span class="fp3d-legend-bar" style="background:${heatGradient(this.heatMode)}"></span>
-      <span class="fp3d-legend-range"><span>${formatNumber(this.hass, lo, 0)} ${scale.unit}</span><span>${formatNumber(this.hass, hi, 0)} ${scale.unit}</span></span>
+      <span class="fp3d-legend-range"><span>${formatNumber(this.hass, lo, 0)} ${unit}</span><span>${formatNumber(this.hass, hi, 0)} ${unit}</span></span>
       ${this.heatValues.size ? nothing : html`<span class="fp3d-legend-none">${t("heat_none_found")}</span>`}
     </div>`;
   }

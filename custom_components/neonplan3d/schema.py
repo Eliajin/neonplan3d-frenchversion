@@ -279,6 +279,8 @@ SETTINGS_SCHEMA = vol.Schema(
         # the weather entity for the weather outside (None = the first one)
         vol.Optional("weather_entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # which weather effects the 3D view shows (None = all but fog)
+        # warning for a window open while it rains
+        vol.Optional("rain_warning", default=True): bool,
         vol.Optional("weather_effects", default=None): vol.Any(
             None, [vol.In(["rain", "snow", "fog", "clouds", "lightning", "sky"])]
         ),
