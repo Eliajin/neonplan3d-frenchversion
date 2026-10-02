@@ -208,6 +208,8 @@ const shots = [
   { name: "view-floor-stack-panel", query: "", width: 1280, height: 800, click: "Obergeschoss", then: "Einzeln" },
   { name: "view-room-names-off", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Raumnamen" },
   { name: "empty", query: "?empty", width: 1280, height: 800 },
+  { name: "site-demo", query: "?site&lang=en", width: 1280, height: 800 },
+  { name: "site-demo-phone", query: "?site&lang=de", width: 390, height: 844 },
 ];
 
 const errors = [];
