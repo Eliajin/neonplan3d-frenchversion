@@ -128,6 +128,8 @@ export interface DeviceMarker {
   base?: number;
   /** Show the HTML marker (false: the 3D object alone stands for the device). */
   pin?: boolean;
+  /** A placed device fixed against moving. */
+  fixed?: boolean;
   /** The marker setting of its placement or furniture item (undefined = automatic). */
   show?: "always" | "no_power" | "never";
   /** The 3D lamp can be tapped (it has an entity). */
@@ -2422,6 +2424,12 @@ export class FloorplanViewer {
     const f = fv.floor.furniture.find((m) => m.id === id);
     const p = this.floorPoint(fv, x, y);
     if (!f || !p) return false;
+    if (f.locked) {
+      // fixed: selected, but a drag turns the view instead of moving it
+      this.selectFurniture(f.id);
+      this.options.onFurnitureSelect?.(f.id);
+      return false;
+    }
     this.grab = { floorId: fv.floor.id, id: f.id, offset: [f.x - p[0], f.z - p[1]], x: f.x, z: f.z, moved: false };
     this.selectFurniture(f.id);
     this.options.onFurnitureSelect?.(f.id);
@@ -2433,6 +2441,11 @@ export class FloorplanViewer {
     const fv = d && this.floorMap.get(d.floorId);
     const p = fv && this.floorPoint(fv, x, y);
     if (!d || !fv || !p) return false;
+    if (d.fixed) {
+      this.selectDevice(id);
+      this.options.onDeviceSelect?.(id);
+      return false;
+    }
     this.deviceGrab = { id, floorId: fv.floor.id, offset: [d.x - p[0], d.z - p[1]], x: d.x, z: d.z, moved: false };
     this.selectDevice(id);
     this.options.onDeviceSelect?.(id);

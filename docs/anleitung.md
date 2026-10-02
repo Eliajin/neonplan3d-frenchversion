@@ -112,6 +112,8 @@ Daneben stehen **Rückgängig**, **Wiederholen**, **Alles zeigen** und **3D dane
 
 **Maus und Touch:** Mit zwei Fingern ziehst du die Ansicht, mit zwei Fingern zoomst du. Mit der Maus zoomt das Mausrad, die Ansicht ziehst du auf einer leeren Stelle. **Strg+Z** macht rückgängig, **Strg+Y** oder **Strg+Umschalt+Z** wiederholt, **Entf** löscht das Ausgewählte, **Esc** bricht ab. Die **Pfeiltasten** verschieben das Ausgewählte (Raum, Ecke, Möbel, Gerät, Wand, Außenfläche) um einen Rasterschritt, mit **Umschalt** um 10 cm, mit **Alt** um 1 cm; Türen und Fenster wandern dabei entlang ihrer Wand.
 
+**Fixieren:** Steht etwas an seinem endgültigen Platz, fixierst du es, damit es nicht mehr versehentlich verrutscht: mit dem Schloss **🔓 Fixieren** oben im Formular, mit der Taste **L**, oder per **Rechtsklick** (auf dem Tablet langes Drücken) auf das Ding im Plan. Das Rechtsklick-Menü bietet außerdem **Duplizieren**, **Drehen 90°** und **Löschen**. Ein fixiertes Ding lässt sich auswählen und im Formular bearbeiten, aber nicht mehr ziehen, nicht mit den Pfeiltasten schieben und nur nach Rückfrage löschen; Ziehen bewegt dann die Ansicht. **🔒 Grundriss** in der Werkzeugleiste fixiert alle Räume, Wände, Türen, Fenster und Außenflächen auf einmal, auch neu gezeichnete; Möbel und Geräte bleiben frei. Einzelne Teile löst du trotzdem mit ihrem Schloss. Fixierte Möbel und Geräte bleiben auch in der 3D-Hälfte stehen.
+
 ### 4.2 Etagen
 
 ![Etagen-Einstellungen](images/editor-ha-floors.jpg)

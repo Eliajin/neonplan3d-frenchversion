@@ -112,6 +112,8 @@ Next to them are **Undo**, **Redo**, **Show all** and **3D beside**. A short hin
 
 **Mouse and touch:** Two fingers pan and zoom. With a mouse, the wheel zooms and dragging an empty spot pans. **Ctrl+Z** undoes, **Ctrl+Y** or **Ctrl+Shift+Z** redoes, **Del** deletes the selection, **Esc** cancels. The **arrow keys** nudge the selection (room, corner, furniture, device, wall, outdoor area) by one grid step, with **Shift** by 10 cm, with **Alt** by 1 cm; doors and windows slide along their wall.
 
+**Fixing:** Once something sits in its final place, fix it so it cannot slip by accident: with the lock **🔓 Fix** at the top of its form, with the key **L**, or by **right-click** (long press on a tablet) on it in the plan. The right-click menu also offers **Duplicate**, **Turn 90°** and **Delete**. A fixed item can be selected and edited in its form, but not dragged, not nudged with the arrow keys and only deleted after asking; dragging then moves the view. **🔒 Floor plan** in the toolbar fixes all rooms, walls, doors, windows and outdoor areas at once, newly drawn ones too; furniture and devices stay free. Single parts can still be released with their own lock. Fixed furniture and devices also stay put in the 3D half.
+
 ### 4.2 Floors
 
 ![Floor settings](images/editor-ha-floors.jpg)

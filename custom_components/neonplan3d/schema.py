@@ -34,6 +34,8 @@ ROOM_SCHEMA = vol.Schema(
         vol.Optional("wall_heights"): vol.All(
             [vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.05, max=20)))], vol.Length(max=MAX_POINTS)
         ),
+        # fixed against moving by accident (None = follows the plan lock for structural items)
+        vol.Optional("locked", default=None): vol.Any(None, bool),
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -78,6 +80,8 @@ OPENING_SCHEMA = vol.Schema(
         vol.Optional("cover", default=None): _ENTITY_REF,
         vol.Optional("contact", default=None): _ENTITY_REF,
         vol.Optional("tilt", default=None): _ENTITY_REF,
+        # fixed against moving by accident (None = follows the plan lock for structural items)
+        vol.Optional("locked", default=None): vol.Any(None, bool),
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -131,6 +135,8 @@ FURNITURE_SCHEMA = vol.Schema(
         vol.Optional("scale", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0.2, max=2)),
         vol.Optional("type_entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Optional("types", default=[]): vol.All([_VEHICLE_TYPE_SCHEMA], vol.Length(max=20)),
+        # fixed against moving by accident (None = follows the plan lock for structural items)
+        vol.Optional("locked", default=None): vol.Any(None, bool),
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -153,6 +159,8 @@ PLACEMENT_SCHEMA = vol.Schema(
         vol.Optional("confirm", default=False): bool,
         # its marker in 3D: None = automatic, always, without watts, or hidden
         vol.Optional("marker", default=None): vol.Any(None, vol.In(["always", "no_power", "never"])),
+        # fixed against moving by accident (None = follows the plan lock for structural items)
+        vol.Optional("locked", default=None): vol.Any(None, bool),
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -175,6 +183,8 @@ OUTDOOR_SCHEMA = vol.Schema(
         vol.Required("id"): _ID,
         vol.Required("type"): vol.In(OUTDOOR_TYPES),
         vol.Required("points"): vol.All([_POINT], vol.Length(min=3, max=MAX_POINTS)),
+        # fixed against moving by accident (None = follows the plan lock for structural items)
+        vol.Optional("locked", default=None): vol.Any(None, bool),
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -197,6 +207,8 @@ FREE_WALL_SCHEMA = vol.Schema(
         vol.Required("b"): _POINT,
         vol.Optional("thickness", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.02, max=1))),
         vol.Optional("height", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.05, max=20))),
+        # fixed against moving by accident (None = follows the plan lock for structural items)
+        vol.Optional("locked", default=None): vol.Any(None, bool),
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -229,6 +241,8 @@ SETTINGS_SCHEMA = vol.Schema(
         vol.Required("grid"): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=1)),
         # direction of north in the plan, degrees clockwise from "up"
         vol.Optional("north", default=0): vol.All(vol.Coerce(float), vol.Range(min=-360, max=360)),
+        # plan lock: rooms, walls, doors, windows and outdoor areas cannot be moved by accident
+        vol.Optional("lock_plan", default=False): bool,
         vol.Optional("roof", default=lambda: {"type": "none", "pitch": 35, "overhang": 0.4}): ROOF_SCHEMA,
         # the weather entity for the weather outside (None = the first one)
         vol.Optional("weather_entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),

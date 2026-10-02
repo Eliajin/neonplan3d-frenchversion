@@ -93,6 +93,7 @@ export function buildMarkers(hass: HomeAssistant, building: Building): DeviceMar
         unavailable: isUnavailable(st),
         glow: kind === "light" ? lightGlow(st) : null,
         show: pl.marker ?? undefined,
+        fixed: !!pl.locked,
       });
     }
   }

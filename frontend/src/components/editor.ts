@@ -29,6 +29,7 @@ import {
   FURNITURE_SIZE,
   FURNITURE_TYPES,
   canLift,
+  isFixed,
   isLamp,
   LAMP_MODEL,
   isAxisRect,
@@ -77,6 +78,9 @@ import { load3d } from "../load3d.ts";
 import type { WallMode } from "../viewer/viewer3d.ts";
 import { furnitureName } from "../furniture-names.ts";
 import { furnitureSize, isElectric, mountBase, packItem, packItemName, packType, setPacks, type FurniturePack } from "../packs.ts";
+
+/** Items that can be fixed against moving. */
+type FixKind = "room" | "opening" | "furniture" | "device" | "wall" | "outdoor";
 
 type Tool = "select" | "rect" | "polygon" | "measure" | "opening" | "furniture" | "outdoor" | "hole" | "wall" | "meter";
 
@@ -143,6 +147,8 @@ export class Fp3dEditor extends LitElement {
     _outdoorId: { state: true },
     _wallId: { state: true },
     _edgeHi: { state: true },
+    _ctx: { state: true },
+    _fixedHint: { state: true },
     _floorMenu: { state: true },
     _openingPreset: { state: true },
     _measureLen: { state: true },
@@ -204,6 +210,13 @@ export class Fp3dEditor extends LitElement {
   /** Selected room wall (id from generateWalls), to set its height. */
   /** Edge of the selected room highlighted from the wall height list. */
   private declare _edgeHi: number | null;
+  /** Open context menu (right-click, long press) at a plan point, for one item. */
+  private declare _ctx: { x: number; y: number; kind: FixKind; id: string } | null;
+  /** A drag on a fixed item was turned into panning: the hint line says why. */
+  private declare _fixedHint: boolean;
+  private fixedPan = false;
+  private pressTimer = 0;
+  private pressStart: [number, number] | null = null;
   /** The "add floor" menu with the floors of Home Assistant is open. */
   private declare _floorMenu: boolean;
   /** Kind of opening the opening tool places (the last one chosen). */
@@ -453,6 +466,7 @@ export class Fp3dEditor extends LitElement {
           : nothing}
         <button class="fp3d-chip" @click=${() => this.rotateFurniture(-45)}>↺ 45°</button>
         <button class="fp3d-chip" @click=${() => this.rotateFurniture(45)}>↻ 45°</button>
+        ${this.fixButton("furniture", f.id)}
         <button class="fp3d-chip fp3d-danger-chip" @click=${() => this.deleteFurniture()}>${this.t("delete")}</button>
       </div>`;
     }
@@ -483,7 +497,8 @@ export class Fp3dEditor extends LitElement {
         </label>
         <button class="fp3d-chip" @click=${() => this.updateDevice({ rotation: ((((d.rotation ?? 0) - 45) % 360) + 360) % 360 })}>↺ 45°</button>
         <button class="fp3d-chip" @click=${() => this.updateDevice({ rotation: (((d.rotation ?? 0) + 45) % 360) % 360 })}>↻ 45°</button>
-        <button class="fp3d-chip fp3d-danger-chip" @click=${() => this.removeDevice(d.entity_id)}>${this.t("delete")}</button>
+        ${this.fixButton("device", d.entity_id)}
+        <button class="fp3d-chip fp3d-danger-chip" @click=${() => this.deleteItem("device", d.entity_id)}>${this.t("delete")}</button>
       </div>`;
     }
     return nothing;
@@ -732,6 +747,48 @@ export class Fp3dEditor extends LitElement {
   // ------------------------------------------------------------------ pointer input
 
   private onPointerDown(e: PointerEvent): void {
+    this._ctx = null;
+    this._fixedHint = false;
+    this.fixedPan = false;
+    this.pointerDown(e);
+    if (this.pointers.size !== 1) {
+      clearTimeout(this.pressTimer);
+      return;
+    }
+    this.guardFixed(this.localPoint(e));
+    clearTimeout(this.pressTimer);
+    this.pressStart = null;
+    if (e.pointerType === "touch" && (this._tool === "select" || this._tool === "furniture")) {
+      const at = this.localPoint(e);
+      const target = e.target as Element;
+      this.pressStart = at;
+      this.pressTimer = window.setTimeout(() => {
+        const d = this.drag;
+        if (d && "moved" in d && d.moved) return;
+        this.drag = null;
+        this.openContext(target, at);
+      }, 550);
+    }
+  }
+
+  /** A drag that would move a fixed item pans the view instead (the item stays selected). */
+  private guardFixed(local: [number, number]): void {
+    const d = this.drag;
+    if (!d) return;
+    let target: [FixKind, string] | null = null;
+    if (d.kind === "vertex" || d.kind === "room") target = ["room", d.roomId];
+    else if (d.kind === "device" || d.kind === "aim") target = ["device", d.entityId];
+    else if (d.kind === "opening") target = ["opening", d.id];
+    else if (d.kind === "furniture" || d.kind === "rotate" || d.kind === "resize") target = ["furniture", d.id];
+    else if (d.kind === "wallmove") target = ["wall", d.id];
+    else if (d.kind === "outdoor") target = ["outdoor", d.id];
+    if (!target || !this.isFixedItem(...target)) return;
+    if ("moved" in d && d.moved && "base" in d) this.restoreLive(d.base);
+    this.drag = { kind: "pan", last: local };
+    this.fixedPan = true;
+  }
+
+  private pointerDown(e: PointerEvent): void {
     const svgEl = e.currentTarget as SVGSVGElement;
     svgEl.setPointerCapture(e.pointerId);
     const local = this.localPoint(e);
@@ -886,6 +943,14 @@ export class Fp3dEditor extends LitElement {
   }
 
   private onPointerMove(e: PointerEvent): void {
+    if (this.pressStart) {
+      const p = this.localPoint(e);
+      if (Math.hypot(p[0] - this.pressStart[0], p[1] - this.pressStart[1]) > 8) {
+        clearTimeout(this.pressTimer);
+        this.pressStart = null;
+        if (this.fixedPan) this._fixedHint = true;
+      }
+    } else if (this.fixedPan && !this._fixedHint && this.drag?.kind === "pan") this._fixedHint = true;
     const local = this.localPoint(e);
     if (this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId, local);
     if (this.pinch) {
@@ -1066,6 +1131,9 @@ export class Fp3dEditor extends LitElement {
   }
 
   private onPointerUp(e: PointerEvent): void {
+    clearTimeout(this.pressTimer);
+    this.pressStart = null;
+    this.fixedPan = false;
     this.pointers.delete(e.pointerId);
     if (this.pinch) {
       if (this.pointers.size < 2) this.pinch = null;
@@ -1312,7 +1380,7 @@ export class Fp3dEditor extends LitElement {
 
   private deleteFreeWall(): void {
     const id = this._wallId;
-    if (!id || !this.isAdmin) return;
+    if (!id || !this.isAdmin || !this.confirmFixedDelete("wall", id)) return;
     this.change((_, floor) => {
       floor.walls = (floor.walls ?? []).filter((w) => w.id !== id);
       floor.openings = floor.openings.filter((o) => o.wall !== id);
@@ -1330,7 +1398,7 @@ export class Fp3dEditor extends LitElement {
         <line class="fp3d-hit" x1=${x0} y1=${y0} x2=${x1} y2=${y1} />
         <line class="fp3d-free-wall-line" x1=${x0} y1=${y0} x2=${x1} y2=${y1} />
       </g>
-      ${sel && this.isAdmin
+      ${sel && this.isAdmin && !isFixed(w, true, this._doc.settings)
         ? svg`<g class="fp3d-vertex" data-wall-end=${`${w.id}:a`}><circle cx=${x0} cy=${y0} r="16" class="fp3d-hit" /><circle cx=${x0} cy=${y0} r="6" /></g>
             <g class="fp3d-vertex" data-wall-end=${`${w.id}:b`}><circle cx=${x1} cy=${y1} r="16" class="fp3d-hit" /><circle cx=${x1} cy=${y1} r="6" /></g>`
         : nothing}`;
@@ -1346,7 +1414,7 @@ export class Fp3dEditor extends LitElement {
       this.updateFreeWall({ b: [round(w.a[0] + (w.b[0] - w.a[0]) * k), round(w.a[1] + (w.b[1] - w.a[1]) * k)] });
     };
     return html`<section>
-      <h3>${this.t("free_wall")}</h3>
+      <div class="fp3d-h3row"><h3>${this.t("free_wall")}</h3>${this.fixButton("wall", w.id)}</div>
       <div class="fp3d-form">
         ${this.num(this.t("wall_length"), length, setLength, 0.01, 0.1)}
         ${this.num(this.t("wall_thickness"), w.thickness ?? this._doc.settings.wall_interior, (v) => this.updateFreeWall({ thickness: Math.min(1, Math.max(0.02, v)) }), 0.01, 0.02)}
@@ -1399,7 +1467,7 @@ export class Fp3dEditor extends LitElement {
 
   private deleteOutdoor(): void {
     const id = this._outdoorId;
-    if (!id || !this.isAdmin) return;
+    if (!id || !this.isAdmin || !this.confirmFixedDelete("outdoor", id)) return;
     this.change((_, floor) => (floor.outdoor = floor.outdoor.filter((o) => o.id !== id)));
     this._outdoorId = null;
   }
@@ -1442,15 +1510,16 @@ export class Fp3dEditor extends LitElement {
       e.preventDefault();
       this.duplicateRoom();
     } else if (e.key === "Delete" || (e.key === "Backspace" && (this._tool === "select" || this._tool === "furniture"))) {
-      if (this._deviceId) {
-        this.removeDevice(this._deviceId);
-        this._deviceId = null;
-      } else if (this._outdoorId) this.deleteOutdoor();
+      if (this._deviceId) this.deleteItem("device", this._deviceId);
+      else if (this._outdoorId) this.deleteOutdoor();
       else if (this._wallId) this.deleteFreeWall();
       else if (this._openingId) this.deleteOpening();
       else if (this._furnitureId) this.deleteFurniture();
       else if (this._vertex !== null) this.deleteVertex(this._vertex);
       else this.deleteRoom();
+    } else if (e.key.toLowerCase() === "l" && !mod && this.selectedFix) {
+      const s = this.selectedFix;
+      this.toggleFixed(s.kind, s.id);
     } else if (Object.hasOwn(ARROWS, e.key) && !mod && (this._tool === "select" || this._tool === "furniture")) {
       // arrow keys nudge the selection: one grid step, Shift 10 cm, Alt 1 cm
       const step = e.altKey ? 0.01 : e.shiftKey ? 0.1 : this._doc.settings.grid;
@@ -1463,6 +1532,10 @@ export class Fp3dEditor extends LitElement {
     } else if (e.key === "Enter" && this._tool === "polygon") {
       this.closeDraft();
     } else if (e.key === "Escape") {
+      if (this._ctx) {
+        this._ctx = null;
+        return;
+      }
       if (this._draft.length) this._draft = [];
       else if (this._tool !== "select") this._tool = "select";
       else this.selectItem("room", null);
@@ -1476,6 +1549,11 @@ export class Fp3dEditor extends LitElement {
   private nudge(dx: number, dz: number): boolean {
     const floor = this.floor;
     if (!floor || !this.isAdmin) return false;
+    const fix = this.selectedFix;
+    if (fix && this.isFixedItem(fix.kind, fix.id)) {
+      this._fixedHint = true;
+      return true;
+    }
     const mv = (p: Vec2): Vec2 => [round(p[0] + dx), round(p[1] + dz)];
     if (this._deviceId) {
       const id = this._deviceId;
@@ -1597,7 +1675,7 @@ export class Fp3dEditor extends LitElement {
 
   private deleteRoom(): void {
     const id = this._roomId;
-    if (!id || !this.isAdmin) return;
+    if (!id || !this.isAdmin || !this.confirmFixedDelete("room", id)) return;
     this.change((_, floor) => {
       const room = floor.rooms.find((r) => r.id === id);
       floor.rooms = floor.rooms.filter((r) => r.id !== id);
@@ -1614,6 +1692,142 @@ export class Fp3dEditor extends LitElement {
     const id = uid("room");
     this.change((_, floor) => floor.rooms.push({ ...structuredClone(room), id, points: room.points.map(([x, z]) => [round(x + 0.5), round(z + 0.5)]) }));
     this._roomId = id;
+  }
+
+  /** The item of a fixable kind on a floor. */
+  private fixItem(floor: Floor | undefined, kind: FixKind, id: string): { locked?: boolean | null } | undefined {
+    if (!floor) return undefined;
+    switch (kind) {
+      case "room":
+        return floor.rooms.find((r) => r.id === id);
+      case "opening":
+        return floor.openings.find((o) => o.id === id);
+      case "furniture":
+        return floor.furniture.find((m) => m.id === id);
+      case "device":
+        return floor.placements.find((p) => p.entity_id === id);
+      case "wall":
+        return (floor.walls ?? []).find((w) => w.id === id);
+      case "outdoor":
+        return floor.outdoor.find((a) => a.id === id);
+    }
+  }
+
+  /** Fixed by itself, or (rooms, walls, doors, windows, outdoor areas) by the plan lock. */
+  private isFixedItem(kind: FixKind, id: string): boolean {
+    return isFixed(this.fixItem(this.floor, kind, id), kind !== "furniture" && kind !== "device", this._doc.settings);
+  }
+
+  private toggleFixed(kind: FixKind, id: string): void {
+    if (!this.isAdmin) return;
+    const next = !this.isFixedItem(kind, id);
+    this.change((_, floor) => {
+      const item = this.fixItem(floor, kind, id);
+      if (item) item.locked = next;
+    });
+  }
+
+  private toggleLockPlan(): void {
+    if (!this.isAdmin) return;
+    this.change((doc) => (doc.settings.lock_plan = !doc.settings.lock_plan));
+  }
+
+  /** The selected item (for the L key and nudging), the most specific selection first. */
+  private get selectedFix(): { kind: FixKind; id: string } | null {
+    if (this._deviceId) return { kind: "device", id: this._deviceId };
+    if (this._openingId) return { kind: "opening", id: this._openingId };
+    if (this._furnitureId) return { kind: "furniture", id: this._furnitureId };
+    if (this._wallId) return { kind: "wall", id: this._wallId };
+    if (this._outdoorId) return { kind: "outdoor", id: this._outdoorId };
+    if (this._roomId) return { kind: "room", id: this._roomId };
+    return null;
+  }
+
+  /** A fixed item is only deleted after asking. */
+  private confirmFixedDelete(kind: FixKind, id: string): boolean {
+    return !this.isFixedItem(kind, id) || confirm(this.t("fixed_delete_confirm"));
+  }
+
+  private onContextMenu(e: MouseEvent): void {
+    e.preventDefault();
+    if (this._tool !== "select" && this._tool !== "furniture") return;
+    this.drag = null;
+    this.openContext(e.target as Element, this.localPoint(e as PointerEvent));
+  }
+
+  /** Select the item under a plan point and open its menu. */
+  private openContext(target: Element, local: [number, number]): void {
+    if (!this.isAdmin || !this.floor) return;
+    const world = this.toWorld(...local);
+    const attr = (sel: string) => target.closest(`[${sel}]`)?.getAttribute(sel) ?? null;
+    let hit: [FixKind, string] | null = null;
+    const device = attr("data-device");
+    const opening = attr("data-opening");
+    const furniture = target.closest("[data-vertex], [data-mid]") ? null : attr("data-furniture");
+    const wall = attr("data-free-wall");
+    const outdoor = attr("data-outdoor");
+    const room = attr("data-room") ?? this.roomAt(world);
+    if (device) hit = ["device", device];
+    else if (opening) hit = ["opening", opening];
+    else if (furniture) hit = ["furniture", furniture];
+    else if (wall) hit = ["wall", wall];
+    else if (outdoor && !room) hit = ["outdoor", outdoor];
+    else if (room) hit = ["room", room];
+    if (!hit) {
+      this._ctx = null;
+      return;
+    }
+    const [kind, id] = hit;
+    this.selectItem(kind, id);
+    if (kind === "opening" || kind === "furniture") this._roomId = this._roomId ?? room;
+    this._ctx = { x: local[0], y: local[1], kind, id };
+  }
+
+  private deleteItem(kind: FixKind, id: string): void {
+    if (kind === "device") {
+      if (!this.confirmFixedDelete(kind, id)) return;
+      this.removeDevice(id);
+      this._deviceId = null;
+      return;
+    }
+    // the delete methods ask themselves for fixed items
+    if (kind === "room") this.deleteRoom();
+    else if (kind === "opening") this.deleteOpening();
+    else if (kind === "furniture") this.deleteFurniture();
+    else if (kind === "wall") this.deleteFreeWall();
+    else this.deleteOutdoor();
+  }
+
+  private renderContext() {
+    const c = this._ctx;
+    if (!c) return nothing;
+    const fixed = this.isFixedItem(c.kind, c.id);
+    const wrap = this.renderRoot.querySelector(".fp3d-canvas-wrap") as HTMLElement | null;
+    // keep the menu inside the plan
+    const x = Math.max(4, Math.min(c.x, (wrap?.clientWidth ?? 800) - 190));
+    const y = Math.max(4, Math.min(c.y, (wrap?.clientHeight ?? 600) - 190));
+    const run = (fn: () => void) => () => {
+      this._ctx = null;
+      fn();
+    };
+    return html`<div class="fp3d-ctx" style=${`left:${x}px;top:${y}px`} @pointerdown=${(e: Event) => e.stopPropagation()} @contextmenu=${(e: Event) => e.preventDefault()}>
+      <button title=${this.t("fix_hint")} @click=${run(() => this.toggleFixed(c.kind, c.id))}>${fixed ? `🔓 ${this.t("unfix")}` : `🔒 ${this.t("fix")}`}</button>
+      ${c.kind === "room" ? html`<button @click=${run(() => this.duplicateRoom())}>⧉ ${this.t("duplicate")}</button>` : nothing}
+      ${c.kind === "furniture"
+        ? html`<button @click=${run(() => this.duplicateFurniture())}>⧉ ${this.t("duplicate")}</button>
+            <button ?disabled=${fixed} @click=${run(() => this.rotateFurniture(90))}>↻ ${this.t("ctx_rotate")}</button>`
+        : nothing}
+      <button class="fp3d-ctx-danger" @click=${run(() => this.deleteItem(c.kind, c.id))}>✕ ${this.t("delete")}</button>
+    </div>`;
+  }
+
+  /** Lock button in the form of an item. */
+  private fixButton(kind: FixKind, id: string) {
+    if (!this.isAdmin) return nothing;
+    const fixed = this.isFixedItem(kind, id);
+    return html`<button class="fp3d-btn fp3d-fix" aria-pressed=${fixed} title=${this.t("fix_hint")} @click=${() => this.toggleFixed(kind, id)}>
+      ${fixed ? `🔒 ${this.t("unfix")}` : `🔓 ${this.t("fix")}`}
+    </button>`;
   }
 
   /** Select a room, an opening or a furniture item (only one at a time). */
@@ -1734,7 +1948,7 @@ export class Fp3dEditor extends LitElement {
 
   private deleteOpening(): void {
     const id = this._openingId;
-    if (!id || !this.isAdmin) return;
+    if (!id || !this.isAdmin || !this.confirmFixedDelete("opening", id)) return;
     this.change((_, floor) => (floor.openings = floor.openings.filter((o) => o.id !== id)));
     this._openingId = null;
   }
@@ -1774,7 +1988,7 @@ export class Fp3dEditor extends LitElement {
 
   private deleteFurniture(): void {
     const id = this._furnitureId;
-    if (!id || !this.isAdmin) return;
+    if (!id || !this.isAdmin || !this.confirmFixedDelete("furniture", id)) return;
     this.change((_, floor) => (floor.furniture = floor.furniture.filter((f) => f.id !== id)));
     this._furnitureId = null;
   }
@@ -2002,6 +2216,7 @@ export class Fp3dEditor extends LitElement {
               <button ?disabled=${!this._canRedo} @click=${() => this.redo()} title="Ctrl+Y">${this.t("redo")}</button>
               <button @click=${() => this.fit()}>${this.t("fit")}</button>
               <button aria-pressed=${this._split} title=${this.t("split_3d_hint")} @click=${() => this.toggleSplit()}>${this.t("split_3d")}</button>
+              ${this.isAdmin ? html`<button aria-pressed=${!!this._doc.settings.lock_plan} title=${this.t("lock_plan_hint")} @click=${() => this.toggleLockPlan()}>${this.t("lock_plan")}</button>` : nothing}
             </div>
             ${walls?.warnings.length ? html`<span class="fp3d-warn">${this.t("overlap_warning")}</span>` : nothing}
           </div>
@@ -2017,17 +2232,18 @@ export class Fp3dEditor extends LitElement {
                 if (!this.drag) this._cursor = null;
               }}
               @wheel=${this.onWheel}
-              @contextmenu=${(e: Event) => e.preventDefault()}
+              @contextmenu=${this.onContextMenu}
             >
               ${this.renderBackground(floor)} ${this.renderGrid()} ${this.renderGhost()} ${walls ? this.renderWalls(walls.walls) : nothing}
               ${floor ? this.renderOutdoor(floor) : nothing} ${floor ? this.renderRooms(floor) : nothing} ${floor ? this.renderFurniture(floor) : nothing}
               ${floor ? this.renderFreeWalls(floor) : nothing}
               ${floor && walls ? this.renderOpenings(floor, walls.walls) : nothing} ${floor ? this.renderMeter(floor) : nothing}
               ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
-              ${this.room && this.isAdmin && this._tool === "select" && !this._openingId && !this._furnitureId ? this.renderHandles(this.room) : nothing}
+              ${this.room && this.isAdmin && this._tool === "select" && !this._openingId && !this._furnitureId && !this.isFixedItem("room", this.room.id) ? this.renderHandles(this.room) : nothing}
               ${this.renderDraft()} ${this.renderGuides()}
             </svg>
-            <p class="fp3d-hint">${!floor ? this.t("hint_empty") : this.t(`hint_${this._tool}` as I18nKey)}</p>
+            ${this.renderContext()}
+            <p class="fp3d-hint ${this._fixedHint ? "fp3d-hint-fixed" : ""}">${!floor ? this.t("hint_empty") : this._fixedHint ? this.t("fixed_drag_hint") : this.t(`hint_${this._tool}` as I18nKey)}</p>
           </div>
           ${this._split && !this.narrow
             ? html`<div class="fp3d-split-handle" title=${this.t("split_handle_hint")} @pointerdown=${this.onSplitDown}></div>`
@@ -2169,7 +2385,7 @@ export class Fp3dEditor extends LitElement {
       this.updateOutdoor({ points: [[x0, z0], [x1, z0], [x1, z1], [x0, z1]].map(([x, z]) => [round(x), round(z)] as Vec2) });
     };
     return html`<section>
-      <h3>${this.t("outdoor")}</h3>
+      <div class="fp3d-h3row"><h3>${this.t("outdoor")}</h3>${this.fixButton("outdoor", a.id)}</div>
       <div class="fp3d-form">
         <label class="fp3d-field fp3d-wide"
           >${this.t("outdoor_type")}
@@ -2247,7 +2463,7 @@ export class Fp3dEditor extends LitElement {
         </g>
         ${big ? svg`<text x=${cx} y=${cy + 4}>${furnitureName(this.hass, f.type)}</text>` : nothing}
       </g>
-      ${sel && this.isAdmin
+      ${sel && this.isAdmin && !f.locked
         ? ([[-1, -1], [1, -1], [1, 1], [-1, 1]] as const).map(([sx, sz]) => {
             const [x, y] = this.toScreen([f.x + (sx * f.w * Math.cos(a)) / 2 - (sz * f.d * Math.sin(a)) / 2, f.z + (sx * f.w * Math.sin(a)) / 2 + (sz * f.d * Math.cos(a)) / 2]);
             return svg`<g class="fp3d-resize" data-resize=${`${f.id}:${sx}:${sz}`}>
@@ -2263,7 +2479,8 @@ export class Fp3dEditor extends LitElement {
             return svg`<text class="fp3d-dim" x=${lx} y=${ly + 4}>${formatNumber(this.hass, f.w, 2)} × ${formatNumber(this.hass, f.d, 2)} m</text>`;
           })()
         : nothing}
-      ${sel && this.isAdmin
+      ${sel && f.locked ? svg`<text class="fp3d-lock" x=${hx} y=${hy + 5}>🔒</text>` : nothing}
+      ${sel && this.isAdmin && !f.locked
         ? svg`<g class="fp3d-rotate" data-rotate=${f.id}>
             <line x1=${fx} y1=${fy} x2=${hx} y2=${hy} />
             <circle cx=${hx} cy=${hy} r="16" class="fp3d-hit" />
@@ -2406,7 +2623,7 @@ export class Fp3dEditor extends LitElement {
     const [hx, hy] = at(0, reach);
     return svg`<g class="fp3d-wedge ${sel ? "fp3d-wedge-sel" : ""}">
       ${fov >= 360 ? svg`<circle cx=${cx} cy=${cy} r=${rp} />` : svg`<path d=${path} />`}
-      ${sel && this.isAdmin
+      ${sel && this.isAdmin && !pl.locked
         ? svg`<g class="fp3d-rotate" data-aim=${pl.entity_id}>
             <line x1=${cx} y1=${cy} x2=${hx} y2=${hy} />
             <circle cx=${hx} cy=${hy} r="16" class="fp3d-hit" />
@@ -2726,7 +2943,7 @@ export class Fp3dEditor extends LitElement {
     const rect = isAxisRect(room.points);
     const b = bounds(room.points);
     return html`<section>
-      <h3>${this.t("room")}</h3>
+      <div class="fp3d-h3row"><h3>${this.t("room")}</h3>${this.fixButton("room", room.id)}</div>
       <div class="fp3d-form">
         <label class="fp3d-field fp3d-wide"
           >${this.t("room_name")}
@@ -2983,7 +3200,7 @@ export class Fp3dEditor extends LitElement {
     const preset = openingPreset(o);
     const door = o.type === "door";
     return html`<section>
-      <h3>${this.t(`preset_${preset}` as I18nKey)}</h3>
+      <div class="fp3d-h3row"><h3>${this.t(`preset_${preset}` as I18nKey)}</h3>${this.fixButton("opening", o.id)}</div>
       ${admin
         ? html`<div class="fp3d-presets" role="group" aria-label=${this.t("opening_type")}>
             ${(Object.keys(OPENING_PRESETS) as OpeningPreset[]).map(
@@ -3058,7 +3275,7 @@ export class Fp3dEditor extends LitElement {
   private renderFurnitureForm(f: Furniture) {
     const admin = this.isAdmin;
     return html`<section>
-      <h3>${this.t("furniture")}</h3>
+      <div class="fp3d-h3row"><h3>${this.t("furniture")}</h3>${this.fixButton("furniture", f.id)}</div>
       <div class="fp3d-form">
         <label class="fp3d-field fp3d-wide"
           >${this.t("furniture_type")}
@@ -3603,7 +3820,7 @@ export class Fp3dEditor extends LitElement {
     const mount = pl.mount ?? "ceiling";
     const auto = kind ? defaultHeight(kind, this.floor?.height ?? 2.5, light ? mount : null) : 1;
     return html`<section>
-      <h3>${this.t("device")}</h3>
+      <div class="fp3d-h3row"><h3>${this.t("device")}</h3>${this.fixButton("device", pl.entity_id)}</div>
       <p class="fp3d-dev-title">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d=${kind ? iconPath(kind) : ""} />
@@ -4604,6 +4821,64 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-wall-low {
         opacity: 0.55;
+      }
+      .fp3d-h3row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .fp3d-h3row h3 {
+        margin-bottom: 0;
+      }
+      .fp3d-fix {
+        min-height: 30px;
+        padding: 4px 10px;
+        font-size: 13px;
+      }
+      .fp3d-fix[aria-pressed="true"] {
+        border-color: var(--fp3d-accent);
+        color: var(--fp3d-accent);
+      }
+      .fp3d-lock {
+        font-size: 13px;
+        text-anchor: middle;
+        pointer-events: none;
+      }
+      .fp3d-hint-fixed {
+        color: var(--fp3d-accent);
+      }
+      .fp3d-ctx {
+        position: absolute;
+        z-index: 5;
+        display: flex;
+        flex-direction: column;
+        min-width: 170px;
+        padding: 4px;
+        border: 1px solid var(--fp3d-line);
+        border-radius: 10px;
+        background: var(--fp3d-panel, #111a2e);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      }
+      .fp3d-ctx button {
+        padding: 8px 12px;
+        border: none;
+        border-radius: 7px;
+        background: none;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .fp3d-ctx button:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--fp3d-accent) 16%, transparent);
+      }
+      .fp3d-ctx button:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .fp3d-ctx-danger {
+        color: var(--fp3d-danger, #ff6b7a) !important;
       }
       .fp3d-edge-hi {
         stroke: var(--fp3d-accent);

@@ -8,6 +8,7 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 
 ### New
 
+- **Fixing items and locking the floor plan** (lock in the form, key L, right-click menu with duplicate, turn and delete).
 - **More sensors:** gas and water meters, energy, illuminance, pressure and air quality can be placed; values use Home Assistant's decimals (#7).
 - **TV on a smart plug:** TVs and media walls may link a switch instead of a media player (#5).
 - **Marker in 3D per device:** automatic, always, without watts or hidden.
