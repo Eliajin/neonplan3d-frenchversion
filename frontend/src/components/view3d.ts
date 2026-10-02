@@ -825,7 +825,10 @@ export class Fp3dView3d extends LitElement {
     const st = entity ? hass.states[entity] : undefined;
     const item = packItem(f.type);
     const model = LAMP_MODEL[f.type] ?? item?.light ?? "floor";
-    const base = item || model === "wall" || model === "strip"
+    // a height above the floor set by hand wins (a table lamp on a shelf, a floor lamp on a platform)
+    const base = f.mount_y != null && !item
+      ? f.mount_y
+      : item || model === "wall" || model === "strip"
       ? mountBase(floor, f)
       : model === "table"
         ? surfaceHeight(floor, f.x, f.z)
@@ -845,8 +848,8 @@ export class Fp3dView3d extends LitElement {
       spot: H - 0.35,
       panel: H - 0.25,
       pendant: Math.max(0.6, H - f.h - 0.25),
-      floor: f.h + 0.25,
-      uplight: f.h + 0.25,
+      floor: base + f.h + 0.25,
+      uplight: base + f.h + 0.25,
       table: base + f.h + 0.2,
       wall: base + f.h + 0.2,
       strip: Math.max(0.3, base - 0.2),

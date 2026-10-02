@@ -1241,8 +1241,8 @@ export class FloorplanViewer {
         spot: [H - h, "spot"],
         panel: [H - 0.05, "ceiling"],
         pendant: [Math.max(0.5, H - h), "pendant"],
-        floor: [h - 0.15, "omni"],
-        uplight: [h, "up"],
+        floor: [base + h - 0.15, "omni"],
+        uplight: [base + h, "up"],
         table: [base + h - 0.1, "omni"],
         wall: [base + 0.1, "wall"],
         // a strip under the ceiling or the wall cabinets shines down; one low down (skirting,
@@ -1965,8 +1965,8 @@ export class FloorplanViewer {
         spot: H - h,
         panel: H - 0.03,
         pendant: Math.max(0.4, H - h) + 0.08,
-        floor: h - 0.15,
-        uplight: h,
+        floor: base + h - 0.15,
+        uplight: base + h,
         table: base + h - 0.09,
         wall: base + h / 2,
         strip: base + Math.max(0.02, h) - 0.01,
@@ -3394,11 +3394,11 @@ export function pushLampModel(
       box(-w / 2 + 0.02, w / 2 - 0.02, -dd / 2 + 0.02, dd / 2 - 0.02, H - Math.max(0.015, h) - 0.004, H - Math.max(0.015, h), shadeCol);
       break;
     case "uplight":
-      cyl(Math.max(0.1, r * 0.6), 0, 0.03, LAMP_BODY, LAMP_BODY);
-      cyl(0.014, 0.03, h - 0.12, LAMP_BODY, LAMP_BODY, 6);
+      cyl(Math.max(0.1, r * 0.6), base, base + 0.03, LAMP_BODY, LAMP_BODY);
+      cyl(0.014, base + 0.03, base + h - 0.12, LAMP_BODY, LAMP_BODY, 6);
       // bowl open to the top: dark outside, glowing rim
-      cyl(r, h - 0.14, h - 0.02, LAMP_BODY, LAMP_BODY);
-      cyl(r * 0.92, h - 0.02, h, shadeCol, shadeCol);
+      cyl(r, base + h - 0.14, base + h - 0.02, LAMP_BODY, LAMP_BODY);
+      cyl(r * 0.92, base + h - 0.02, base + h, shadeCol, shadeCol);
       break;
     case "bollard":
       // path light: post with a glowing band under its cap
@@ -3413,9 +3413,9 @@ export function pushLampModel(
       cyl(r * 0.8, base + h - 0.01, base + h, shadeCol, shadeCol, 10);
       break;
     case "floor":
-      cyl(Math.max(0.1, r * 0.7), 0, 0.03, LAMP_BODY, LAMP_BODY);
-      cyl(0.014, 0.03, h - 0.28, LAMP_BODY, LAMP_BODY, 6);
-      cyl(r, h - 0.3, h, shadeCol, shadeCol);
+      cyl(Math.max(0.1, r * 0.7), base, base + 0.03, LAMP_BODY, LAMP_BODY);
+      cyl(0.014, base + 0.03, base + h - 0.28, LAMP_BODY, LAMP_BODY, 6);
+      cyl(r, base + h - 0.3, base + h, shadeCol, shadeCol);
       break;
     case "table":
       cyl(Math.max(0.05, r * 0.55), base, base + 0.03, LAMP_BODY, LAMP_BODY);
