@@ -47,3 +47,21 @@ test("loft and lying cylinder parts build finite geometry with their outlines", 
   const wheelSegs = lines.p.length / 6 - 8;
   assert.ok(wheelSegs === 28);
 });
+
+test("a built-in item lifted by its mount height (a dryer on the washer) leaves the floor", () => {
+  const dryer = { id: "d", type: "dryer", x: 0, z: 0, w: 0.6, d: 0.6, h: 0.85, rotation: 0, variant: null } as Furniture;
+  const ys = (base: number) => {
+    const buf = new GeoBuffer();
+    const shadow = new GeoBuffer();
+    pushFurniture(buf, new LineBuffer(), shadow, dryer, base);
+    const y = buf.p.filter((_, i) => i % 3 === 1);
+    return { min: Math.min(...y), max: Math.max(...y), shadow: shadow.p.length };
+  };
+  const floor = ys(0);
+  const lifted = ys(0.85);
+  assert.ok(Math.abs(floor.min) < 1e-6 && floor.shadow > 0);
+  assert.ok(Math.abs(lifted.min - 0.85) < 1e-6, `min ${lifted.min}`);
+  assert.ok(Math.abs(lifted.max - floor.max - 0.85) < 1e-6);
+  // no contact shadow on the floor under a lifted item
+  assert.equal(lifted.shadow, 0);
+});

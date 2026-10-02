@@ -4,7 +4,13 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 [releases page](https://github.com/Mastershort/neonplan3d/releases). Ideas and votes:
 [Discussions → Ideas](https://github.com/Mastershort/neonplan3d/discussions/categories/ideas).
 
-## 1.3.0 – unreleased
+## 1.3.1
+
+### Fixes
+
+- Built-in furniture follows its height above floor in 3D (a dryer on the washing machine, #13).
+
+## 1.3.0
 
 ### New
 
