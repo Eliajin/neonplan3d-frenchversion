@@ -18,17 +18,17 @@ function house(type: "none" | "flat" | "gable") {
 
 test("the roof sits on the highest floor with rooms", () => {
   assert.equal(roofFloor(house("gable"))?.id, "og");
-  assert.equal(buildRoof(house("none")), null);
+  assert.equal(buildRoof(house("none")).length, 0);
 });
 
 test("a gable roof rises to half the house depth times the slope", () => {
-  const roof = buildRoof(house("gable"))!;
+  const roof = buildRoof(house("gable"))[0];
   const p = roof.solid.p;
   let top = -Infinity;
   for (let i = 1; i < p.length; i += 3) top = Math.max(top, p[i]);
   // 8 m deep + 2 × (0.24 wall + 0.5 overhang) = 9.48 m; half of it at 45° rises as much
   assert.ok(Math.abs(top - 9.48 / 2) < 1e-6, `ridge at ${top}`);
-  assert.ok(buildRoof(house("flat"))!.solid.count > 0);
+  assert.ok(buildRoof(house("flat"))[0].solid.count > 0);
 });
 
 test("a gable ridge can run along the short side", () => {
@@ -36,7 +36,7 @@ test("a gable ridge can run along the short side", () => {
   const ridge = (dir?: "long" | "short") => {
     const b = house("gable");
     b.settings.roof.ridge = dir;
-    const p = buildRoof(b)!.solid.p;
+    const p = buildRoof(b)[0].solid.p;
     let top = -Infinity;
     for (let i = 1; i < p.length; i += 3) top = Math.max(top, p[i]);
     let x = [Infinity, -Infinity];

@@ -107,6 +107,7 @@ The editor has the floor plan in the middle, the toolbar at the top and the side
 | **Furniture** | Open the furniture library |
 | **Outdoor** | Draw outdoor areas such as lawn, terrace or pool |
 | **Floor opening** | Draw a hole into the floor, e.g. above the staircase |
+| **Roof** | Draw, move and set up roof sections, see [4.19](#419-roof) |
 
 Next to them are **Undo**, **Redo**, **Show all** and **3D beside**. A short hint for the active tool is always shown at the bottom of the plan.
 
@@ -162,7 +163,7 @@ Walls are created automatically: every shared edge of two rooms becomes an inter
 | **Exterior wall (m)**, **Interior wall (m)** | Wall thicknesses |
 | **Grid (m)** | Drawing step |
 | **North** | Degrees clockwise from up. Needed for sunlight |
-| **Roof** | No roof, flat roof or gable roof, with pitch and overhang. For a gable roof, **Ridge** sets whether the ridge runs along the long or the short side (e.g. terraced house) |
+| **Roof** | No roof, flat roof or gable roof, with pitch and overhang. For a gable roof, **Ridge** sets whether the ridge runs along the long or the short side (e.g. terraced house). **Roof sections (custom)** builds the roof from several parts, see [4.19](#419-roof) |
 | **Weather entity** | Which weather entity drives the weather outside, see [6.2](#62-weather-outside) |
 | **Weather effects in 3D** | Which effects are shown |
 
@@ -330,6 +331,22 @@ With **Outdoor** you draw lawn, terrace, path, driveway, pool, flower bed, hedge
 - At the top of the 3D half you switch between **Tall walls** and **Cut**.
 - You can also tap and drag an item or device in the 3D half. A bar with width, depth, height, height above the floor, rotation and delete appears at the bottom.
 - The sidebar folds away beside the 3D view. Small buttons at the right edge open it again, the pin keeps it open.
+
+### 4.19 Roof
+
+![A farmhouse with house, barn and extension, each with a roof of its own](images/view-roof-sections.jpg)
+
+A simple house gets a flat or gable roof over the whole top floor under **Settings → Roof**. For everything else – an L- or T-shaped house, a house with a barn, an extension with a pent roof, a roof that reaches far down on one side – you build the roof from **roof sections**.
+
+- Choose **Roof sections (custom)** under **Roof**, or the **Roof** tool. The first time, NeonPlan 3D proposes the sections from your rooms: per floor the parts no higher floor covers, each with a gable roof. Then you adjust them.
+- In the **Roof** tool you drag a new section in the plan. Tap selects one, dragging moves it, the corners resize it.
+- Each section has a **shape** (gable, hip, pent, flat) and a **ridge direction** (↔ or ↕).
+- **Eave** and **pitch** are set for both sides separately. All heights count from the ground. A side with a lower eave reaches further down, e.g. a catslide over a low extension. A pent roof rises from the first side; **Swap sides** turns it round.
+- **Top of walls** is the height where the walls below the roof end. Gables and knee walls are built from there up under the roof.
+- The **ridge height** is shown at the bottom of the form. Sections may overlap: the lower roof runs under the higher one, as with a real extension.
+- **Create again from the rooms** replaces all sections with a new proposal, **Back to one roof** switches to the simple roof.
+
+![The Roof tool with a selected roof section](images/editor-roof.jpg)
 
 ---
 

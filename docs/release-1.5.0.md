@@ -1,0 +1,27 @@
+## 🇩🇪 Deutsch
+
+### Neu
+
+- **Dachflächen – Dächer für jedes Haus:** Häuser in L- oder T-Form, Wohnhaus mit Scheune, Anbauten mit Pultdach oder ein Dach, das auf einer Seite tief herunterzieht, bekommen jetzt ihr richtiges Dach. Unter *Einstellungen → Dach* gibt es **Dachflächen (frei)**, dazu das neue Werkzeug **Dach** im Editor:
+  - NeonPlan 3D schlägt die Dachflächen aus deinen Räumen vor – auch über Teilen, die nur ein Erdgeschoss haben.
+  - Jede Dachfläche hat ihre eigene Form (**Sattel, Walm, Pult, Flach**), Firstrichtung, Traufhöhe und Neigung – getrennt für beide Seiten. So entstehen Abschleppdächer und Pultdächer.
+  - Höhen zählen vom Boden; Giebel und Drempel werden bis unters Dach hochgezogen. Dachflächen dürfen sich überschneiden, das niedrigere Dach läuft unter das höhere.
+  - Im Plan aufziehen, verschieben, an den Ecken ändern; die Firsthöhe steht im Formular.
+- Alle Dachformen sind kostenlos. Bestehende Dächer bleiben, wie sie sind.
+
+Nach dem Update Home Assistant neu starten und die Seite neu laden.
+
+---
+
+## 🇬🇧 English
+
+### New
+
+- **Roof sections – roofs for every house:** L- or T-shaped houses, a house with a barn, extensions with a pent roof or a roof that reaches far down on one side now get their proper roof. *Settings → Roof* has **Roof sections (custom)**, and the editor has the new **Roof** tool:
+  - NeonPlan 3D proposes the sections from your rooms – also over parts that only have a ground floor.
+  - Each section has its own shape (**gable, hip, pent, flat**), ridge direction, eave height and pitch – separately for both sides. That gives catslides and pent roofs.
+  - Heights count from the ground; gables and knee walls are built up under the roof. Sections may overlap, the lower roof runs under the higher one.
+  - Draw them in the plan, move them, resize them at the corners; the ridge height is shown in the form.
+- All roof shapes are free. Existing roofs stay as they are.
+
+Restart Home Assistant after updating and reload the page.

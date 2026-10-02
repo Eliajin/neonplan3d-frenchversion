@@ -187,7 +187,40 @@ export interface FreeWall {
   height?: number | null;
 }
 
-export type RoofType = "none" | "flat" | "gable";
+/** "custom": the roof is made of sections (wings of an L- or T-shaped house, a barn, a lean-to …). */
+export type RoofType = "none" | "flat" | "gable" | "custom";
+
+/** Shapes of a roof section. */
+export const ROOF_SHAPES = ["gable", "hip", "pent", "flat"] as const;
+export type RoofShape = (typeof ROOF_SHAPES)[number];
+
+/**
+ * One roof section over a rectangle of the plan (at the outer wall faces; the overhang comes on top).
+ * Heights are above the ground. Across the ridge, side "a" is the low coordinate (z for a ridge along
+ * x, x for a ridge along z), side "b" the high one; each side has its own eave height and pitch, so one
+ * slope can reach further down (a catslide over a lower part). A pent roof rises from side a.
+ */
+export interface RoofSection {
+  id: string;
+  x0: number;
+  z0: number;
+  x1: number;
+  z1: number;
+  shape: RoofShape;
+  /** The ridge runs along x or along z. */
+  axis: "x" | "z";
+  eave_a: number;
+  eave_b: number;
+  /** Slopes in degrees. */
+  pitch_a: number;
+  pitch_b: number;
+  /** Top of the walls below: gable and knee walls are built from here up to the roof. */
+  base: number;
+  /** Overhang beyond the walls (null = the roof setting). */
+  overhang?: number | null;
+  /** Sides a and b swapped: side a is the high coordinate (a pent roof then rises the other way). */
+  flip?: boolean;
+}
 
 export interface RoofSettings {
   type: RoofType;
@@ -197,6 +230,8 @@ export interface RoofSettings {
   overhang: number;
   /** Gable roof: ridge along the long side (default) or across, along the short side (terraced houses). */
   ridge?: "long" | "short" | null;
+  /** Roof sections of a "custom" roof. */
+  sections?: RoofSection[];
 }
 
 export interface BuildingSettings {

@@ -47,6 +47,28 @@ const PACK_SCRIPT = `
   e.setDoc(structuredClone(e._doc));
 `;
 
+// a farmhouse like a user's: a two-storey house, a long barn whose front slope sweeps down lower
+// (catslide), and a lean-to with a pent roof in front of the barn; roof sections at their own heights
+const FARM_SCRIPT = `
+  const b = structuredClone(e._doc);
+  const eg = b.floors[0];
+  const og = b.floors[1];
+  const R = (id, name, x0, z0, x1, z1, mat) => ({ id, name, area_id: null, points: [[x0, z0], [x1, z0], [x1, z1], [x0, z1]], floor_material: mat ?? "wood" });
+  for (const f of [eg, og]) Object.assign(f, { openings: [], furniture: [], placements: [], outdoor: [], walls: [], background: null });
+  eg.height = 2.6;
+  eg.rooms = [R("wohnen", "Wohnen", 0, 0, 6, 9), R("kueche", "Küche", 6, 0, 10, 9, "tiles"), R("scheune", "Scheune", -16, 0, 0, 11, "concrete"), R("schuppen", "Schuppen", -16, -3, -6, 0, "concrete")];
+  eg.outdoor = [{ id: "hof", type: "driveway", points: [[-20, -8], [14, -8], [14, -3.3], [-20, -3.3]] }, { id: "rasen", type: "lawn", points: [[-20, -3.3], [14, -3.3], [14, 16], [-20, 16]] }];
+  og.elevation = 2.75;
+  og.height = 2.5;
+  og.rooms = [R("schlafen", "Schlafen", 0, 0, 5, 9), R("kind", "Kind", 5, 0, 10, 9)];
+  b.settings.roof = { type: "custom", pitch: 42, overhang: 0.4, sections: [
+    { id: "haus", x0: -0.25, z0: -0.25, x1: 10.25, z1: 9.25, shape: "gable", axis: "x", eave_a: 5.25, eave_b: 5.25, pitch_a: 45, pitch_b: 45, base: 5.25, overhang: null },
+    { id: "scheune", x0: -16.25, z0: -0.25, x1: -0.25, z1: 11.25, shape: "gable", axis: "x", eave_a: 2.3, eave_b: 3.0, pitch_a: 40, pitch_b: 40, base: 2.6, overhang: null },
+    { id: "schuppen", x0: -16.25, z0: -3.25, x1: -6, z1: -0.25, shape: "pent", axis: "x", eave_a: 2.0, eave_b: 2.0, pitch_a: 6, pitch_b: 6, base: 2.4, overhang: null },
+  ] };
+  e.setDoc(b);
+`;
+
 // kitchen with pack furniture on the island, pendant lights from a pack and a wallbox (local packs)
 const PACK_MOUNT_SCRIPT = `
   const f = e._doc.floors[0];
@@ -104,6 +126,11 @@ const shots = [
   { name: "view-dryer-on-washer", query: "", width: 1280, height: 800, editor: true, editorScript: "const f = e._doc.floors[0]; const w = f.furniture.find((m) => m.type === 'washer'); f.furniture.push({ ...structuredClone(w), id: 'dryer_demo', type: 'dryer', entity: null, power: null, mount_y: w.h }); e.setDoc(structuredClone(e._doc));", then3d: "Bad" },
   { name: "editor-device-extras", query: "", width: 1280, height: 1500, editor: true, editorScript: "e._roomId = 'garage'; e._devSource = 'other'; e._deviceQuery = 'licht'; const r = e._doc.floors[0].rooms.find((x) => x.id === 'garage'); r.climate = { temperature: null, humidity: 'none', co2: null }; e.setDoc(structuredClone(e._doc));", scrollSide: true },
   { name: "view-wall-cabinet-low", query: "", width: 1280, height: 800, editor: true, editorScript: "const f = e._doc.floors[0]; const k = f.furniture.find((m) => m.type === 'kitchen_wall'); if (k) { f.furniture.push({ ...structuredClone(k), id: 'kw_low', x: k.x + k.w + 0.1, mount_y: 1.0 }); } e.setDoc(structuredClone(e._doc));", then3d: "Küche" },
+  { name: "editor-roof-tool", query: "", width: 1280, height: 900, editor: true, editorScript: FARM_SCRIPT + "e._floorId = e._doc.floors[0].id; e._tool = 'roof'; e._roofId = 'scheune'; setTimeout(() => e.fit(), 300);" },
+  { name: "editor-roof-overview", query: "", width: 1280, height: 900, editor: true, editorScript: FARM_SCRIPT + "e._floorId = e._doc.floors[0].id; e._tool = 'roof'; e._roofId = null; setTimeout(() => e.fit(), 300);" },
+  { name: "view-roof-proposal", query: "", width: 1280, height: 800, editor: true, editorScript: FARM_SCRIPT + "setTimeout(() => { e._doc.settings.roof.sections = []; e.useRoofSections(); }, 300);", then3d: "Alle Etagen", then3dAlso: "Gestapelt", camera: { theta: 2.3, phi: 0.95, radius: 52 } },
+  { name: "view-roof-farmhouse-front", query: "", width: 1280, height: 800, editor: true, editorScript: FARM_SCRIPT, then3d: "Alle Etagen", then3dAlso: "Gestapelt", camera: { theta: 2.3, phi: 0.95, radius: 52 } },
+  { name: "view-roof-farmhouse", query: "", width: 1280, height: 800, editor: true, editorScript: FARM_SCRIPT, then3d: "Alle Etagen", then3dAlso: "Gestapelt" },
   { name: "view-tv-plug", query: "", width: 1280, height: 800, editor: true, editorScript: "const f = e._doc.floors[0].furniture.find((x) => x.type === 'tv_board'); f.entity = 'switch.kaffeemaschine'; f.pictures = []; e._roomId = 'wohnen'; e._furnitureId = f.id; e.setDoc(structuredClone(e._doc));", then3d: "Wohnzimmer" },
   { name: "editor-tv-plug", query: "", width: 1280, height: 1000, editor: true, editorScript: "const f = e._doc.floors[0].furniture.find((x) => x.type === 'tv_board'); f.entity = 'switch.kaffeemaschine'; e._roomId = 'wohnen'; e._furnitureId = f.id; e.setDoc(structuredClone(e._doc));" },
   { name: "view-shared-light", query: "", width: 1280, height: 800, click: "Erdgeschoss", then: "Bad" },
@@ -265,6 +292,17 @@ for (const shot of shots.filter((s) => !only || only.includes(s.name))) {
     if (shot.then3d) {
       await clickText("3D");
       await clickText(shot.then3d);
+      if (shot.then3dAlso) await clickText(shot.then3dAlso);
+      if (shot.camera) {
+        // turn the camera (radius, theta, phi around the house) for a view from another side
+        await page.evaluate((cam) => {
+          const v = document.querySelector("neonplan3d-panel").shadowRoot.querySelector("fp3d-view3d");
+          const viewer = Object.values(v).find((x) => x && x.floors && x.floorMap);
+          Object.assign(viewer.controls.view, cam);
+          viewer.invalidate();
+        }, shot.camera);
+        await new Promise((r) => setTimeout(r, 1500));
+      }
     }
   }
   if (shot.furnishDrag) {

@@ -429,7 +429,8 @@ export class FloorplanViewer {
   private effectTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly haloTexture: CanvasTexture;
   /** Roof over the top floor (house view only), its opacity and the camera distance of the house view. */
-  private roof: { group: Group; floorId: string; solid: MeshBasicMaterial; lines: LineBasicMaterial } | null = null;
+  /** The roof: one group with a part per floor it sits on (each part follows its floor). */
+  private roof: { group: Group; parts: { group: Group; floorId: string; base: number }[]; solid: MeshBasicMaterial; lines: LineBasicMaterial } | null = null;
   private roofO = 0;
   /** Robot vacuums: their info from Home Assistant, how they move, and their meshes. */
   private robots = new Map<string, { info: RobotInfo; motion: RobotMotion; group: Group; led: MeshBasicMaterial }>();
@@ -1549,15 +1550,21 @@ export class FloorplanViewer {
       this.scene.remove(this.roof.group);
       this.roof = null;
     }
-    const geo = this.building ? buildRoof(this.building) : null;
-    if (!geo) return;
+    const geos = this.building ? buildRoof(this.building) : [];
+    if (!geos.length) return;
     const group = new Group();
     const solid = themed(new MeshBasicMaterial({ vertexColors: true, transparent: true, side: DoubleSide }), this.themeUniform);
     const lines = themed(new LineBasicMaterial({ vertexColors: true, transparent: true, blending: lineBlending(this.theme), depthWrite: false }), this.themeUniform, true);
-    group.add(new Mesh(geo.solid.geometry(), solid), new LineSegments(geo.lines.geometry(), lines));
+    const parts = geos.map((geo) => {
+      const part = new Group();
+      part.add(new Mesh(geo.solid.geometry(), solid), new LineSegments(geo.lines.geometry(), lines));
+      part.renderOrder = 8;
+      group.add(part);
+      return { group: part, floorId: geo.floor.id, base: geo.base };
+    });
     group.renderOrder = 8;
     this.scene.add(group);
-    this.roof = { group, floorId: geo.floor.id, solid, lines };
+    this.roof = { group, parts, solid, lines };
     this.placeRoof();
   }
 
@@ -1568,8 +1575,6 @@ export class FloorplanViewer {
   private placeRoof(dt = 1000): boolean {
     const roof = this.roof;
     if (!roof) return false;
-    const fv = this.floorMap.get(roof.floorId);
-    if (!fv) return false;
     const zoom = Math.min(1, Math.max(0, (this.controls.view.radius / this.houseRadius - 0.62) / 0.3));
     const target = this.floorId === null && this.wallMode !== "cut" ? 0.94 * zoom : 0;
     const k = 1 - Math.exp(-dt / FLOOR_TAU);
@@ -1577,7 +1582,11 @@ export class FloorplanViewer {
     this.roofO += (target - this.roofO) * k;
     if (Math.abs(target - this.roofO) < 0.004) this.roofO = target;
     roof.group.visible = this.roofO > 0.02;
-    roof.group.position.y = fv.floor.elevation + fv.y + fv.floor.height + (1 - this.roofO) * 2.2;
+    // each part rides on its floor (pulled apart or stacked), lifted while it fades in or out
+    for (const part of roof.parts) {
+      const fv = this.floorMap.get(part.floorId);
+      if (fv) part.group.position.y = fv.floor.elevation + fv.y + part.base + (1 - this.roofO) * 2.2;
+    }
     roof.solid.opacity = this.roofO;
     roof.solid.depthWrite = this.roofO > 0.9;
     roof.lines.opacity = this.roofO;

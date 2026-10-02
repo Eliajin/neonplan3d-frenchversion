@@ -107,6 +107,7 @@ Der Editor besteht aus dem Grundriss in der Mitte, der Werkzeugleiste oben und d
 | **Möbel** | Die Möbelbibliothek öffnen |
 | **Außen** | Außenflächen wie Rasen, Terrasse oder Pool aufziehen |
 | **Bodenöffnung** | Ein Loch in den Boden der Etage aufziehen, etwa über dem Treppenaufgang |
+| **Dach** | Dachflächen aufziehen, verschieben und einstellen, siehe [4.19](#419-dach) |
 
 Daneben stehen **Rückgängig**, **Wiederholen**, **Alles zeigen** und **3D daneben**. Unten im Plan steht immer ein kurzer Hinweis zum aktiven Werkzeug.
 
@@ -162,7 +163,7 @@ Unten in der Seitenleiste klappt **Einstellungen** auf:
 | **Außenwand (m)**, **Innenwand (m)** | Wandstärken |
 | **Raster (m)** | Schrittweite beim Zeichnen |
 | **Nordrichtung** | Grad im Uhrzeigersinn von oben. Wird für das Sonnenlicht gebraucht |
-| **Dach** | Kein Dach, Flachdach oder Satteldach, mit Dachneigung und Dachüberstand. Beim Satteldach legt **First** fest, ob der First entlang der langen oder der kurzen Seite läuft (z. B. Reihenhaus) |
+| **Dach** | Kein Dach, Flachdach oder Satteldach, mit Dachneigung und Dachüberstand. Beim Satteldach legt **First** fest, ob der First entlang der langen oder der kurzen Seite läuft (z. B. Reihenhaus). **Dachflächen (frei)** baut das Dach aus mehreren Teilen, siehe [4.19](#419-dach) |
 | **Wetter-Entität** | Welche Wetter-Entität das Wetter draußen liefert, siehe [6.2](#62-wetter-draußen) |
 | **Wetter-Effekte in 3D** | Welche Effekte gezeigt werden |
 
@@ -330,6 +331,22 @@ Mit **Außen** ziehst du Rasen, Terrasse, Weg, Einfahrt, Pool, Beet, Hecke oder 
 - Oben in der 3D-Hälfte schaltest du zwischen **Wände hoch** und **Schnitt**.
 - Ein Möbel oder Gerät kannst du auch in der 3D-Hälfte antippen und ziehen. Unten erscheint dann eine Leiste mit Breite, Tiefe, Höhe, Höhe über Boden, Drehung und Löschen.
 - Die Seitenleiste klappt neben der 3D-Ansicht ein. Am rechten Rand öffnen kleine Knöpfe sie wieder, das Stecknadel-Symbol hält sie offen.
+
+### 4.19 Dach
+
+![Ein Bauernhaus mit Wohnhaus, Scheune und Anbau, jedes mit eigenem Dach](images/view-roof-sections.jpg)
+
+Ein einfaches Haus bekommt unter **Einstellungen → Dach** ein Flach- oder Satteldach über das ganze oberste Geschoss. Für alles andere – ein Haus in L- oder T-Form, ein Wohnhaus mit Scheune, ein Anbau mit Pultdach, ein Dach, das auf einer Seite tief herunterzieht – baust du das Dach aus **Dachflächen**.
+
+- Wähle unter **Dach** die Option **Dachflächen (frei)** oder das Werkzeug **Dach**. Beim ersten Mal schlägt NeonPlan 3D die Dachflächen aus deinen Räumen vor: je Etage die Teile, über denen keine höhere Etage liegt, jeweils mit Satteldach. Danach passt du sie an.
+- Im Werkzeug **Dach** ziehst du eine neue Dachfläche im Plan auf. Antippen wählt eine aus, ziehen verschiebt sie, die Ecken ändern die Größe.
+- Jede Dachfläche hat eine **Form** (Sattel, Walm, Pult, Flach) und eine **Firstrichtung** (↔ oder ↕).
+- **Traufe** und **Neigung** stellst du für beide Seiten getrennt ein. Alle Höhen zählen vom Boden. Eine Seite mit tieferer Traufe zieht weiter herunter, so entsteht etwa ein Abschleppdach über einem niedrigen Anbau. Ein Pultdach steigt von der ersten Seite an; **Seiten tauschen** dreht es um.
+- **Wandoberkante** ist die Höhe, auf der die Wände unter dem Dach enden. Von dort werden Giebel und Drempel bis unter das Dach hochgezogen.
+- Unten im Formular steht die **Firsthöhe**. Dachflächen dürfen sich überschneiden: Das niedrigere Dach läuft unter das höhere, wie bei einem echten Anbau.
+- **Neu aus den Räumen erzeugen** ersetzt alle Dachflächen durch einen neuen Vorschlag, **Zurück zu einem Dach** schaltet auf das einfache Dach zurück.
+
+![Das Werkzeug Dach mit einer ausgewählten Dachfläche](images/editor-roof.jpg)
 
 ---
 

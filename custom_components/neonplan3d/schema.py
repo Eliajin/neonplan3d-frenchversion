@@ -194,9 +194,35 @@ OUTDOOR_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
+_COORD = vol.All(vol.Coerce(float), vol.Range(min=-1000, max=1000))
+_HEIGHT = vol.All(vol.Coerce(float), vol.Range(min=-50, max=200))
+
+# one roof section of a "custom" roof: a rectangle with its own shape, ridge direction, eaves and pitches
+ROOF_SECTION_SCHEMA = vol.Schema(
+    {
+        vol.Required("id"): _ID,
+        vol.Required("x0"): _COORD,
+        vol.Required("z0"): _COORD,
+        vol.Required("x1"): _COORD,
+        vol.Required("z1"): _COORD,
+        vol.Optional("shape", default="gable"): vol.In(["gable", "hip", "pent", "flat"]),
+        vol.Optional("axis", default="x"): vol.In(["x", "z"]),
+        vol.Required("eave_a"): _HEIGHT,
+        vol.Required("eave_b"): _HEIGHT,
+        vol.Optional("pitch_a", default=35): vol.All(vol.Coerce(float), vol.Range(min=0, max=80)),
+        vol.Optional("pitch_b", default=35): vol.All(vol.Coerce(float), vol.Range(min=0, max=80)),
+        vol.Required("base"): _HEIGHT,
+        vol.Optional("overhang", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=2))),
+        vol.Optional("flip", default=False): bool,
+    },
+    extra=vol.ALLOW_EXTRA,
+)
+
 ROOF_SCHEMA = vol.Schema(
     {
-        vol.Optional("type", default="none"): vol.In(["none", "flat", "gable"]),
+        vol.Optional("type", default="none"): vol.In(["none", "flat", "gable", "custom"]),
+        # roof sections of a "custom" roof
+        vol.Optional("sections", default=list): vol.All([ROOF_SECTION_SCHEMA], vol.Length(max=64)),
         vol.Optional("pitch", default=35): vol.All(vol.Coerce(float), vol.Range(min=5, max=60)),
         vol.Optional("overhang", default=0.4): vol.All(vol.Coerce(float), vol.Range(min=0, max=2)),
         # gable roof: ridge along the long side (None) or along the short side (terraced houses)

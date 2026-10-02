@@ -11,6 +11,7 @@ import { weatherEntity } from "../weather.ts";
 import { SHOW_ENERGY, SHOW_PRESENCE } from "../flags.ts";
 import { hasFeature, manualUrl, shopUrl } from "../features.ts";
 import { TOGGLE_KINDS } from "../devices.ts";
+import { ridgeHeight, roofSectionsFromRooms, sectionFrame, sectionProfile } from "../roof-sections.ts";
 import { storedImageIds } from "../transfer.ts";
 import { DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS,
   normalizeBuilding,
@@ -53,6 +54,8 @@ import {
   type Furniture,
   type FurnitureType,
   type LampMount,
+  type RoofSection,
+  ROOF_SHAPES,
   type MarkerShow,
   MARKER_SHOWS,
   type OutdoorArea,
@@ -82,7 +85,7 @@ import { furnitureSize, isElectric, mountBase, packItem, packItemName, packType,
 /** Items that can be fixed against moving. */
 type FixKind = "room" | "opening" | "furniture" | "device" | "wall" | "outdoor";
 
-type Tool = "select" | "rect" | "polygon" | "measure" | "opening" | "furniture" | "outdoor" | "hole" | "wall" | "meter";
+type Tool = "select" | "rect" | "polygon" | "measure" | "opening" | "furniture" | "outdoor" | "hole" | "wall" | "meter" | "roof";
 
 type Drag =
   | { kind: "pan"; last: [number, number] }
@@ -94,7 +97,9 @@ type Drag =
   | { kind: "aim"; entityId: string; base: Building; moved: boolean }
   | { kind: "resize"; id: string; corner: [1 | -1, 1 | -1]; base: Building; moved: boolean }
   | { kind: "room"; roomId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
-  | { kind: "rect"; start: Vec2; end: Vec2; outdoor?: boolean; hole?: boolean }
+  | { kind: "rect"; start: Vec2; end: Vec2; outdoor?: boolean; hole?: boolean; roof?: boolean }
+  | { kind: "roofmove"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
+  | { kind: "roofcorner"; id: string; corner: [0 | 1, 0 | 1]; base: Building; moved: boolean }
   | { kind: "freewall"; start: Vec2; end: Vec2 }
   | { kind: "wallmove"; id: string; end: "a" | "b" | null; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "outdoor"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
@@ -107,7 +112,7 @@ interface Guides {
 }
 
 /** Drags that change the document live (restored when cancelled, recorded in the history when done). */
-const EDIT_DRAGS = new Set(["vertex", "room", "device", "opening", "furniture", "rotate", "resize", "outdoor"]);
+const EDIT_DRAGS = new Set(["vertex", "room", "device", "opening", "furniture", "rotate", "resize", "outdoor", "roofmove", "roofcorner"]);
 
 const HISTORY = 100;
 const SNAP_PX = 10;
@@ -139,6 +144,7 @@ export class Fp3dEditor extends LitElement {
     _deviceId: { state: true },
     _deviceQuery: { state: true },
     _devSource: { state: true },
+    _roofId: { state: true },
     _furnQuery: { state: true },
     _libOpen: { state: true },
     _expanded: { state: true },
@@ -197,6 +203,8 @@ export class Fp3dEditor extends LitElement {
   private declare _deviceQuery: string;
   /** Which devices the room form lists: its own area, other areas, or entities without an area. */
   private declare _devSource: "area" | "other" | "none";
+  /** Selected roof section (tool "roof"). */
+  private declare _roofId: string | null;
   /** Furniture library: the search text, and which sections are open (built-in groups and packs). */
   private declare _furnQuery: string;
   private declare _libOpen: Set<string>;
@@ -260,6 +268,7 @@ export class Fp3dEditor extends LitElement {
     this._deviceId = null;
     this._deviceQuery = "";
     this._devSource = "area";
+    this._roofId = null;
     this._furnQuery = "";
     this._libOpen = new Set(["group:lights", "group:living"]);
     try {
@@ -816,6 +825,22 @@ export class Fp3dEditor extends LitElement {
       this.drag = { kind: "freewall", start, end: start };
       return;
     }
+    if (this._tool === "roof") {
+      const corner = target.closest("[data-roof-corner]")?.getAttribute("data-roof-corner");
+      const body = target.closest("[data-roof]")?.getAttribute("data-roof");
+      if (corner && this.isAdmin) {
+        const [id, cx, cz] = corner.split(":");
+        this.drag = { kind: "roofcorner", id, corner: [cx === "1" ? 1 : 0, cz === "1" ? 1 : 0], base: this._doc, moved: false };
+      } else if (body) {
+        this._roofId = body;
+        this.drag = this.isAdmin ? { kind: "roofmove", id: body, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
+      } else if (this.isAdmin) {
+        this._roofId = null;
+        const start = this.snap(world, undefined, e.altKey);
+        this.drag = { kind: "rect", start, end: start, roof: true };
+      } else this.drag = { kind: "pan", last: local };
+      return;
+    }
     if (this._tool === "rect" || this._tool === "outdoor" || this._tool === "hole") {
       const start = this.snap(world, undefined, e.altKey);
       this.drag = { kind: "rect", start, end: start, outdoor: this._tool === "outdoor", hole: this._tool === "hole" };
@@ -1048,6 +1073,41 @@ export class Fp3dEditor extends LitElement {
         );
         break;
       }
+      case "roofmove": {
+        if (!drag.moved && Math.hypot(local[0] - drag.startScreen[0], local[1] - drag.startScreen[1]) < 5) return;
+        drag.moved = true;
+        const g = e.altKey ? 0.01 : this._doc.settings.grid;
+        const dx = round(Math.round((world[0] - drag.start[0]) / g) * g);
+        const dz = round(Math.round((world[1] - drag.start[1]) / g) * g);
+        const src = drag.base.settings.roof.sections?.find((x) => x.id === drag.id);
+        if (!src) return;
+        this.change(
+          (doc) => {
+            const sec = doc.settings.roof.sections?.find((x) => x.id === drag.id);
+            if (sec) Object.assign(sec, { x0: round(src.x0 + dx), x1: round(src.x1 + dx), z0: round(src.z0 + dz), z1: round(src.z1 + dz) });
+          },
+          drag.base,
+          false,
+        );
+        break;
+      }
+      case "roofcorner": {
+        drag.moved = true;
+        const p = this.snap(world, undefined, e.altKey);
+        this.change(
+          (doc) => {
+            const sec = doc.settings.roof.sections?.find((x) => x.id === drag.id);
+            if (!sec) return;
+            if (drag.corner[0]) sec.x1 = round(p[0]);
+            else sec.x0 = round(p[0]);
+            if (drag.corner[1]) sec.z1 = round(p[1]);
+            else sec.z0 = round(p[1]);
+          },
+          drag.base,
+          false,
+        );
+        break;
+      }
       case "opening": {
         if (!drag.moved && Math.hypot(local[0] - drag.startScreen[0], local[1] - drag.startScreen[1]) < 5) return;
         drag.moved = true;
@@ -1169,6 +1229,7 @@ export class Fp3dEditor extends LitElement {
           const pts: Vec2[] = [lo, [hi[0], lo[1]], hi, [lo[0], hi[1]]];
           if (drag.outdoor) this.addOutdoor(pts);
           else if (drag.hole) this.addHole(lo, hi);
+          else if (drag.roof) this.addRoofSection(lo, hi);
           else this.addRoom(pts);
         }
         this._guides = {};
@@ -1698,6 +1759,191 @@ export class Fp3dEditor extends LitElement {
     this._roomId = id;
   }
 
+  // ------------------------------------------------------------------ roof sections
+
+  private get roofSection(): RoofSection | undefined {
+    return this._roofId ? this._doc.settings.roof.sections?.find((x) => x.id === this._roofId) : undefined;
+  }
+
+  /** Wall tops of the floor shown in the plan: where a new section's eaves start. */
+  private get floorTop(): number {
+    const f = this.floor;
+    return f ? round(f.elevation + f.height) : 2.5;
+  }
+
+  /** Switch to a roof of sections; without sections yet, propose them from the rooms. */
+  private useRoofSections(regenerate = false): void {
+    if (!this.isAdmin) return;
+    const has = (this._doc.settings.roof.sections ?? []).length > 0;
+    if (regenerate && has && !confirm(this.t("roof_regen_confirm"))) return;
+    this.change((doc) => {
+      doc.settings.roof.type = "custom";
+      if (regenerate || !has) doc.settings.roof.sections = roofSectionsFromRooms(doc, () => uid("roof"));
+    });
+    this._roofId = null;
+  }
+
+  private addRoofSection(lo: Vec2, hi: Vec2): void {
+    if (!this.isAdmin) return;
+    const top = this.floorTop;
+    const pitch = this._doc.settings.roof.pitch || 35;
+    const sec: RoofSection = {
+      id: uid("roof"),
+      x0: round(lo[0]),
+      z0: round(lo[1]),
+      x1: round(hi[0]),
+      z1: round(hi[1]),
+      shape: "gable",
+      axis: hi[0] - lo[0] >= hi[1] - lo[1] ? "x" : "z",
+      eave_a: top,
+      eave_b: top,
+      pitch_a: pitch,
+      pitch_b: pitch,
+      base: top,
+      overhang: null,
+    };
+    this.change((doc) => {
+      doc.settings.roof.type = "custom";
+      doc.settings.roof.sections = [...(doc.settings.roof.sections ?? []), sec];
+    });
+    this._roofId = sec.id;
+  }
+
+  private updateRoofSection(patch: Partial<RoofSection>): void {
+    const id = this._roofId;
+    if (!id || !this.isAdmin) return;
+    this.change((doc) => {
+      const sec = doc.settings.roof.sections?.find((x) => x.id === id);
+      if (sec) Object.assign(sec, patch);
+    });
+  }
+
+  private deleteRoofSection(): void {
+    const id = this._roofId;
+    if (!id || !this.isAdmin) return;
+    this.change((doc) => (doc.settings.roof.sections = (doc.settings.roof.sections ?? []).filter((x) => x.id !== id)));
+    this._roofId = null;
+  }
+
+  private duplicateRoofSection(): void {
+    const sec = this.roofSection;
+    if (!sec || !this.isAdmin) return;
+    const copy = { ...structuredClone(sec), id: uid("roof"), x0: round(sec.x0 + 1), x1: round(sec.x1 + 1), z0: round(sec.z0 + 1), z1: round(sec.z1 + 1) };
+    this.change((doc) => (doc.settings.roof.sections = [...(doc.settings.roof.sections ?? []), copy]));
+    this._roofId = copy.id;
+  }
+
+  /** The sections over the plan: outline, ridge (and hips), a label; the selected one with corner handles. */
+  private renderRoofSections() {
+    const roof = this._doc.settings.roof;
+    const sections = roof.type === "custom" ? (roof.sections ?? []) : [];
+    return svg`<g class="fp3d-roof-layer">${sections.map((sec, i) => {
+      const sel = sec.id === this._roofId;
+      const fr = sectionFrame(sec);
+      const pr = sectionProfile(sec);
+      const pts = [fr.at(fr.u0, 0), fr.at(fr.u1, 0), fr.at(fr.u1, fr.w), fr.at(fr.u0, fr.w)].map((p) => this.toScreen(p));
+      const line = (a: Vec2, b: Vec2) => {
+        const [ax, ay] = this.toScreen(a);
+        const [bx, by] = this.toScreen(b);
+        return svg`<line x1=${ax} y1=${ay} x2=${bx} y2=${by} />`;
+      };
+      let ridge;
+      if (sec.shape === "hip") {
+        const d = Math.min((fr.u1 - fr.u0) / 2, Math.min(pr.vr, fr.w - pr.vr) || fr.w / 2);
+        const rs = fr.at(fr.u0 + d, pr.vr);
+        const re = fr.at(fr.u1 - d, pr.vr);
+        ridge = svg`${line(rs, re)}${line(fr.at(fr.u0, 0), rs)}${line(fr.at(fr.u0, fr.w), rs)}${line(fr.at(fr.u1, 0), re)}${line(fr.at(fr.u1, fr.w), re)}`;
+      } else if (sec.shape === "gable") ridge = line(fr.at(fr.u0, pr.vr), fr.at(fr.u1, pr.vr));
+      else if (sec.shape === "pent") ridge = line(fr.at(fr.u0, fr.w), fr.at(fr.u1, fr.w));
+      const [cx, cy] = this.toScreen(fr.at((fr.u0 + fr.u1) / 2, fr.w / 2));
+      const label = `${i + 1} · ${this.t(`roof_shape_${sec.shape}` as I18nKey)} · ${formatNumber(this.hass, ridgeHeight(sec), 1)} m`;
+      return svg`<g data-roof=${sec.id} class=${`fp3d-roof-sec${sel ? " fp3d-roof-sel" : ""}`}>
+          <polygon points=${pts.map((p) => p.join(",")).join(" ")} />
+          <g class="fp3d-roof-ridge">${ridge}</g>
+          <text x=${cx} y=${cy - 14}>${label}</text>
+        </g>
+        ${sel && this.isAdmin
+          ? ([[0, 0], [1, 0], [1, 1], [0, 1]] as const).map(([kx, kz]) => {
+              const [x, y] = this.toScreen([kx ? Math.max(sec.x0, sec.x1) : Math.min(sec.x0, sec.x1), kz ? Math.max(sec.z0, sec.z1) : Math.min(sec.z0, sec.z1)]);
+              return svg`<g class="fp3d-vertex" data-roof-corner=${`${sec.id}:${kx}:${kz}`}><circle cx=${x} cy=${y} r="16" class="fp3d-hit" /><circle cx=${x} cy=${y} r="6" /></g>`;
+            })
+          : nothing}`;
+    })}</g>`;
+  }
+
+  /** Sidebar of the roof tool: the selected section's form, or the overview of all sections. */
+  private renderRoofPanel() {
+    const roof = this._doc.settings.roof;
+    const admin = this.isAdmin;
+    const sec = roof.type === "custom" ? this.roofSection : undefined;
+    if (sec) return this.renderRoofSectionForm(sec);
+    const sections = roof.type === "custom" ? (roof.sections ?? []) : [];
+    return html`<section>
+      <h3>${this.t("roof_sections")}</h3>
+      <p class="fp3d-sub">${this.t("roof_sections_hint")}</p>
+      ${roof.type !== "custom"
+        ? html`<div class="fp3d-actions"><button class="fp3d-btn fp3d-primary" ?disabled=${!admin} @click=${() => this.useRoofSections()}>${this.t("roof_sections_start")}</button></div>`
+        : html`<div class="fp3d-room-list">
+              ${sections.map(
+                (x, i) => html`<div class="fp3d-row">
+                  <button class="fp3d-dev-name" @click=${() => (this._roofId = x.id)}>
+                    <span>${i + 1} · ${this.t(`roof_shape_${x.shape}` as I18nKey)} · ${formatNumber(this.hass, Math.abs(x.x1 - x.x0), 1)} × ${formatNumber(this.hass, Math.abs(x.z1 - x.z0), 1)} m · ${this.t("roof_ridge_height")} ${formatNumber(this.hass, ridgeHeight(x), 1)} m</span>
+                  </button>
+                </div>`,
+              )}
+            </div>
+            <div class="fp3d-actions">
+              <button class="fp3d-btn" ?disabled=${!admin} @click=${() => this.useRoofSections(true)}>${this.t("roof_sections_regen")}</button>
+              <button class="fp3d-btn" ?disabled=${!admin} @click=${() => this.change((doc) => (doc.settings.roof.type = "gable"))}>${this.t("roof_sections_off")}</button>
+            </div>`}
+    </section>`;
+  }
+
+  private renderRoofSectionForm(sec: RoofSection) {
+    const admin = this.isAdmin;
+    const set = (patch: Partial<RoofSection>) => this.updateRoofSection(patch);
+    // side a is the top (ridge across the plan) or the left (ridge up and down the plan)
+    const sides = sec.axis === "x" ? [this.t("roof_side_top"), this.t("roof_side_bottom")] : [this.t("roof_side_left"), this.t("roof_side_right")];
+    const [sideA, sideB] = sec.flip ? [sides[1], sides[0]] : sides;
+    const flat = sec.shape === "flat";
+    const pent = sec.shape === "pent";
+    const n = (sections: RoofSection[]) => sections.findIndex((x) => x.id === sec.id) + 1;
+    const num = (label: string, value: number, apply: (v: number) => void, step = 0.05, min = 0) => this.num(label, value, (v) => apply(Math.max(min, round(v))), step, min);
+    return html`<button class="fp3d-btn fp3d-back" @click=${() => (this._roofId = null)}>‹ ${this.t("roof_sections")}</button>
+      <section>
+        <h3>${this.t("roof_section")} ${n(this._doc.settings.roof.sections ?? [])}</h3>
+        <div class="fp3d-seg fp3d-dev-source">
+          ${ROOF_SHAPES.map((shape) => html`<button aria-pressed=${sec.shape === shape} ?disabled=${!admin} @click=${() => set({ shape })}>${this.t(`roof_shape_${shape}` as I18nKey)}</button>`)}
+        </div>
+        ${flat
+          ? nothing
+          : html`<div class="fp3d-seg fp3d-dev-source">
+              <button aria-pressed=${sec.axis === "x"} ?disabled=${!admin} @click=${() => set({ axis: "x" })}>${this.t("roof_axis_x")}</button>
+              <button aria-pressed=${sec.axis === "z"} ?disabled=${!admin} @click=${() => set({ axis: "z" })}>${this.t("roof_axis_z")}</button>
+            </div>`}
+        <div class="fp3d-form">
+          ${flat
+            ? num(this.t("roof_height"), sec.eave_a, (v) => set({ eave_a: v, eave_b: v }))
+            : html`${num(`${this.t("roof_eave")} ${pent ? "" : sideA}`, sec.eave_a, (v) => set({ eave_a: v }))}
+              ${pent ? nothing : num(`${this.t("roof_eave")} ${sideB}`, sec.eave_b, (v) => set({ eave_b: v }))}
+              ${num(`${this.t("roof_pitch_short")} ${pent ? "" : sideA}`, sec.pitch_a, (v) => set({ pitch_a: Math.min(75, v) }), 1, 0)}
+              ${pent ? nothing : num(`${this.t("roof_pitch_short")} ${sideB}`, sec.pitch_b, (v) => set({ pitch_b: Math.min(75, v) }), 1, 0)}`}
+          ${num(this.t("roof_base"), sec.base, (v) => set({ base: v }))}
+          ${num(this.t("roof_overhang"), sec.overhang ?? this._doc.settings.roof.overhang, (v) => set({ overhang: Math.min(2, v) }), 0.05, 0)}
+        </div>
+        <p class="fp3d-sub">${this.t("roof_ridge_height")}: ${formatNumber(this.hass, ridgeHeight(sec), 2)} m · ${this.t("roof_section_hint")}</p>
+        ${admin
+          ? html`<div class="fp3d-actions">
+              ${flat
+                ? nothing
+                : html`<button class="fp3d-btn" title=${this.t("roof_swap_hint")} @click=${() => set({ flip: !sec.flip })}>⇅ ${this.t("roof_swap")}</button>`}
+              <button class="fp3d-btn" @click=${() => this.duplicateRoofSection()}>${this.t("duplicate")}</button>
+              <button class="fp3d-btn fp3d-danger" @click=${() => this.deleteRoofSection()}>${this.t("delete")}</button>
+            </div>`
+          : nothing}
+      </section>`;
+  }
+
   /** The item of a fixable kind on a floor. */
   private fixItem(floor: Floor | undefined, kind: FixKind, id: string): object | undefined {
     if (!floor) return undefined;
@@ -2210,7 +2456,7 @@ export class Fp3dEditor extends LitElement {
         <div class="fp3d-main">
           <div class="fp3d-toolbar">
             <div class="fp3d-seg" role="group" aria-label=${this.t("tool_select")}>
-              ${(["select", "rect", "polygon", "wall", "opening", "furniture", "outdoor", "hole"] as Tool[]).map(
+              ${(["select", "rect", "polygon", "wall", "opening", "furniture", "outdoor", "hole", "roof"] as Tool[]).map(
                 (tool) => html`<button
                   aria-pressed=${this._tool === tool}
                   ?disabled=${!floor || (!this.isAdmin && tool !== "select")}
@@ -2255,7 +2501,7 @@ export class Fp3dEditor extends LitElement {
               ${floor && walls ? this.renderOpenings(floor, walls.walls) : nothing} ${floor ? this.renderMeter(floor) : nothing}
               ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
               ${this.room && this.isAdmin && this._tool === "select" && !this._openingId && !this._furnitureId && !this.isFixedItem("room", this.room.id) ? this.renderHandles(this.room) : nothing}
-              ${this.renderDraft()} ${this.renderGuides()}
+              ${this._tool === "roof" ? this.renderRoofSections() : nothing} ${this.renderDraft()} ${this.renderGuides()}
             </svg>
             ${this.renderContext()}
             <p class="fp3d-hint ${this._fixedHint ? "fp3d-hint-fixed" : ""}">${!floor ? this.t("hint_empty") : this._fixedHint ? this.t("fixed_drag_hint") : this.t(`hint_${this._tool}` as I18nKey)}</p>
@@ -2806,6 +3052,7 @@ export class Fp3dEditor extends LitElement {
     const room = this.room;
     const admin = this.isAdmin;
     const areas = Object.values(this.hass?.areas ?? {}).sort((a, b) => a.name.localeCompare(b.name));
+    if (this._tool === "roof") return this.renderRoofPanel();
     // furnishing: the library and the selected item come first
     if (this._tool === "furniture" && floor && admin) {
       return html`${this.furnitureItem ? this.renderFurnitureForm(this.furnitureItem) : nothing} ${this.renderFurnitureLibrary()}`;
@@ -4267,8 +4514,17 @@ export class Fp3dEditor extends LitElement {
         ${this.num(this.t("north"), s.north, (v) => set({ north: ((Math.round(v) % 360) + 360) % 360 }), 1)}
         <label class="fp3d-field fp3d-wide"
           >${this.t("roof")}
-          <select @change=${(e: Event) => set({ roof: { ...s.roof, type: (e.target as HTMLSelectElement).value as RoofType } })}>
-            ${(["none", "flat", "gable"] as const).map((t) => html`<option value=${t} ?selected=${t === s.roof.type}>${this.t(`roof_${t}`)}</option>`)}
+          <select
+            @change=${(e: Event) => {
+              const type = (e.target as HTMLSelectElement).value as RoofType;
+              // roof sections: propose them from the rooms and open the roof tool
+              if (type === "custom") {
+                this.useRoofSections();
+                this._tool = "roof";
+              } else set({ roof: { ...s.roof, type } });
+            }}
+          >
+            ${(["none", "flat", "gable", "custom"] as const).map((t) => html`<option value=${t} ?selected=${t === s.roof.type}>${this.t(`roof_${t}`)}</option>`)}
           </select></label
         >
         ${s.roof.type === "gable"
@@ -4933,6 +5189,44 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-place-all {
         margin: 10px 0 0;
+      }
+      .fp3d-roof-sec polygon {
+        fill: color-mix(in srgb, #ffb547 10%, transparent);
+        stroke: #ffb547;
+        stroke-width: 2;
+        stroke-dasharray: 8 6;
+        cursor: move;
+      }
+      .fp3d-roof-sel polygon {
+        fill: color-mix(in srgb, var(--fp3d-accent) 14%, transparent);
+        stroke: var(--fp3d-accent);
+        stroke-dasharray: none;
+      }
+      .fp3d-roof-ridge line {
+        stroke: #ffb547;
+        stroke-width: 2.5;
+        pointer-events: none;
+      }
+      .fp3d-roof-sel .fp3d-roof-ridge line {
+        stroke: var(--fp3d-accent);
+      }
+      .fp3d-roof-sec text {
+        fill: #ffd28a;
+        font-size: 12px;
+        font-weight: 700;
+        text-anchor: middle;
+        paint-order: stroke;
+        stroke: rgba(0, 0, 0, 0.6);
+        stroke-width: 3px;
+        pointer-events: none;
+      }
+      .fp3d-tool-roof .fp3d-room,
+      .fp3d-tool-roof [data-furniture],
+      .fp3d-tool-roof [data-device],
+      .fp3d-tool-roof [data-opening],
+      .fp3d-tool-roof [data-free-wall],
+      .fp3d-tool-roof [data-outdoor] {
+        pointer-events: none;
       }
       .fp3d-dev-area {
         margin: 10px 0 2px;
