@@ -114,7 +114,8 @@ test("stairs cut a hole into the floor above", () => {
   const holes = stairHoles([lower, upper], upper);
   assert.equal(holes.length, 1);
   const geo = buildFloorGeometry(upper, EXT, INT, holes);
-  near(area(geo.floor), 12 - 2, 1e-6);
+  // the opening is cut 3 mm in from its outline
+  near(area(geo.floor), 12 - 0.994 * 1.994, 1e-6);
   assert.deepEqual(stairHoles([lower, upper], lower), []);
 });
 

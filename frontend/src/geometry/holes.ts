@@ -121,3 +121,35 @@ export function mergeHoles(holes: Vec2[][]): Vec2[][] {
   valid.forEach((h, i) => groups.set(find(i), [...(groups.get(find(i)) ?? []), h]));
   return [...groups.values()].flatMap((g) => (g.length === 1 ? g : union(g)));
 }
+
+function distToSegment(p: Vec2, a: Vec2, b: Vec2): number {
+  const dx = b[0] - a[0];
+  const dz = b[1] - a[1];
+  const len2 = dx * dx + dz * dz;
+  const t = len2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / len2)) : 0;
+  return Math.hypot(p[0] - a[0] - dx * t, p[1] - a[1] - dz * t);
+}
+
+/** Whether an opening lies in a room; corners on the room's edge (snapped to a wall) count as inside. */
+export function holeInRoom(hole: readonly Vec2[], room: readonly Vec2[], tolerance = 0.03): boolean {
+  return hole.every(
+    (p) => pointInPolygon(p, room) || room.some((a, i) => distToSegment(p, a, room[(i + 1) % room.length]) <= tolerance),
+  );
+}
+
+/** An opening moved inwards by d on every side, so one on the room's edge stays a hole in the floor. */
+export function insetHole(hole: readonly Vec2[], d: number): Vec2[] {
+  const ring = area(hole) >= 0 ? hole : [...hole].reverse();
+  const normal = (a: Vec2, b: Vec2): Vec2 => {
+    const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    // left of a counter-clockwise edge is inside
+    return [-(b[1] - a[1]) / l, (b[0] - a[0]) / l];
+  };
+  return ring.map((p, i) => {
+    const n1 = normal(ring[(i - 1 + ring.length) % ring.length], p);
+    const n2 = normal(p, ring[(i + 1) % ring.length]);
+    const k = 1 + n1[0] * n2[0] + n1[1] * n2[1];
+    if (k < 0.1) return p;
+    return [p[0] + ((n1[0] + n2[0]) / k) * d, p[1] + ((n1[1] + n2[1]) / k) * d] as Vec2;
+  });
+}

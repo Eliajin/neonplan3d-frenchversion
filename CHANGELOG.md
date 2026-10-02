@@ -11,6 +11,7 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 - A table lamp, floor lamp or uplight with a height above the floor set by hand now moves the lamp itself, not only its selection box ([#20](https://github.com/Mastershort/neonplan3d/issues/20)).
 - Heatmap and room panel with °F: sensors in °F are converted, the legend and values show Home Assistant's unit.
 - Overlapping floor openings are cut as one outline (an L-shaped opening) instead of breaking the floor.
+- A floor opening snapped to the room's edge is cut instead of being reported as outside the room.
 - The rain warning uses the weather entity chosen in the plan settings.
 
 ### New

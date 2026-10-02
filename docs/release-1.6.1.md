@@ -7,6 +7,7 @@
 - Eine Tischleuchte, Stehleuchte oder ein Deckenfluter mit von Hand gesetzter Höhe über dem Boden wird jetzt selbst angehoben, nicht nur ihr Auswahlrahmen (#20).
 - Heatmap und Raumfenster mit °F: Sensoren in °F werden umgerechnet, Legende und Werte zeigen die Einheit von Home Assistant.
 - Überlappende Bodenöffnungen werden als ein Umriss ausgeschnitten (zum Beispiel eine L-Form), statt den Boden zu zerreißen.
+- Eine Bodenöffnung, die an der Raumkante eingerastet ist, wird jetzt ausgeschnitten, statt als „ragt über die Raumgrenze“ zu gelten.
 - Die Regenwarnung nimmt die in den Einstellungen gewählte Wetter-Entität.
 
 ---
@@ -20,4 +21,5 @@
 - A table lamp, floor lamp or uplight with a height above the floor set by hand now moves the lamp itself, not only its selection box (#20).
 - Heatmap and room panel with °F: sensors in °F are converted, the legend and values show Home Assistant's unit.
 - Overlapping floor openings are cut as one outline (an L shape, for example) instead of breaking the floor.
+- A floor opening snapped to the room's edge is cut instead of being reported as outside the room.
 - The rain warning uses the weather entity chosen in the settings.

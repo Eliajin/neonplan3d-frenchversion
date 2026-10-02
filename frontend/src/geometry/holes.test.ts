@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mergeHoles } from "./holes.ts";
+import { holeInRoom, insetHole, mergeHoles } from "./holes.ts";
 import type { Vec2 } from "../model.ts";
 
 const rect = (x0: number, z0: number, x1: number, z1: number): Vec2[] => [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
@@ -33,4 +33,14 @@ test("an opening inside another one disappears in it", () => {
   const merged = mergeHoles([rect(0, 0, 4, 4), rect(1, 1, 2, 2)]);
   assert.equal(merged.length, 1);
   assert.ok(Math.abs(area(merged[0]) - 16) < 1e-6);
+});
+
+test("an opening snapped to the room's edge counts as inside and is moved in a little", () => {
+  const room = rect(0, 0, 4, 4);
+  const hole = rect(1, 2, 2, 4);
+  assert.ok(holeInRoom(hole, room));
+  assert.ok(!holeInRoom(rect(1, 2, 2, 4.2), room));
+  const inset = insetHole(hole, 0.003);
+  assert.ok(inset.every(([x, z]) => x > 1 && x < 2 && z > 2 && z < 4));
+  assert.ok(Math.abs(area(inset) - 0.994 * 1.994) < 1e-6);
 });

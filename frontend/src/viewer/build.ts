@@ -14,7 +14,7 @@ import { Color, type BufferGeometry } from "three";
 import type { Floor, Opening, Room, Vec2 } from "../model.ts";
 import { furnitureFootprint, isLamp, pointInPolygon } from "../model.ts";
 import { generateWalls, locateOpening, openingHost, type Wall } from "../geometry/walls.ts";
-import { mergeHoles } from "../geometry/holes.ts";
+import { holeInRoom, insetHole, mergeHoles } from "../geometry/holes.ts";
 import { pushFurniture } from "./furniture.ts";
 import { mountBase, packItem } from "../packs.ts";
 import { pushOutdoor } from "./outdoor.ts";
@@ -110,7 +110,8 @@ export function buildFloorGeometry(floor: Floor, wallExterior: number, wallInter
     const poly = ccw(room.points);
     const look = FLOOR_LOOK[room.floor_material] ?? FLOOR_LOOK.wood;
     const top = new Color(look.color);
-    const inside = holes.filter((h) => h.every((p) => pointInPolygon(p, poly)));
+    // an opening snapped to the room's edge is still cut, a few millimetres in from it
+    const inside = holes.filter((h) => holeInRoom(h, poly)).map((h) => insetHole(h, 0.003));
     cutHoles.push(...inside);
     const all = [...poly, ...inside.flat()];
     const start = floorBuf.count;
