@@ -4,11 +4,11 @@
 
 **by Mastershort** – draw your home right inside Home Assistant and control it in a neon 3D view: lights glow in their colours, blinds move, doors and windows open, cameras watch, and the TV shows what is playing. No external tools, no cloud, made for wall tablets.
 
-▶️ **[Try the online demo](https://mastershort.github.io/neonplan3d/)** – right in your browser, with invented demo data: turn the house, switch lights, open the editor. Nothing to install.
+▶️ **[Try the online demo](https://neonplan3d.mastershort.de/)** – right in your browser, with invented demo data: turn the house, switch lights, open the editor. Nothing to install.
 
 [![Open your Home Assistant instance and open the NeonPlan 3D repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Mastershort&repository=neonplan3d&category=integration)
 
-[![NeonPlan 3D: the house turns, the view flies into the ground floor, lights go off and on, then the kitchen with its room panel](docs/images/demo.webp)](https://mastershort.github.io/neonplan3d/)
+[![NeonPlan 3D: the house turns, the view flies into the ground floor, lights go off and on, then the kitchen with its room panel](docs/images/demo.webp)](https://neonplan3d.mastershort.de/)
 
 📖 **Manual:** [English](https://mastershort.de/en/neonplan3d/manual/?lang=en) · [Deutsch](https://mastershort.de/neonplan3d/anleitung/?lang=de) (also in this repository: [manual.md](docs/manual.md), [anleitung.md](docs/anleitung.md))
 
