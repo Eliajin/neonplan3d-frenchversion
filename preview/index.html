@@ -222,9 +222,13 @@
           (narrow ? "position:fixed;left:50%;top:244px;" : "position:fixed;left:50%;bottom:64px;") +
           "transform:translateX(-50%);z-index:10;display:flex;gap:10px;align-items:center;flex-wrap:nowrap;white-space:nowrap;justify-content:center;max-width:calc(100vw - 32px);padding:8px 14px;border-radius:999px;background:rgba(7,11,20,.88);border:1px solid rgba(0,229,255,.45);color:#cfe9ff;font:13px/1.3 Figtree,Roboto,sans-serif;box-shadow:0 0 18px rgba(0,229,255,.25)";
         const link = (href, text) => `<a href="${href}" target="_blank" rel="noopener" style="color:#00e5ff;font-weight:600;text-decoration:none">${text}</a>`;
+        // the install button stands out; GitHub, the manual and the language as plain links
+        const install = (text) =>
+          `<a href="https://github.com/Mastershort/neonplan3d#installation" target="_blank" rel="noopener" style="background:#00e5ff;color:#06101c;font-weight:700;text-decoration:none;padding:5px 12px;border-radius:999px">${text}</a>`;
+        const github = link("https://github.com/Mastershort/neonplan3d", "★ GitHub");
         bar.innerHTML = de
-          ? `<span>${narrow ? "Demo" : "Demo mit erfundenen Daten – probier alles aus"}</span>${link("https://github.com/Mastershort/neonplan3d#installation", "Installieren")}${link("https://mastershort.de/neonplan3d/anleitung/?lang=de", "Anleitung")}${link("?site&lang=en", "English")}`
-          : `<span>${narrow ? "Demo" : "Demo with invented data – try everything"}</span>${link("https://github.com/Mastershort/neonplan3d#installation", "Install")}${link("https://mastershort.de/en/neonplan3d/manual/?lang=en", "Manual")}${link("?site&lang=de", "Deutsch")}`;
+          ? `<span>${narrow ? "Demo" : "Demo mit erfundenen Daten – probier alles aus"}</span>${install(narrow ? "Installieren" : "Jetzt installieren")}${github}${narrow ? "" : link("https://mastershort.de/neonplan3d/anleitung/?lang=de", "Anleitung")}${link("?site&lang=en", narrow ? "EN" : "English")}`
+          : `<span>${narrow ? "Demo" : "Demo with invented data – try everything"}</span>${install(narrow ? "Install" : "Install now")}${github}${narrow ? "" : link("https://mastershort.de/en/neonplan3d/manual/?lang=en", "Manual")}${link("?site&lang=de", narrow ? "DE" : "Deutsch")}`;
         const close = document.createElement("button");
         close.textContent = "×";
         close.setAttribute("aria-label", de ? "Schließen" : "Close");
