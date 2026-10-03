@@ -4,6 +4,12 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 [releases page](https://github.com/Mastershort/neonplan3d/releases). Ideas and votes:
 [Discussions → Ideas](https://github.com/Mastershort/neonplan3d/discussions/categories/ideas).
 
+## 1.8.4 (French fork)
+
+### Fixed
+
+- A page still running an older interface from the browser cache now says to reload the page (Ctrl+F5, or reset the Companion app's frontend cache) instead of asking for a Home Assistant restart.
+
 ## 1.8.3 (French fork)
 
 ### New

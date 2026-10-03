@@ -1,7 +1,7 @@
 // Sidebar page: 3D view and editor.
 
 import { css, html, LitElement, nothing, type PropertyValues } from "lit";
-import { BuildingController } from "./building-controller.ts";
+import { BuildingController, FRONTEND_VERSION } from "./building-controller.ts";
 import { loadEditor } from "./load-editor.ts";
 import "./components/room-panel.ts";
 import "./components/view3d.ts";
@@ -485,7 +485,8 @@ export class Floorplan3dPanel extends LitElement {
   private renderNotices() {
     const d = this.data;
     const notices = [];
-    if (d.needsRestart) notices.push(html`<div class="fp3d-notice fp3d-notice-warn">${d.backendVersion ? this.t("needs_restart", { version: d.backendVersion }) : this.t("needs_restart_old")}</div>`);
+    if (d.needsReload) notices.push(html`<div class="fp3d-notice fp3d-notice-warn">${this.t("needs_reload", { version: d.backendVersion ?? "", frontend: FRONTEND_VERSION })}</div>`);
+    else if (d.needsRestart) notices.push(html`<div class="fp3d-notice fp3d-notice-warn">${d.backendVersion ? this.t("needs_restart", { version: d.backendVersion }) : this.t("needs_restart_old")}</div>`);
     if (this._upstream && this.isAdmin) {
       const u = this._upstream;
       notices.push(

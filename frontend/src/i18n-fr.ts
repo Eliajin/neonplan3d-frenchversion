@@ -17,6 +17,7 @@ export const fr: Record<I18nKey, string> = {
   save_error: "Échec de l'enregistrement",
   save_failed_detail: "Échec de l'enregistrement : {error}. Vos modifications restent conservées dans ce navigateur.",
   needs_restart: "Une nouvelle version de NeonPlan 3D est installée, mais Home Assistant tourne encore avec la {version}. Redémarrez Home Assistant – d'ici là, l'enregistrement peut échouer.",
+  needs_reload: "Home Assistant tourne déjà avec NeonPlan 3D {version}, mais cette page utilise encore la {frontend} depuis le cache du navigateur. Rechargez la page (Ctrl+F5) ; dans l'application Companion : Paramètres → Application Companion → Dépannage → Réinitialiser le cache du frontend.",
   needs_restart_old: "Une nouvelle version de NeonPlan 3D est installée, mais Home Assistant tourne encore avec une version plus ancienne. Redémarrez Home Assistant – d'ici là, l'enregistrement échoue.",
   draft_found: "Modifications non enregistrées du {time} trouvées.",
   draft_restore: "Restaurer et enregistrer",

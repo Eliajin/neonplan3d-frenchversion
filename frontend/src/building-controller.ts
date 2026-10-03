@@ -5,6 +5,8 @@ import { fetchBuilding, listPacks, saveBuilding, subscribeBuilding } from "./api
 import { normalizeBuilding, type Building } from "./model.ts";
 import { setPacks, type FurniturePack } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
+import { isNewer } from "./version.ts";
+
 
 export type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -99,6 +101,11 @@ export class BuildingController implements ReactiveController {
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => void this.flush(), SAVE_DELAY);
     this.host.requestUpdate();
+  }
+
+  /** The backend is newer than this page: the page comes from the browser cache and needs a reload, not a restart. */
+  get needsReload(): boolean {
+    return !!this.backendVersion && FRONTEND_VERSION !== "dev" && isNewer(this.backendVersion, FRONTEND_VERSION);
   }
 
   /** The backend runs another version than this frontend: Home Assistant has to restart. */
