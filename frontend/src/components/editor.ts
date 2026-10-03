@@ -944,6 +944,14 @@ export class Fp3dEditor extends LitElement {
     if (this._tool === "roof" || this._tool === "energy") {
       const corner = target.closest("[data-roof-corner]")?.getAttribute("data-roof-corner");
       const body = target.closest("[data-roof]")?.getAttribute("data-roof");
+      const marker = this._tool === "energy" ? target.closest("[data-energy-device]")?.getAttribute("data-energy-device") : null;
+      if (marker) {
+        // an energy device by its marker (above solar fields on the roof): selected and moved like furniture
+        this._solarId = null;
+        this.selectItem("furniture", marker);
+        this.drag = this.isAdmin ? { kind: "furniture", id: marker, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
+        return;
+      }
       const solar = this._tool === "energy" ? target.closest("[data-solar]")?.getAttribute("data-solar") : null;
       const turn = this._tool === "energy" ? target.closest("[data-solar-turn]")?.getAttribute("data-solar-turn") : null;
       if (turn && this.isAdmin) {
@@ -2322,6 +2330,25 @@ export class Fp3dEditor extends LitElement {
       </section>`;
   }
 
+  /** Energy tool: a round marker with a symbol and its name on every energy device of the floor, above all else. */
+  private renderEnergyMarkers() {
+    const floor = this.floor;
+    if (!floor) return nothing;
+    const icons: Record<string, string> = { inverter: "⚡", home_battery: "🔋", wallbox: "🔌" };
+    return svg`<g class="fp3d-energy-markers">${floor.furniture
+      .filter((m) => (ENERGY_DEVICES as readonly string[]).includes(m.type))
+      .map((m) => {
+        const [x, y] = this.toScreen([m.x, m.z]);
+        const sel = m.id === this._furnitureId;
+        return svg`<g data-energy-device=${m.id} class=${`fp3d-energy-marker${sel ? " fp3d-energy-marker-sel" : ""}`}>
+          <circle cx=${x} cy=${y} r="17" />
+          <text x=${x} y=${y + 6} class="fp3d-energy-icon">${icons[m.type] ?? "⚡"}</text>
+          ${sel ? svg`<text x=${x} y=${y + 32} class="fp3d-energy-name">${this.t(`furn_${m.type}` as I18nKey)}</text>` : nothing}
+          <title>${this.t(`furn_${m.type}` as I18nKey)}</title>
+        </g>`;
+      })}</g>`;
+  }
+
   /** "Main roof · south · 35°" or "Section 2 · flat roof". */
   private faceLabel(face: RoofFace): string {
     if (face.key === GROUND) return this.t("solar_ground");
@@ -3411,7 +3438,7 @@ export class Fp3dEditor extends LitElement {
               ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
               ${this.room && this.isAdmin && this._tool === "select" && !this._openingId && !this._furnitureId && !this.isFixedItem("room", this.room.id) ? this.renderHandles(this.room) : nothing}
               ${floor ? this.renderOutdoorHandles(floor) : nothing}
-              ${this._tool === "roof" ? svg`${this.renderRoofSections()}${this.renderRoofWindows()}` : this._tool === "energy" ? svg`${this.renderRoofSections()}${this.renderSolarFields()}` : nothing} ${this.renderDraft()} ${this.renderGuides()}
+              ${this._tool === "roof" ? svg`${this.renderRoofSections()}${this.renderRoofWindows()}` : this._tool === "energy" ? svg`${this.renderRoofSections()}${this.renderSolarFields()}${this.renderEnergyMarkers()}` : nothing} ${this.renderDraft()} ${this.renderGuides()}
             </svg>
             ${this.renderContext()}
             <p class="fp3d-hint ${this._fixedHint ? "fp3d-hint-fixed" : ""}">${!floor ? this.t("hint_empty") : this._fixedHint ? this.t("fixed_drag_hint") : this.t(`hint_${this._tool}` as I18nKey)}</p>
@@ -6158,6 +6185,34 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-tool-energy .fp3d-energy-item {
         pointer-events: auto;
+      }
+      .fp3d-energy-marker {
+        cursor: move;
+      }
+      .fp3d-energy-marker circle {
+        fill: color-mix(in srgb, #0b1426 80%, transparent);
+        stroke: #ffd75a;
+        stroke-width: 2;
+      }
+      .fp3d-energy-marker-sel circle {
+        stroke: var(--fp3d-accent);
+        stroke-width: 3;
+        fill: color-mix(in srgb, var(--fp3d-accent) 25%, #0b1426);
+      }
+      .fp3d-energy-marker text {
+        text-anchor: middle;
+        pointer-events: none;
+      }
+      .fp3d-energy-icon {
+        font-size: 17px;
+      }
+      .fp3d-energy-name {
+        font-size: 11px;
+        font-weight: 700;
+        fill: #ffd75a;
+        paint-order: stroke;
+        stroke: rgba(0, 0, 0, 0.65);
+        stroke-width: 3px;
       }
       .fp3d-solar polygon {
         fill: color-mix(in srgb, #1b3a8f 75%, transparent);
