@@ -19,6 +19,7 @@ import {
   tempUnit,
   robotRoom,
   robotRoomSensor,
+  isStatusSensor,
 } from "../devices.ts";
 import { alertColor, alertEntities, alertSources, alertText, findAlerts, type Alert, type AlertSources } from "../alerts.ts";
 import { iconPath, iconSvg } from "../icons.ts";
@@ -657,7 +658,7 @@ export class Fp3dView3d extends LitElement {
           consumerSensors.add(link.power);
           consumers.push({ id, powerEntity: link.power, floorId: floor.id, x: f.x, z: f.z, power: Math.max(0, power) });
         }
-        const running = (power ?? 0) > 10 || st?.state === "on" || st?.state === "running";
+        const running = (power ?? 0) > 10 || st?.state === "on" || st?.state === "running" || (isStatusSensor(st) && isActive(st));
         if (f.type === "radiator" && st && kindOf(st.entity_id) === "climate") {
           // glows while it heats; brighter the further the room is below its target
           const a = st.attributes;
@@ -810,7 +811,7 @@ export class Fp3dView3d extends LitElement {
    * hung on the wall.
    */
   private robotObstacles(floor: Building["floors"][number], room: [number, number][]): [number, number][][] {
-    const OPEN_BELOW = new Set(["rug", "table", "table_round", "coffee_table", "chair", "office_chair", "stool", "bar_stool", "bench", "desk", "robot_vacuum", "parking", "stairwell", "radiator", "tv_wall", "kitchen_wall", "led_strip"]);
+    const OPEN_BELOW = new Set(["rug", "worktop", "table", "table_round", "coffee_table", "chair", "office_chair", "stool", "bar_stool", "bench", "desk", "robot_vacuum", "parking", "stairwell", "radiator", "tv_wall", "kitchen_wall", "led_strip"]);
     return floor.furniture
       .filter((m) => {
         if (OPEN_BELOW.has(m.type) || (m.type.startsWith("lamp_") && m.type !== "lamp_floor" && m.type !== "lamp_uplight")) return false;
@@ -998,7 +999,8 @@ export class Fp3dView3d extends LitElement {
   private onDeviceSwipe(entityId: string, phase: "start" | "move" | "end", dy: number, x: number, y: number): boolean {
     const st = this.hass?.states[entityId];
     if (phase === "start") {
-      if (!st || isUnavailable(st)) return false;
+      // devices that ask before switching are not moved by a swipe (it turns the view instead)
+      if (!st || isUnavailable(st) || this.confirmSet.has(entityId)) return false;
       const kind = kindOf(entityId);
       if (kind === "light" && lightAbilities(st).dim) {
         const pct = st.state === "on" ? (typeof st.attributes.brightness === "number" ? Math.round((st.attributes.brightness as number) / 2.55) : 100) : 0;

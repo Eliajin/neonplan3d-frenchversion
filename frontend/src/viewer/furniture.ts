@@ -889,6 +889,10 @@ function buildFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f:
     case "island":
       island(b, w, d, h);
       break;
+    case "worktop":
+      // only the 4 cm top at its height, nothing below it (no contact shadow)
+      b.box(-w / 2, w / 2, Math.max(0, h - 0.04), h, -d / 2, d / 2, C.whiteTop, C.whiteTop, EDGE_FURN);
+      return;
     case "dishwasher":
       dishwasher(b, w, d, h);
       break;

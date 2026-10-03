@@ -105,6 +105,11 @@ export class Fp3dRoomPanel extends LitElement {
     return html`<button class="fp3d-rp-name" title=${this.t("details")} @click=${() => openMoreInfo(this, id)}>${this.name(id)}</button>`;
   }
 
+  /** Ask first for devices marked so (a blind that must not move by accident). */
+  private askFor(id: string): boolean {
+    return !this.confirmEntities?.has(id) || confirm(this.t("confirm_switch", { name: this.name(id) }));
+  }
+
   private toggle(st: HassEntity, on: boolean, onToggle: () => void) {
     const guarded = () => {
       if (this.confirmEntities?.has(st.entity_id) && !confirm(this.t("confirm_switch", { name: this.name(st.entity_id) }))) return;
@@ -298,11 +303,11 @@ export class Fp3dRoomPanel extends LitElement {
       ${this.nameButton(id)}
       <span class="fp3d-rp-state">${stateText(this.hass, st)}</span>
       <div class="fp3d-rp-buttons">
-        <button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${() => this.call("cover", "open_cover", { entity_id: id })}>${this.t("cover_open")}</button>
+        <button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${() => this.askFor(id) && this.call("cover", "open_cover", { entity_id: id })}>${this.t("cover_open")}</button>
         ${features & COVER_STOP
           ? html`<button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${() => this.call("cover", "stop_cover", { entity_id: id })}>${this.t("cover_stop")}</button>`
           : nothing}
-        <button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${() => this.call("cover", "close_cover", { entity_id: id })}>${this.t("cover_close")}</button>
+        <button class="fp3d-btn fp3d-rp-small" ?disabled=${na} @click=${() => this.askFor(id) && this.call("cover", "close_cover", { entity_id: id })}>${this.t("cover_close")}</button>
       </div>
       ${features & COVER_SET_POSITION && typeof a.current_position === "number"
         ? html`<label class="fp3d-rp-slider"

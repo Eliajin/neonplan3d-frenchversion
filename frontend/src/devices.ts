@@ -287,6 +287,14 @@ export function isUnavailable(st: HassEntity | undefined): boolean {
   return !st || st.state === "unavailable" || st.state === "unknown";
 }
 
+/** States of a status sensor (a 3D printer, a washing machine's programme) that mean "it is working". */
+const WORKING_STATES = new Set(["running", "printing", "prepare", "preparing", "slicing", "heating", "busy", "working", "active", "washing", "rinsing", "spinning", "drying", "cleaning", "in_progress", "in progress", "on"]);
+
+/** Whether an entity is a status sensor (enum states such as running / idle / finish) that furniture can follow. */
+export function isStatusSensor(st: HassEntity | undefined): boolean {
+  return !!st && st.entity_id.startsWith("sensor.") && st.attributes.device_class === "enum";
+}
+
 /** "Active" drives the glow of a device marker: light on, cover open, heating, playing, window open … */
 export function isActive(st: HassEntity | undefined): boolean {
   if (!st) return false;
@@ -304,6 +312,9 @@ export function isActive(st: HassEntity | undefined): boolean {
       return st.state === "playing";
     case "lock":
       return st.state === "unlocked" || st.state === "open";
+    case "sensor":
+      // a status sensor: a 3D printer printing, a machine running
+      return isStatusSensor(st) && WORKING_STATES.has(String(st.state).toLowerCase());
     default:
       return false;
   }
@@ -667,8 +678,14 @@ export function hasScreen(type: string): boolean {
 export function confirmEntities(hass: HomeAssistant, floors: readonly Floor[]): Set<string> {
   const out = new Set<string>();
   const links = furnitureEntities(hass, floors);
+  const openings = floors.some((f) => f.openings.some((o) => o.confirm)) ? openingEntities(hass, floors) : null;
   for (const floor of floors) {
     for (const p of floor.placements) if (p.confirm) out.add(p.entity_id);
+    // blinds and garage doors of openings marked "ask first"
+    for (const o of floor.openings) {
+      const cover = o.confirm ? openings?.get(o.id)?.cover : null;
+      if (cover && cover !== "none") out.add(cover);
+    }
     for (const f of floor.furniture) {
       const e = f.confirm ? links.get(f.id)?.entity : null;
       if (e && e !== "none") out.add(e);

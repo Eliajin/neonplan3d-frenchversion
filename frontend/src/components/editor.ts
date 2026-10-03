@@ -11,7 +11,7 @@ import { holeInRoom } from "../geometry/holes.ts";
 import { weatherEntity } from "../weather.ts";
 import { SHOW_ENERGY, SHOW_PRESENCE } from "../flags.ts";
 import { hasFeature, manualUrl, shopUrl } from "../features.ts";
-import { robotRoomSensor, TOGGLE_KINDS } from "../devices.ts";
+import { isStatusSensor, robotRoomSensor, TOGGLE_KINDS } from "../devices.ts";
 import { ridgeHeight, roofSectionsFromRooms, sectionFrame, sectionProfile, wallTopUnder } from "../roof-sections.ts";
 import { storedImageIds } from "../transfer.ts";
 import { DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS,
@@ -3613,7 +3613,11 @@ export class Fp3dEditor extends LitElement {
                     />
                     ${this.t("cover_position_invert")}</label
                   >`
-                : nothing}`
+                : nothing}
+              <label class="fp3d-check fp3d-wide" title=${this.t("cover_confirm_hint")}
+                ><input type="checkbox" ?disabled=${!admin} .checked=${!!o.confirm} @change=${(ev: Event) => this.updateOpening({ confirm: (ev.target as HTMLInputElement).checked })} />
+                ${this.t("device_confirm")}</label
+              >`
           : nothing}
         ${window
           ? html`${o.leaves === 2 ? html`<h4 class="fp3d-lib-head fp3d-wide">${this.t("leaf_main")}</h4>` : nothing}
@@ -3797,7 +3801,8 @@ export class Fp3dEditor extends LitElement {
             ? id.startsWith("climate.")
             : f.type === "robot_vacuum"
               ? id.startsWith("vacuum.")
-              : /^(switch|media_player|fan|input_boolean|climate)\./.test(id),
+              : // or a status sensor (a 3D printer's print status: running, idle, finish …)
+                /^(switch|media_player|fan|input_boolean|climate)\./.test(id) || isStatusSensor(hass.states[id]),
     );
     const power = this.entityOptions((id) => id.startsWith("sensor.") && hass.states[id]?.attributes.device_class === "power");
     const doorSensors = f.type === "fridge_smart" ? this.entityOptions((id) => id.startsWith("binary_sensor.")) : [];

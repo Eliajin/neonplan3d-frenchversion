@@ -154,10 +154,11 @@ export class Fp3dQuickMenu extends LitElement {
       html`<button class="qm-swatch qm-slot ${active ? "qm-slot-on" : ""}" aria-label=${aria} @click=${action}>${label}</button>`;
     const at = (p: number) => pos !== null && Math.abs(pos - p) < 3;
     const ring = [
-      slot("▲", this.t("cover_open"), () => this.call("cover", "open_cover"), at(100)),
-      ...(setPos ? [75, 50].map((p) => slot(`${p}`, `${p} %`, () => this.call("cover", "set_cover_position", { position: p }), at(p))) : []),
-      slot("▼", this.t("cover_close"), () => this.call("cover", "close_cover"), at(0)),
-      ...(setPos ? [25].map((p) => slot(`${p}`, `${p} %`, () => this.call("cover", "set_cover_position", { position: p }), at(p))) : []),
+      // moving asks first when the blind is marked so; stopping never asks
+      slot("▲", this.t("cover_open"), () => this.ask() && this.call("cover", "open_cover"), at(100)),
+      ...(setPos ? [75, 50].map((p) => slot(`${p}`, `${p} %`, () => this.ask() && this.call("cover", "set_cover_position", { position: p }), at(p))) : []),
+      slot("▼", this.t("cover_close"), () => this.ask() && this.call("cover", "close_cover"), at(0)),
+      ...(setPos ? [25].map((p) => slot(`${p}`, `${p} %`, () => this.ask() && this.call("cover", "set_cover_position", { position: p }), at(p))) : []),
       slot("■", this.t("cover_stop"), () => this.call("cover", "stop_cover"), moving),
     ];
     // the centre shows the blind: its closed part fills from the top
@@ -168,7 +169,7 @@ export class Fp3dQuickMenu extends LitElement {
           class="qm-power qm-blind ${closed < 100 ? "qm-on" : ""}"
           style="--closed:${closed}%"
           aria-label=${moving ? this.t("cover_stop") : closed > 50 ? this.t("cover_open") : this.t("cover_close")}
-          @click=${() => this.call("cover", moving ? "stop_cover" : closed > 50 ? "open_cover" : "close_cover")}
+          @click=${() => (moving ? this.call("cover", "stop_cover") : this.ask() && this.call("cover", closed > 50 ? "open_cover" : "close_cover"))}
         >
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4h16M5 4v15M19 4v15M7 8h10M7 12h10M7 16h10" /></svg>
           <b>${pos !== null ? `${pos} %` : stateText(this.hass, st)}</b>

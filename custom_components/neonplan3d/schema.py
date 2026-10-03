@@ -86,6 +86,8 @@ OPENING_SCHEMA = vol.Schema(
         vol.Optional("position_inverted", default=False): bool,
         # highlight in 3D while open (None) or while closed ("closed": a WC or a child's room door)
         vol.Optional("mark", default=None): vol.Any(None, vol.In(["closed"])),
+        # ask before moving the blind or garage door (no moving by a swipe then)
+        vol.Optional("confirm", default=False): bool,
         vol.Optional("cover", default=None): _ENTITY_REF,
         vol.Optional("contact", default=None): _ENTITY_REF,
         vol.Optional("tilt", default=None): _ENTITY_REF,

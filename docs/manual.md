@@ -194,6 +194,7 @@ Every opening has:
 |---|---|
 | **Cover** | The blind moves in front of the window with the cover's position |
 | **Position sensor** | For blinds whose position comes from a separate sensor, e.g. Homematic. Can be inverted |
+| **Ask before switching** | Open, close and positions ask first in the quick menu and the room panel, and a swipe on the marker no longer moves the blind (it turns the view instead). Stop never asks. Good for tablets where blinds or the garage door would otherwise move by accident |
 | **Contact** | The door swings open, the window opens |
 | **Tilt contact** | A second sensor that reports "tilted" |
 | **Contact second leaf** | For double windows and doors |
@@ -205,7 +206,7 @@ NeonPlan 3D matches covers and contacts through the area automatically. You can 
 
 ![The furniture library](images/editor-library.jpg)
 
-The **Furniture** tool opens the library with 40 built-in models in the sections Lights, Living, Dining, Kitchen, Sleeping, Bath & laundry and Work & other. Your installed furniture packs follow below. The search field filters all sections, sections fold open and closed. Hover over an entry for a small 3D preview.
+The **Furniture** tool opens the library with 40 built-in models in the sections Lights, Living, Dining, Kitchen, Sleeping, Bath & laundry and Work & other. Your installed furniture packs follow below. The **Worktop** (Kitchen and Work & other) is a free top without a base, for gaps in the kitchen or a self-built desk; its **height** is the top edge, 91 cm by default. The search field filters all sections, sections fold open and closed. Hover over an entry for a small 3D preview.
 
 **Symbols on the entries:**
 
@@ -273,7 +274,7 @@ Lamps are furniture with a linked light: ceiling light, downlight, surface spot,
 
 TVs, media walls, desks with monitors, washing machines, dryers, dishwashers, radiators, robot vacuums and many pack items link to entities:
 
-- **Device** or **TV (media player or smart plug)**: A TV glows while it is on. An older TV on a smart plug simply takes the plug's switch; the screen glows while the plug is on, and a tap switches it. Washing machine, dryer and dishwasher glow while they run. A radiator with a thermostat glows while it heats.
+- **Device** or **TV (media player or smart plug)**: A **status sensor** works as a device too, e.g. the print status of a 3D printer (Bambu Lab and others); the item then counts as active while the status reports "running", "printing", "prepare" or similar. A TV glows while it is on. An older TV on a smart plug simply takes the plug's switch; the screen glows while the plug is on, and a tap switches it. Washing machine, dryer and dishwasher glow while they run. A radiator with a thermostat glows while it heats.
 - **Power sensor (W)**: The item shows its watts.
 - **Ask before switching** and **Marker in 3D** as with devices.
 - **Pictures by state** on screens: a Pro add-on, see [6.3](#63-live-screens).
@@ -413,7 +414,7 @@ Each device remembers these switches.
 ![Tapping a lamp](images/view-tap-lamp.jpg)
 
 - **Tap** switches lamps and switches. The lamp flashes briefly to confirm.
-- **Swipe up or down** on a lamp dims it; on a blind or window it moves the blind. The value appears at your finger.
+- **Swipe up or down** on a lamp dims it; on a blind or window it moves the blind. The value appears at your finger. Devices and windows with "Ask before switching" do not react to a swipe.
 - **Long press** opens the quick menu: brightness, colour temperature and colours for lights; up, stop, down and fixed positions for blinds.
 - Tap a **window** – frame, glass or blind – to open the blind menu or show the contact.
 - **Double tap a room** switches all its lights on or off. Devices with "Ask before switching" stay out.

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { appColor, areaEntities, otherAreaEntities, roomClimateSensors, roomClimateValue, unassignedEntities, autoPlace, entityName, fridgeDoors, furnitureEntities, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, powerSensorsOf, primaryEntities, roomPanelEntities, windowPosition, robotRoom, robotRoomSensor, roomKey } from "./devices.ts";
+import { appColor, areaEntities, otherAreaEntities, roomClimateSensors, roomClimateValue, unassignedEntities, autoPlace, entityName, fridgeDoors, furnitureEntities, groupByDevice, isActive, kindOf, lightGlow, openingEntities, openingState, powerSensorsOf, primaryEntities, roomPanelEntities, windowPosition, confirmEntities, robotRoom, robotRoomSensor, roomKey } from "./devices.ts";
 import type { Floor, Opening, Room } from "./model.ts";
 import { centroid, newFloor, pointInPolygon } from "./model.ts";
 import type { HomeAssistant } from "./types.ts";
@@ -442,4 +442,25 @@ test("a robot vacuum's current room is found on its device and matched by room o
   hass.states["sensor.robbi_room"].state = "Keller";
   assert.equal(robotRoom(hass, rooms, "vacuum.robbi", "sensor.robbi_room"), null);
   assert.equal(roomKey("Büro"), roomKey("Buero"));
+});
+
+test("a window marked 'ask first' puts its blind on the confirm list", () => {
+  const hass = hassWith();
+  const o = (id: string, extra: Partial<Opening> = {}): Opening => ({
+    id, room_id: "r", edge: 0, offset: 1, width: 1, type: "window", sill: 0.9, height: 1.3, hinge: "left", leaves: 1, swing: "in", cover: "cover.rollo", contact: null, contact2: null, tilt: null, ...extra,
+  });
+  const floor: Floor = { ...newFloor("f", "F", 0), rooms: [{ ...room, area_id: "wohnen" }], openings: [o("w1")] };
+  assert.equal(confirmEntities(hass, [floor]).has("cover.rollo"), false);
+  floor.openings = [o("w1", { confirm: true })];
+  assert.equal(confirmEntities(hass, [floor]).has("cover.rollo"), true);
+});
+
+test("a status sensor (a 3D printer) counts as active while it prints", () => {
+  const st = (state: string, dc = "enum") => ({ entity_id: "sensor.drucker_status", state, attributes: { device_class: dc } });
+  assert.equal(isActive(st("running")), true);
+  assert.equal(isActive(st("prepare")), true);
+  assert.equal(isActive(st("idle")), false);
+  assert.equal(isActive(st("finish")), false);
+  // an ordinary sensor is never "active"
+  assert.equal(isActive(st("running", "temperature")), false);
 });

@@ -194,6 +194,7 @@ Jede Öffnung hat:
 |---|---|
 | **Rollladen** | Der Rollladen fährt vor dem Fenster mit der Position der Cover-Entität |
 | **Positions-Sensor** | Für Rollläden, deren Position über einen eigenen Sensor kommt, etwa bei Homematic. Bei Bedarf umkehrbar |
+| **Vor dem Schalten nachfragen** | Auf, Zu und Positionen fragen im Schnellmenü und im Raumfenster erst nach, und Wischen über das Symbol bewegt den Rollladen nicht mehr (es dreht dann die Ansicht). Stopp fragt nie. Gut für Tablets, auf denen Rollläden oder das Garagentor sonst versehentlich fahren |
 | **Kontakt** | Die Tür schwingt auf, das Fenster öffnet sich |
 | **Kippkontakt** | Ein zweiter Sensor, der „gekippt“ meldet |
 | **Kontakt zweiter Flügel** | Für zweiflügelige Fenster und Türen |
@@ -205,7 +206,7 @@ Rollläden und Kontakte ordnet NeonPlan 3D über den Bereich automatisch zu. Du 
 
 ![Die Möbelbibliothek](images/editor-library.jpg)
 
-Das Werkzeug **Möbel** öffnet rechts die Bibliothek mit 40 eingebauten Modellen in den Abschnitten Leuchten, Wohnen, Essen, Küche, Schlafen, Bad & Hauswirtschaft und Arbeiten & Sonstiges. Darunter folgen deine installierten Möbel-Packs. Das Suchfeld oben filtert alle Abschnitte, die Abschnitte klappen auf und zu. Fährst du mit der Maus über einen Eintrag, zeigt eine kleine 3D-Vorschau das Möbel.
+Das Werkzeug **Möbel** öffnet rechts die Bibliothek mit 40 eingebauten Modellen in den Abschnitten Leuchten, Wohnen, Essen, Küche, Schlafen, Bad & Hauswirtschaft und Arbeiten & Sonstiges. Darunter folgen deine installierten Möbel-Packs. Die **Arbeitsplatte** (Küche sowie Arbeiten & Sonstiges) ist eine freie Platte ohne Unterbau, für Lücken in der Küche oder einen selbst gebauten Schreibtisch; ihre **Höhe** ist die Oberkante, voreingestellt 91 cm. Das Suchfeld oben filtert alle Abschnitte, die Abschnitte klappen auf und zu. Fährst du mit der Maus über einen Eintrag, zeigt eine kleine 3D-Vorschau das Möbel.
 
 **Symbole an den Einträgen:**
 
@@ -273,7 +274,7 @@ Leuchten sind Möbel mit einem verknüpften Licht. Es gibt Deckenleuchte, Einbau
 
 Fernseher, Medienwand, Schreibtisch mit Monitor, Waschmaschine, Trockner, Spülmaschine, Heizkörper, Saugroboter und viele Pack-Möbel lassen sich mit Entitäten verknüpfen:
 
-- **Gerät** oder **Fernseher (Media-Player oder Steckdose)**: Ein Fernseher leuchtet, solange er läuft. Ein älterer Fernseher an einer smarten Steckdose nimmt einfach deren Schalter; der Bildschirm leuchtet, solange die Steckdose an ist, und ein Tipp schaltet sie. Waschmaschine, Trockner und Spülmaschine leuchten, solange sie arbeiten. Ein Heizkörper mit Thermostat glüht beim Heizen.
+- **Gerät** oder **Fernseher (Media-Player oder Steckdose)**: Als Gerät geht auch ein **Status-Sensor**, etwa der Druckstatus eines 3D-Druckers (Bambu Lab u. a.). Das Möbel gilt dann als aktiv, solange der Status „running“, „printing“, „prepare“ oder ähnlich meldet.  Ein Fernseher leuchtet, solange er läuft. Ein älterer Fernseher an einer smarten Steckdose nimmt einfach deren Schalter; der Bildschirm leuchtet, solange die Steckdose an ist, und ein Tipp schaltet sie. Waschmaschine, Trockner und Spülmaschine leuchten, solange sie arbeiten. Ein Heizkörper mit Thermostat glüht beim Heizen.
 - **Leistungssensor (W)**: Das Möbel zeigt seine Watt.
 - **Vor dem Schalten nachfragen** und **Symbol in 3D** wie bei Geräten.
 - **Bilder nach Zustand** bei Bildschirmen: eine Pro-Erweiterung, siehe [6.3](#63-bildschirme-live).
@@ -413,7 +414,7 @@ Alle Schalter merkt sich das jeweilige Gerät.
 ![Lampe antippen](images/view-tap-lamp.jpg)
 
 - **Antippen** schaltet Lampen und Schalter. Die Lampe blinkt kurz zur Bestätigung.
-- **Senkrecht wischen** auf einer Lampe dimmt, auf einem Rollladen oder Fenster fährt der Rollladen. Der Wert erscheint am Finger.
+- **Senkrecht wischen** auf einer Lampe dimmt, auf einem Rollladen oder Fenster fährt der Rollladen. Der Wert erscheint am Finger. Geräte und Fenster mit „Vor dem Schalten nachfragen“ reagieren nicht auf Wischen.
 - **Lange drücken** öffnet das Schnellmenü: bei Lichtern Helligkeit, Farbtemperatur und Farben, bei Rollläden Auf, Stopp, Zu und feste Positionen.
 - Ein **Fenster** antippen, egal ob Rahmen, Glas oder Rollladen, öffnet das Rollladen-Menü oder zeigt den Kontakt.
 - **Doppeltipp auf einen Raum** schaltet alle Lichter des Raums ein oder aus. Geräte mit „Vor dem Schalten nachfragen“ bleiben außen vor.
