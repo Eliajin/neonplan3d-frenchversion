@@ -244,6 +244,8 @@ export interface RoofSettings {
   solar?: SolarField[];
   /** Strings that fields belong to. */
   strings?: SolarString[];
+  /** Roof windows on the roof faces. */
+  windows?: RoofWindow[];
 }
 
 /**
@@ -283,6 +285,23 @@ export interface SolarField {
   string?: string | null;
   /** Garden fields (face "ground"): rotation of the rows in the plan, degrees. */
   rotation?: number | null;
+}
+
+/**
+ * A roof window on a roof face (u along the eave, v up the slope, in metres, at its lower left corner). Like a
+ * window it follows a contact (open or tilted: the sash swings out at the top) and a blind (cover).
+ */
+export interface RoofWindow {
+  id: string;
+  face: string;
+  u: number;
+  v: number;
+  /** Size in metres (null = 0.78 × 1.18, a common size). */
+  w?: number | null;
+  h?: number | null;
+  cover?: EntityRef;
+  contact?: EntityRef;
+  tilt?: EntityRef;
 }
 
 /** A string of solar modules: one or more fields wired together to one inverter. */

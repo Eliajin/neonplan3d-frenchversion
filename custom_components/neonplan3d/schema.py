@@ -269,6 +269,22 @@ SOLAR_STRING_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
+# a roof window on a roof face, with an optional blind (cover) and contacts
+ROOF_WINDOW_SCHEMA = vol.Schema(
+    {
+        vol.Required("id"): _ID,
+        vol.Required("face"): vol.All(str, vol.Length(max=80)),
+        vol.Required("u"): vol.All(vol.Coerce(float), vol.Range(min=-50, max=200)),
+        vol.Required("v"): vol.All(vol.Coerce(float), vol.Range(min=-50, max=200)),
+        vol.Optional("w", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.3, max=4))),
+        vol.Optional("h", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.3, max=4))),
+        vol.Optional("cover", default=None): _ENTITY_REF,
+        vol.Optional("contact", default=None): _ENTITY_REF,
+        vol.Optional("tilt", default=None): _ENTITY_REF,
+    },
+    extra=vol.ALLOW_EXTRA,
+)
+
 ROOF_SCHEMA = vol.Schema(
     {
         vol.Optional("type", default="none"): vol.In(["none", "flat", "gable", "custom"]),
@@ -277,6 +293,7 @@ ROOF_SCHEMA = vol.Schema(
         # solar fields on the roof faces
         vol.Optional("solar", default=list): vol.All([SOLAR_FIELD_SCHEMA], vol.Length(max=32)),
         vol.Optional("strings", default=list): vol.All([SOLAR_STRING_SCHEMA], vol.Length(max=16)),
+        vol.Optional("windows", default=list): vol.All([ROOF_WINDOW_SCHEMA], vol.Length(max=32)),
         vol.Optional("pitch", default=35): vol.All(vol.Coerce(float), vol.Range(min=5, max=60)),
         vol.Optional("overhang", default=0.4): vol.All(vol.Coerce(float), vol.Range(min=0, max=2)),
         # gable roof: ridge along the long side (None) or along the short side (terraced houses)

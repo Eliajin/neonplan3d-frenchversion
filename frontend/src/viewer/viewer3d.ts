@@ -51,7 +51,7 @@ import { makeFoldable, type FoldMasks } from "./fold.ts";
 import { pushCameraModel, pushPackLamp, screenRect, pushFridgeDoors } from "./furniture.ts";
 import { mountBase, packItem, setPacks, type FurniturePack } from "../packs.ts";
 import { withVehicles } from "../parking.ts";
-import { buildRoof } from "./roof.ts";
+import { buildRoof, type RoofWindowState } from "./roof.ts";
 import { GROUND, groundFace, groundFloor } from "../solar.ts";
 import { lineBlending, themed, themeIndex, type Theme, type ThemeUniform } from "./theme.ts";
 
@@ -392,6 +392,9 @@ export class FloorplanViewer {
   /** Lamps flashing after a tap (entity id -> end time). */
   private flashes = new Map<string, number>();
   private flows: FlowPiece[] = [];
+  /** Live state of the roof windows (the roof is rebuilt when it changes). */
+  private roofWindows = new Map<string, RoofWindowState>();
+  private roofWindowsKey = "";
   /** Stripe phase per cable piece, kept when its speed changes so the stripes do not jump. */
   private flowPhase = new Map<string, { speed: number; offset: number }>();
   private readonly flowTime = { value: 0 };
@@ -713,6 +716,16 @@ export class FloorplanViewer {
       this.buildGlow(fv);
       this.buildLamps(fv);
     }
+    this.invalidate();
+  }
+
+  /** Roof windows open, tilted or with the blind down: the roof is rebuilt when that changes. */
+  setRoofWindows(states: Map<string, RoofWindowState>): void {
+    const key = JSON.stringify([...states]);
+    if (key === this.roofWindowsKey) return;
+    this.roofWindowsKey = key;
+    this.roofWindows = states;
+    this.buildRoofMesh();
     this.invalidate();
   }
 
@@ -1554,7 +1567,7 @@ export class FloorplanViewer {
       this.scene.remove(this.roof.group);
       this.roof = null;
     }
-    const geos = this.building ? buildRoof(this.building) : [];
+    const geos = this.building ? buildRoof(this.building, this.roofWindows) : [];
     if (!geos.length) return;
     const group = new Group();
     const solid = themed(new MeshBasicMaterial({ vertexColors: true, transparent: true, side: DoubleSide }), this.themeUniform);

@@ -4,7 +4,7 @@
 // A face has a local frame: u runs along the eave (0 … lu), s up the slope from the eave (0 … ls, true
 // length); on a flat roof s runs across, level. A field's u and v place its lower left corner on the face.
 
-import type { Building, Floor, RoofSection, SolarField, Vec2 } from "./model.ts";
+import type { Building, Floor, RoofSection, RoofWindow, SolarField, Vec2 } from "./model.ts";
 import { outdoorGround } from "./model.ts";
 import { sectionFrame, sectionOverhang, sectionProfile } from "./roof-sections.ts";
 
@@ -370,4 +370,30 @@ function unit(a: V3): V3 {
 }
 function cross(a: V3, b: V3): V3 {
   return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+}
+
+/** Default roof window size (a common 78 × 118 cm). */
+export const ROOF_WINDOW_W = 0.78;
+export const ROOF_WINDOW_H = 1.18;
+
+/** A roof window seen as a field of one module of its size (so placing, moving and keeping it on the face work alike). */
+export function windowAsField(w: RoofWindow): SolarField {
+  return { id: w.id, face: w.face, u: w.u, v: w.v, rows: 1, cols: 1, portrait: true, module_w: w.w || ROOF_WINDOW_W, module_h: w.h || ROOF_WINDOW_H };
+}
+
+/** The four corners of a roof window, a little above the roof (lower left, lower right, upper right, upper left); null off the face. */
+export function windowCorners(face: RoofFace, w: RoofWindow): [V3, V3, V3, V3] | null {
+  const m = fieldModules(face, windowAsField(w))[0];
+  if (!m) return null;
+  // the modules ride 7 cm above the roof on rails; a roof window sits nearly flush
+  const down = (p: V3): V3 => [p[0] - face.n[0] * 0.05, p[1] - face.n[1] * 0.05, p[2] - face.n[2] * 0.05];
+  return [down(m.corners[0]), down(m.corners[1]), down(m.corners[2]), down(m.corners[3])];
+}
+
+/** A new roof window in the middle of a face, at about head height above the floor below. */
+export function proposeWindow(face: RoofFace, id: string): RoofWindow {
+  const w = ROOF_WINDOW_W;
+  const h = ROOF_WINDOW_H;
+  const [a, b] = face.span(face.ls / 2);
+  return { id, face: face.key, u: Math.round(((a + b - w) / 2) * 100) / 100, v: Math.round(Math.max(0, Math.min(face.ls - h, face.ls * 0.45 - h / 2)) * 100) / 100, w: null, h: null, cover: null, contact: null, tilt: null };
 }

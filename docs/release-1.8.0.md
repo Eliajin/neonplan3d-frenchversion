@@ -4,6 +4,7 @@
 - **Eigene Muster:** Bei „Module pro Reihe“ geht auch eine Liste wie **„4, 4, 3“** (Reihen eigener Länge, links, mittig oder rechts ausgerichtet), und mit **Module einzeln an/aus** tippst du im Grundriss einzelne Module weg, etwa um einen Schornstein herum. Ein Feld lässt sich auf eine andere Dachfläche ziehen.
 - **Full Black** als Standard-Optik, Blau bleibt wählbar. Die **Modulgröße** ist einstellbar (Standard 1,13 × 1,72 m).
 - **Stränge:** Felder, die zusammen verschaltet sind, kommen in denselben Strang, auch über mehrere Dächer hinweg (z. B. 5 Module auf dem Haus und 5 auf der Garage). Ein Strang hat Namen, PV-Sensor und Wechselrichter.
+- **Dachfenster:** Im Werkzeug **Dach** setzt du Dachfenster in jede Dachfläche, verschiebbar wie Solarfelder. Mit Kontakt und Rollladen klappt der Flügel in 3D auf und der Rollladen fährt über die Scheibe.
 - **Wechselrichter, Stromspeicher und Wallbox** als neue Möbel in der Bibliothek unter **Energie & Solar**. Mit einem Leistungssensor zeigen sie ihre Watt.
 
 Bald folgt die Pro-Erweiterung **Solar & Energie**: Module, die bei Sonne leben, Stromflüsse durchs Haus und ein Hologramm mit den wichtigsten Werten.
@@ -16,6 +17,7 @@ Bald folgt die Pro-Erweiterung **Solar & Energie**: Module, die bei Sonne leben,
 - **Your own patterns:** "Modules per row" also takes a list like **"4, 4, 3"** (rows of their own length, aligned left, centred or right), and **Modules on/off one by one** lets you tap single modules away in the plan, e.g. around a chimney. A field can be dragged onto another roof face.
 - **Full black** as the default look, blue stays available. The **module size** can be set (1.13 × 1.72 m by default).
 - **Strings:** fields wired together go into the same string, also across several roofs (e.g. 5 modules on the house and 5 on the garage). A string has a name, a PV sensor and an inverter.
+- **Roof windows:** the **Roof** tool puts roof windows into any roof face, movable like solar fields. With a contact and a blind the sash opens in 3D and the blind comes down over the glass.
 - **Solar inverter, home battery and wallbox** as new items in the library under **Energy & solar**. With a power sensor they show their watts.
 
 Coming soon: the Pro add-on **Solar & Energy** with modules that come alive in the sun, power flows through the house and a hologram with the key figures.

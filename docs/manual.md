@@ -359,6 +359,10 @@ A simple house gets a flat or gable roof over the whole top floor under **Settin
 
 ![The Roof tool with a selected roof section](images/editor-roof.jpg)
 
+#### Roof windows
+
+Below the roof sections, **+ Roof window** puts a window into a roof face (78 × 118 cm by default). Drag it in the plan, also onto another roof face. Like a window it has a **Blind**, a **Contact** and a **Tilt contact**: open, the sash swings out, hinged at the top; tilted, a little; the blind comes down over the glass from the top.
+
 ### 4.20 Energy: solar fields
 
 The **Energy** tool gathers everything about energy in the house, starting with the **solar fields** (meters, heating and heat pump will follow). **+ Solar field** puts a field on the sunniest free roof face, as large as fits. **+ In the garden** puts a field on frames beside the house. The modules lie in the slope of the face; on a flat roof they stand on frames. This works on the single gable and flat roof and on all roof sections (gable, hip, pent, flat).

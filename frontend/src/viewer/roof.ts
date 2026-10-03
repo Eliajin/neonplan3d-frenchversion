@@ -7,7 +7,7 @@ import { Color } from "three";
 import type { Building, Floor, RoofSection, SolarField } from "../model.ts";
 import { sectionFrame, sectionOverhang, sectionProfile, type SectionOverhang } from "../roof-sections.ts";
 import { DEG, GeoBuffer, LineBuffer, pushPrism, shade } from "./geo.ts";
-import { fieldModules, roofFaces, type RoofFace } from "../solar.ts";
+import { fieldModules, roofFaces, windowCorners, type RoofFace } from "../solar.ts";
 
 const ROOF = 0x1a2338;
 const ROOF_TOP = 0x222d48;
@@ -25,6 +25,17 @@ const PANEL_LOOKS = {
   blue: { glass: new Color(0x15295a), edge: shade(0x9fb8ff, 0.55), cells: shade(0x3d6cff, 0.35) },
 };
 const PANEL_POST = shade(0xc9d3e6, 0.5);
+/** Roof windows: a light frame, glass, the blind. */
+const WINDOW_FRAME = shade(0xc9d3e6, 0.85);
+const WINDOW_GLASS = new Color(0x2b6b8f);
+const WINDOW_BLIND = new Color(0x3a4258);
+
+/** Live state of a roof window: how far its sash is open (1 = open, tilt counts less) and how far its blind is down. */
+export interface RoofWindowState {
+  open: number;
+  tilt: number;
+  cover: number;
+}
 
 /** Roof geometry that sits on a floor: y = 0 is `base` above the floor's own level. */
 export interface RoofGeometry {
@@ -45,12 +56,60 @@ export function roofFloor(b: Building): Floor | null {
 }
 
 /** The roof, in parts per floor (each part moves with its floor when the floors are pulled apart). */
-export function buildRoof(b: Building): RoofGeometry[] {
+export function buildRoof(b: Building, windows: ReadonlyMap<string, RoofWindowState> = new Map()): RoofGeometry[] {
   const roof = b.settings.roof;
   const one = roof?.type === "custom" ? null : buildSingleRoof(b);
   const parts = roof?.type === "custom" ? buildSections(b, roof.sections ?? [], roof.overhang) : one ? [one] : [];
   pushSolar(b, parts);
+  pushRoofWindows(b, parts, windows);
   return parts;
+}
+
+/** Roof windows: frame and glass in the slope; the sash swings out at the top when open, the blind comes down. */
+function pushRoofWindows(b: Building, parts: RoofGeometry[], states: ReadonlyMap<string, RoofWindowState>): void {
+  const windows = b.settings.roof?.windows ?? [];
+  if (!windows.length || !parts.length) return;
+  const faces = new Map(roofFaces(b).map((f) => [f.key, f]));
+  for (const w of windows) {
+    const face = faces.get(w.face);
+    const corners = face ? windowCorners(face, w) : null;
+    if (!face || !corners) continue;
+    const part = face.section ? parts.find((p) => p.sections?.includes(face.section!)) : parts[0];
+    if (!part) continue;
+    const dy = part.floor.elevation + part.base;
+    const L = (p: number[]): number[] => [p[0], p[1] - dy, p[2]];
+    const [a, c, d, e] = corners.map(L);
+    const st = states.get(w.id) ?? { open: 0, tilt: 0, cover: 0 };
+    const up = (p: number[], k: number) => [p[0] + face.n[0] * k, p[1] + face.n[1] * k, p[2] + face.n[2] * k];
+    const mix = (p: number[], q: number[], t: number) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t];
+    // the fixed frame in the roof
+    const ring = [a, c, d, e].map((p) => up(p, 0.06));
+    for (let i = 0; i < 4; i++) part.lines.seg(ring[i], ring[(i + 1) % 4], WINDOW_FRAME);
+    // the sash, hinged at the top: its lower edge swings out along the normal (open 30°, tilted 12°)
+    const angle = (st.open > 0.5 ? 30 : st.tilt > 0.5 ? 12 : 0) * DEG;
+    const h = Math.hypot(d[0] - c[0], d[1] - c[1], d[2] - c[2]);
+    const swing = (top: number[]) => {
+      const es = face.es;
+      return [top[0] - es[0] * h * Math.cos(angle) + face.n[0] * h * Math.sin(angle), top[1] - es[1] * h * Math.cos(angle) + face.n[1] * h * Math.sin(angle), top[2] - es[2] * h * Math.cos(angle) + face.n[2] * h * Math.sin(angle)];
+    };
+    const top0 = up(e, 0.065);
+    const top1 = up(d, 0.065);
+    const bot0 = swing(top0);
+    const bot1 = swing(top1);
+    part.solid.tri(bot0, bot1, top1, WINDOW_GLASS);
+    part.solid.tri(bot0, top1, top0, WINDOW_GLASS);
+    for (const [p, q] of [[bot0, bot1], [bot1, top1], [top1, top0], [top0, bot0]]) part.lines.seg(p, q, WINDOW_FRAME);
+    // the blind comes down from the top over the sash
+    if (st.cover > 0.02) {
+      const k = Math.min(1, st.cover);
+      const b0 = up(mix(top0, bot0, k), 0.01);
+      const b1 = up(mix(top1, bot1, k), 0.01);
+      const t0 = up(top0, 0.01);
+      const t1 = up(top1, 0.01);
+      part.solid.tri(b0, b1, t1, WINDOW_BLIND);
+      part.solid.tri(b0, t1, t0, WINDOW_BLIND);
+    }
+  }
 }
 
 /** Solar fields on the roof: every module on its face, in the coordinates of the roof part the face belongs to. */

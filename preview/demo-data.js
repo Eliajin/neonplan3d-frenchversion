@@ -424,7 +424,10 @@ DEMO_BUILDING.settings = {
   ...DEMO_BUILDING.settings,
   north: 0,
   // a solar field of 2 × 7 modules on the south side of the roof
-  roof: { type: "gable", pitch: 35, overhang: 0.4, solar: [{ id: "pv_sued", face: "main:b", u: 1.4, v: 0.75, rows: 2, cols: 7, portrait: true }] },
+  roof: { type: "gable", pitch: 35, overhang: 0.4, solar: [{ id: "pv_sued", face: "main:b", u: 1.4, v: 0.75, rows: 2, cols: 7, portrait: true }],
+    // a roof window beside it: open, with the blind half down
+    windows: [{ id: "dachfenster", face: "main:b", u: 10.0, v: 1.0, contact: "binary_sensor.schlafzimmer_fenster", cover: "cover.kueche" }],
+  },
 };
 
 // an invented furniture pack (the preview does not check signatures)

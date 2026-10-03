@@ -13,7 +13,7 @@ import { SHOW_ENERGY, SHOW_PRESENCE } from "../flags.ts";
 import { hasFeature, manualUrl, shopUrl } from "../features.ts";
 import { isStatusSensor, robotRoomSensor, TOGGLE_KINDS } from "../devices.ts";
 import { ridgeHeight, roofSectionsFromRooms, sectionFrame, sectionProfile, wallTopUnder } from "../roof-sections.ts";
-import { bestFace, clampField, faceAt, faceCompass, fieldFace, fieldModules, GROUND, pointOnFace, proposeField, proposeGroundField, roofFaces, rowCounts, type RoofFace } from "../solar.ts";
+import { bestFace, clampField, faceAt, faceCompass, fieldFace, fieldModules, GROUND, pointOnFace, proposeField, proposeGroundField, proposeWindow, roofFaces, rowCounts, windowAsField, windowCorners, type RoofFace } from "../solar.ts";
 import { storedImageIds } from "../transfer.ts";
 import { DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS,
   normalizeBuilding,
@@ -59,6 +59,7 @@ import {
   type RoofSection,
   type SolarField,
   type SolarString,
+  type RoofWindow,
   ROOF_SHAPES,
   type MarkerShow,
   MARKER_SHOWS,
@@ -103,7 +104,7 @@ type Drag =
   | { kind: "room"; roomId: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
   | { kind: "rect"; start: Vec2; end: Vec2; outdoor?: boolean; hole?: boolean; roof?: boolean }
   | { kind: "roofmove"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean }
-  | { kind: "solarmove"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean; grab: { du: number; ds: number } | null }
+  | { kind: "solarmove"; id: string; start: Vec2; startScreen: [number, number]; base: Building; moved: boolean; grab: { du: number; ds: number } | null; win?: boolean }
   | { kind: "outvertex"; id: string; index: number; base: Building; moved: boolean }
   | { kind: "roofcorner"; id: string; corner: [0 | 1, 0 | 1]; base: Building; moved: boolean }
   | { kind: "freewall"; start: Vec2; end: Vec2 }
@@ -153,6 +154,7 @@ export class Fp3dEditor extends LitElement {
     _roofId: { state: true },
     _solarId: { state: true },
     _solarPick: { state: true },
+    _roofWinId: { state: true },
     _furnQuery: { state: true },
     _libOpen: { state: true },
     _expanded: { state: true },
@@ -217,6 +219,8 @@ export class Fp3dEditor extends LitElement {
   private declare _solarId: string | null;
   /** Solar field form: taps in the plan switch single modules on and off. */
   private declare _solarPick: boolean;
+  /** Selected roof window (roof tool). */
+  private declare _roofWinId: string | null;
   /** Furniture library: the search text, and which sections are open (built-in groups and packs). */
   private declare _furnQuery: string;
   private declare _libOpen: Set<string>;
@@ -285,6 +289,7 @@ export class Fp3dEditor extends LitElement {
     this._roofId = null;
     this._solarId = null;
     this._solarPick = false;
+    this._roofWinId = null;
     this._furnQuery = "";
     this._libOpen = new Set(["group:lights", "group:living"]);
     try {
@@ -880,6 +885,18 @@ export class Fp3dEditor extends LitElement {
         this.drag = this.isAdmin ? { kind: "solarmove", id: solar, start: world, startScreen: local, base: this._doc, moved: false, grab } : { kind: "pan", last: local };
         return;
       }
+      const win = this._tool === "roof" ? target.closest("[data-roofwin]")?.getAttribute("data-roofwin") : null;
+      if (win) {
+        this._roofWinId = win;
+        this._roofId = null;
+        const w = this._doc.settings.roof.windows?.find((x) => x.id === win);
+        const face = w ? roofFaces(this._doc).find((f) => f.key === w.face) : undefined;
+        const hit = face ? pointOnFace(face, world) : null;
+        const grab = w && hit ? { du: hit.u - w.u, ds: hit.s - w.v } : null;
+        this.drag = this.isAdmin ? { kind: "solarmove", id: win, start: world, startScreen: local, base: this._doc, moved: false, grab, win: true } : { kind: "pan", last: local };
+        return;
+      }
+      if (this._tool === "roof") this._roofWinId = null;
       if (this._tool === "energy") {
         // beside the fields the energy tool only pans the plan
         this._solarId = null;
@@ -1160,7 +1177,8 @@ export class Fp3dEditor extends LitElement {
       case "solarmove": {
         if (!drag.moved && Math.hypot(local[0] - drag.startScreen[0], local[1] - drag.startScreen[1]) < 5) return;
         drag.moved = true;
-        const src = drag.base.settings.roof.solar?.find((x) => x.id === drag.id);
+        const winSrc = drag.win ? drag.base.settings.roof.windows?.find((x) => x.id === drag.id) : undefined;
+        const src = drag.win ? (winSrc ? windowAsField(winSrc) : undefined) : drag.base.settings.roof.solar?.find((x) => x.id === drag.id);
         const faces = roofFaces(drag.base);
         const own = src ? fieldFace(drag.base, src, faces) : null;
         if (!src || !own) return;
@@ -1188,6 +1206,11 @@ export class Fp3dEditor extends LitElement {
         const kept = clampField(face, { ...src, face: face.key, u, v, tilt: face.flat ? (src.tilt ?? 15) : src.tilt });
         this.change(
           (doc) => {
+            if (drag.win) {
+              const w = doc.settings.roof.windows?.find((x) => x.id === drag.id);
+              if (w) Object.assign(w, { face: face.key, ...kept });
+              return;
+            }
             const f = doc.settings.roof.solar?.find((x) => x.id === drag.id);
             if (f) Object.assign(f, { face: face.key, ...kept }, face.flat && f.tilt == null ? { tilt: 15 } : {});
           },
@@ -2038,6 +2061,107 @@ export class Fp3dEditor extends LitElement {
     })}</g>`;
   }
 
+  /** Roof windows over the plan (roof tool), the selected one highlighted. */
+  private renderRoofWindows() {
+    const windows = this._doc.settings.roof.windows ?? [];
+    if (!windows.length) return nothing;
+    const faces = new Map(roofFaces(this._doc).map((f) => [f.key, f]));
+    return svg`<g class="fp3d-roofwin-layer">${windows.map((w) => {
+      const face = faces.get(w.face);
+      const c = face ? windowCorners(face, w) : null;
+      if (!c) return nothing;
+      return svg`<g data-roofwin=${w.id} class=${`fp3d-roofwin${w.id === this._roofWinId ? " fp3d-roofwin-sel" : ""}`}><polygon points=${c.map((p) => this.toScreen([p[0], p[2]]).join(",")).join(" ")} /></g>`;
+    })}</g>`;
+  }
+
+  private addRoofWindow(): void {
+    if (!this.isAdmin) return;
+    const faces = roofFaces(this._doc).filter((f) => !f.flat);
+    const face = bestFace(faces, this._doc.settings.north ?? 0) ?? roofFaces(this._doc)[0];
+    if (!face) return;
+    const w = proposeWindow(face, uid("rwin"));
+    this.change((doc) => (doc.settings.roof.windows = [...(doc.settings.roof.windows ?? []), w]));
+    this._roofWinId = w.id;
+    this._roofId = null;
+  }
+
+  private updateRoofWindow(patch: Partial<RoofWindow>): void {
+    const id = this._roofWinId;
+    if (!id || !this.isAdmin) return;
+    this.change((doc) => {
+      const w = doc.settings.roof.windows?.find((x) => x.id === id);
+      if (!w) return;
+      Object.assign(w, patch);
+      const face = roofFaces(doc).find((x) => x.key === w.face);
+      if (face) Object.assign(w, clampField(face, windowAsField(w)));
+    });
+  }
+
+  private deleteRoofWindow(): void {
+    const id = this._roofWinId;
+    if (!id || !this.isAdmin) return;
+    this.change((doc) => (doc.settings.roof.windows = (doc.settings.roof.windows ?? []).filter((x) => x.id !== id)));
+    this._roofWinId = null;
+  }
+
+  private renderRoofWindowList() {
+    const windows = this._doc.settings.roof.windows ?? [];
+    const faces = new Map(roofFaces(this._doc).map((f) => [f.key, f]));
+    return html`<section>
+      <h3>🪟 ${this.t("roof_windows")}</h3>
+      <p class="fp3d-sub">${this.t(faces.size ? "roof_windows_hint" : "solar_no_roof")}</p>
+      ${windows.length
+        ? html`<div class="fp3d-room-list">
+            ${windows.map((w, i) => {
+              const face = faces.get(w.face);
+              return html`<div class="fp3d-row">
+                <button class="fp3d-dev-name" @click=${() => {
+                  this._roofWinId = w.id;
+                  this._roofId = null;
+                }}>
+                  <span>${this.t("roof_window")} ${i + 1} · ${face ? this.faceLabel(face) : this.t("solar_face_gone")}</span>
+                </button>
+              </div>`;
+            })}
+          </div>`
+        : nothing}
+      <div class="fp3d-actions"><button class="fp3d-btn" ?disabled=${!this.isAdmin || !faces.size} @click=${() => this.addRoofWindow()}>+ ${this.t("roof_window")}</button></div>
+    </section>`;
+  }
+
+  private renderRoofWindowForm(w: RoofWindow) {
+    const admin = this.isAdmin;
+    const faces = roofFaces(this._doc);
+    const set = (patch: Partial<RoofWindow>) => this.updateRoofWindow(patch);
+    const index = (this._doc.settings.roof.windows ?? []).findIndex((x) => x.id === w.id) + 1;
+    const covers = this.entityOptions((id) => id.startsWith("cover."));
+    const contacts = this.entityOptions((id) => id.startsWith("binary_sensor.") || id.startsWith("sensor."));
+    return html`<button class="fp3d-btn fp3d-back" @click=${() => (this._roofWinId = null)}>‹ ${this.t("roof_sections")}</button>
+      <section>
+        <h3>🪟 ${this.t("roof_window")} ${index}</h3>
+        <div class="fp3d-form">
+          <label class="fp3d-field fp3d-wide"
+            >${this.t("solar_face")}
+            <select ?disabled=${!admin} @change=${(e: Event) => {
+              const next = faces.find((x) => x.key === (e.target as HTMLSelectElement).value);
+              if (next) set({ ...proposeWindow(next, w.id), w: w.w, h: w.h, cover: w.cover, contact: w.contact, tilt: w.tilt });
+            }}>
+              ${faces.map((x) => html`<option value=${x.key} ?selected=${x.key === w.face}>${this.faceLabel(x)}</option>`)}
+            </select></label
+          >
+          ${this.num(this.t("width"), w.w ?? 0.78, (v) => set({ w: Math.max(0.3, Math.min(4, round(v))) }), 0.01, 0.3)}
+          ${this.num(this.t("height_m"), w.h ?? 1.18, (v) => set({ h: Math.max(0.3, Math.min(4, round(v))) }), 0.01, 0.3)}
+          ${this.num(this.t("solar_u"), w.u, (v) => set({ u: round(v) }), 0.05)}
+          ${this.num(this.t("solar_v"), w.v, (v) => set({ v: round(v) }), 0.05)}
+          ${this.entitySelect(this.t("cover_entity"), w.cover ?? null, undefined, covers, (v) => set({ cover: v === "none" ? null : v }))}
+          ${this.entitySelect(this.t("contact_entity"), w.contact ?? null, undefined, contacts, (v) => set({ contact: v === "none" ? null : v }))}
+          ${this.entitySelect(this.t("roof_window_tilt"), w.tilt ?? null, undefined, contacts, (v) => set({ tilt: v === "none" ? null : v }))}
+        </div>
+        <p class="fp3d-sub">${this.t("roof_window_hint")}</p>
+        ${admin ? html`<div class="fp3d-actions"><button class="fp3d-btn fp3d-danger" @click=${() => this.deleteRoofWindow()}>${this.t("delete")}</button></div>` : nothing}
+      </section>`;
+  }
+
   /** "Main roof · south · 35°" or "Section 2 · flat roof". */
   private faceLabel(face: RoofFace): string {
     if (face.key === GROUND) return this.t("solar_ground");
@@ -2335,6 +2459,8 @@ export class Fp3dEditor extends LitElement {
     const roof = this._doc.settings.roof;
     const admin = this.isAdmin;
     const sec = roof.type === "custom" ? this.roofSection : undefined;
+    const win = this._roofWinId ? roof.windows?.find((x) => x.id === this._roofWinId) : undefined;
+    if (win) return this.renderRoofWindowForm(win);
     if (sec) return this.renderRoofSectionForm(sec);
     const sections = roof.type === "custom" ? (roof.sections ?? []) : [];
     return html`<section>
@@ -2356,7 +2482,8 @@ export class Fp3dEditor extends LitElement {
               <button class="fp3d-btn" ?disabled=${!admin} @click=${() => this.useRoofSections(true)}>${this.t("roof_sections_regen")}</button>
               <button class="fp3d-btn" ?disabled=${!admin} @click=${() => this.change((doc) => (doc.settings.roof.type = "gable"))}>${this.t("roof_sections_off")}</button>
             </div>`}
-    </section>`;
+    </section>
+    ${this.renderRoofWindowList()}`;
   }
 
   /** Sidebar of the energy tool: the selected solar field, or the overview (fields, strings). */
@@ -2983,7 +3110,7 @@ export class Fp3dEditor extends LitElement {
               ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
               ${this.room && this.isAdmin && this._tool === "select" && !this._openingId && !this._furnitureId && !this.isFixedItem("room", this.room.id) ? this.renderHandles(this.room) : nothing}
               ${floor ? this.renderOutdoorHandles(floor) : nothing}
-              ${this._tool === "roof" ? this.renderRoofSections() : this._tool === "energy" ? svg`${this.renderRoofSections()}${this.renderSolarFields()}` : nothing} ${this.renderDraft()} ${this.renderGuides()}
+              ${this._tool === "roof" ? svg`${this.renderRoofSections()}${this.renderRoofWindows()}` : this._tool === "energy" ? svg`${this.renderRoofSections()}${this.renderSolarFields()}` : nothing} ${this.renderDraft()} ${this.renderGuides()}
             </svg>
             ${this.renderContext()}
             <p class="fp3d-hint ${this._fixedHint ? "fp3d-hint-fixed" : ""}">${!floor ? this.t("hint_empty") : this._fixedHint ? this.t("fixed_drag_hint") : this.t(`hint_${this._tool}` as I18nKey)}</p>
@@ -5716,6 +5843,15 @@ export class Fp3dEditor extends LitElement {
         stroke-dasharray: none;
       }
       /* solar modules: dark blue panes with a light frame, so they do not look like a selected room */
+      .fp3d-roofwin polygon {
+        fill: color-mix(in srgb, #2b6b8f 70%, transparent);
+        stroke: #e3e9f5;
+        stroke-width: 2;
+        cursor: move;
+      }
+      .fp3d-roofwin-sel polygon {
+        stroke: #ffd75a;
+      }
       .fp3d-tool-energy .fp3d-roof-layer {
         opacity: 0.45;
       }
