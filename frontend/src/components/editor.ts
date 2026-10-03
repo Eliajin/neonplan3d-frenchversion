@@ -30,6 +30,7 @@ import {
   centroid,
   FLOOR_MATERIALS,
   FURNITURE_GROUPS,
+  ENERGY_DEVICES,
   FURNITURE_SIZE,
   FURNITURE_TYPES,
   canLift,
@@ -975,8 +976,17 @@ export class Fp3dEditor extends LitElement {
         return;
       }
       if (this._tool === "roof") this._roofWinId = null;
+      const device = this._tool === "energy" ? target.closest(".fp3d-energy-item")?.getAttribute("data-furniture") : null;
+      if (device) {
+        // an energy device (inverter, battery, wallbox): selected and moved like furniture
+        this._solarId = null;
+        this.selectItem("furniture", device);
+        this.drag = this.isAdmin ? { kind: "furniture", id: device, start: world, startScreen: local, base: this._doc, moved: false } : { kind: "pan", last: local };
+        return;
+      }
       if (this._tool === "energy") {
         // beside the fields the energy tool only pans the plan
+        this.selectItem("furniture", null);
         this._solarId = null;
         this.drag = { kind: "pan", last: local };
         return;
@@ -2663,7 +2673,54 @@ export class Fp3dEditor extends LitElement {
   /** Sidebar of the energy tool: the selected solar field, or the overview (fields, strings). */
   private renderEnergyPanel() {
     const field = this._solarId ? this._doc.settings.roof.solar?.find((x) => x.id === this._solarId) : undefined;
-    return field ? this.renderSolarForm(field) : this.renderSolarList();
+    if (field) return this.renderSolarForm(field);
+    const device = this._furnitureId ? this.floor?.furniture.find((x) => x.id === this._furnitureId && (ENERGY_DEVICES as readonly string[]).includes(x.type)) : undefined;
+    if (device)
+      return html`<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("furniture", null)}>‹ ${this.t("tool_energy")}</button>
+        ${this.renderFurnitureForm(device)}`;
+    return html`${this.renderSolarList()}${this.renderEnergyDevices()}`;
+  }
+
+  /** Inverters, batteries and wallboxes of all floors, and buttons to add them on the floor shown. */
+  private renderEnergyDevices() {
+    const admin = this.isAdmin;
+    const list = this._doc.floors.flatMap((fl) => fl.furniture.filter((m) => (ENERGY_DEVICES as readonly string[]).includes(m.type)).map((m) => ({ fl, m })));
+    return html`<section>
+      <h3>⚡ ${this.t("energy_devices")}</h3>
+      <p class="fp3d-sub">${this.t("energy_devices_hint")}</p>
+      ${list.length
+        ? html`<div class="fp3d-room-list">
+            ${list.map(
+              ({ fl, m }) => html`<div class="fp3d-row">
+                <button
+                  class="fp3d-dev-name"
+                  @click=${() => {
+                    this._floorId = fl.id;
+                    this._solarId = null;
+                    this.selectItem("furniture", m.id);
+                  }}
+                >
+                  <span>${this.t(`furn_${m.type}` as I18nKey)} · ${fl.name}</span>
+                </button>
+              </div>`,
+            )}
+          </div>`
+        : nothing}
+      <div class="fp3d-actions">
+        ${ENERGY_DEVICES.map(
+          (type) => html`<button
+            class="fp3d-btn"
+            ?disabled=${!admin || !this.floor}
+            @click=${() => {
+              this._solarId = null;
+              this.addFurniture(type);
+            }}
+          >
+            + ${this.t(`furn_${type}` as I18nKey)}
+          </button>`,
+        )}
+      </div>
+    </section>`;
   }
 
   private renderRoofSectionForm(sec: RoofSection) {
@@ -3509,7 +3566,7 @@ export class Fp3dEditor extends LitElement {
       const [hx, hy] = this.toScreen([f.x - Math.sin(a) * reach, f.z + Math.cos(a) * reach]);
       const [fx, fy] = this.toScreen([f.x - Math.sin(a) * (f.d / 2), f.z + Math.cos(a) * (f.d / 2)]);
       const lit = isLamp(f.type) && !!f.entity && f.entity !== "none" && this.hass?.states[f.entity]?.state === "on";
-      return svg`<g data-furniture=${f.id} class=${`fp3d-furn${sel ? " fp3d-furn-sel" : ""}${lit ? " fp3d-furn-lit" : ""}`}>
+      return svg`<g data-furniture=${f.id} class=${`fp3d-furn${sel ? " fp3d-furn-sel" : ""}${lit ? " fp3d-furn-lit" : ""}${(ENERGY_DEVICES as readonly string[]).includes(f.type) ? " fp3d-energy-item" : ""}`}>
         <g transform="translate(${cx} ${cy}) rotate(${f.rotation}) scale(${k})">
           <rect class="fp3d-furn-body" x=${-f.w / 2} y=${-f.d / 2} width=${f.w} height=${f.d} />
           <g class="fp3d-furn-sym">${furnitureSymbol(f.type, f.w, f.d)}</g>
@@ -6028,6 +6085,9 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-tool-energy .fp3d-roof-layer {
         opacity: 0.45;
+      }
+      .fp3d-tool-energy .fp3d-energy-item {
+        pointer-events: auto;
       }
       .fp3d-solar polygon {
         fill: color-mix(in srgb, #1b3a8f 75%, transparent);

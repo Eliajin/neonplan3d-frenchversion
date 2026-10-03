@@ -565,9 +565,11 @@ export const FURNITURE_GROUPS: Record<string, FurnitureType[]> = {
   sleeping: ["bed", "bunk_bed", "nightstand", "wardrobe", "dresser"],
   bath: ["bathtub", "shower", "wc", "washbasin", "washer", "dryer"],
   work: ["desk", "worktop", "office_chair", "tall_cabinet", "coat_rack", "radiator", "stairs", "robot_vacuum"],
-  energy: ["inverter", "home_battery", "wallbox"],
   vehicles: ["parking"],
 };
+
+/** Energy devices: placed and set up in the Energy tool (stored like furniture, not in the library). */
+export const ENERGY_DEVICES = ["inverter", "home_battery", "wallbox"] as const;
 
 /** Furniture that can show a linked entity (TV state, power, …). */
 /** Lamps: drawn live (they glow with their light) and tapped directly in 3D. */

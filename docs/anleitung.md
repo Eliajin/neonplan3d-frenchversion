@@ -377,7 +377,7 @@ Felder lassen sich im Grundriss und in der **3D-Ansicht daneben** mit der Maus v
 | **Module einzeln an/aus** | Im Grundriss einzelne Module wegtippen oder wieder dazunehmen, etwa um einen Schornstein oder ein Dachfenster herum |
 | **Full Black** / **Blau** | Optik der Module: ganz schwarz (Standard) oder klassisch blau |
 | **Modulbreite** / **Modulhöhe** | Größe eines Moduls im Hochformat, Standard 1,13 × 1,72 m |
-| **Strang** | Felder, die zusammen verschaltet sind, auch auf verschiedenen Dächern: etwa 5 Module auf dem Haus und 5 auf der Garage in „Strang 1“. Der Strang hat einen Namen, einen PV-Sensor und einen Wechselrichter (ein Möbel aus „Energie & Solar“) |
+| **Strang** | Felder, die zusammen verschaltet sind, auch auf verschiedenen Dächern: etwa 5 Module auf dem Haus und 5 auf der Garage in „Strang 1“. Der Strang hat einen Namen, einen PV-Sensor und einen Wechselrichter (unter **Geräte** angelegt) |
 | **PV-Leistung dieses Feldes** | Der Leistungssensor seines Strangs, für die kommende Pro-Erweiterung |
 | **Hochformat** / **Querformat** | Lage der Module (1,13 × 1,72 m) |
 | **Abstand vom Rand** / **von der Traufe** | Position des Feldes. Im Grundriss lässt es sich mit der Maus verschieben, auch auf eine andere Dachfläche; über den Rand der Fläche hinaus rutscht es nicht |
@@ -386,7 +386,7 @@ Felder lassen sich im Grundriss und in der **3D-Ansicht daneben** mit der Maus v
 | **Wand** | Module hängen an einer Außenwand; statt „Abstand von der Traufe“ gibt es die **Höhe über dem Boden**. **Neigung von der Wand** stellt sie schräg: oben abstehend oder unten abstehend, bis 90° als Vordach. Die Etagen-Knöpfe oben wählen, an welcher Etage du arbeitest |
 | **Fläche füllen** | Legt so viele Module auf die Fläche, wie passen |
 
-Unter dem Feld steht die Leistung, gerechnet mit 400 W je Modul. Die Grundriss-Sperre hält Solarfelder nicht fest, sie lassen sich wie Möbel jederzeit verschieben. Wechselrichter, Stromspeicher und Wallbox findest du als Möbel in der Bibliothek unter **Energie & Solar**. Wie jedes elektrische Möbel zeigen sie mit einem Leistungssensor ihre Watt.
+Unter dem Feld steht die Leistung, gerechnet mit 400 W je Modul. Die Grundriss-Sperre hält Solarfelder nicht fest, sie lassen sich wie Möbel jederzeit verschieben. **Geräte:** Wechselrichter, Stromspeicher und Wallbox legst du ebenfalls im Werkzeug **Energie** an, unter **Geräte**, auf der oben gewählten Etage. Im Grundriss lassen sie sich dort anklicken und verschieben. Mit einem Leistungssensor zeigen sie ihre Watt.
 
 ---
 
