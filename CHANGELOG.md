@@ -4,6 +4,13 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 [releases page](https://github.com/Mastershort/neonplan3d/releases). Ideas and votes:
 [Discussions → Ideas](https://github.com/Mastershort/neonplan3d/discussions/categories/ideas).
 
+## 1.8.0
+
+### New
+
+- **Solar fields on the roof:** modules in rows and columns on any roof face, lying in its slope, on flat roofs on tilted frames; placed on the sunniest face, moved in the plan, with the field's kWp.
+- **Energy furniture:** solar inverter, home battery and wallbox (library section "Energy & solar").
+
 ## 1.7.0
 
 ### New

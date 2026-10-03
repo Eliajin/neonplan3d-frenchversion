@@ -690,6 +690,46 @@ function radiator(b: Builder, w: number, d: number, h: number): void {
   }
 }
 
+/** Solar inverter on the wall (from 1.1 m): a flat box with a display and a status line. */
+function inverter(b: Builder, w: number, d: number, h: number): void {
+  const y0 = 1.1;
+  b.box(-w / 2, w / 2, y0, y0 + h, -d / 2, d / 2, C.white, C.whiteTop, EDGE_FURN);
+  b.box(-w * 0.28, w * 0.28, y0 + h * 0.58, y0 + h * 0.82, d / 2, d / 2 + 0.006, C.dark);
+  b.seg(-w * 0.3, y0 + h * 0.45, d / 2 + 0.004, w * 0.3, y0 + h * 0.45, d / 2 + 0.004, EDGE_GLOW);
+  // cooling fins at the sides
+  for (const s of [-1, 1]) for (let i = 1; i < 6; i++) b.seg((s * w) / 2 + s * 0.002, y0 + (h * i) / 6, -d / 2 + 0.03, (s * w) / 2 + s * 0.002, y0 + (h * i) / 6, d / 2 - 0.03, EDGE_FAINT);
+}
+
+/** Wallbox (from 1.0 m): a compact box with a glowing ring and the charging cable hanging below. */
+function wallbox(b: Builder, w: number, d: number, h: number): void {
+  const y0 = 1.0;
+  b.box(-w / 2, w / 2, y0, y0 + h, -d / 2, d / 2, C.dark, C.body, EDGE_FURN);
+  const r = Math.min(w, h) * 0.28;
+  const cy = y0 + h * 0.58;
+  const n = 16;
+  for (let i = 0; i < n; i++) {
+    const a0 = (i / n) * Math.PI * 2;
+    const a1 = ((i + 1) / n) * Math.PI * 2;
+    b.seg(Math.cos(a0) * r, cy + Math.sin(a0) * r, d / 2 + 0.003, Math.cos(a1) * r, cy + Math.sin(a1) * r, d / 2 + 0.003, EDGE_GLOW);
+  }
+  // the coiled cable below the box
+  b.box(-0.015, 0.015, y0 - 0.35, y0, d / 2 - 0.03, d / 2, C.dark);
+  b.box(-0.06, 0.06, y0 - 0.42, y0 - 0.35, d / 2 - 0.05, d / 2, C.dark, C.body);
+}
+
+/** Home battery on the floor: stacked modules with a charge bar on the front. */
+function homeBattery(b: Builder, w: number, d: number, h: number): void {
+  b.box(-w / 2 + 0.02, w / 2 - 0.02, 0, 0.06, -d / 2 + 0.02, d / 2 - 0.02, C.dark);
+  const modules = Math.max(2, Math.round((h - 0.06) / 0.3));
+  const mh = (h - 0.06) / modules;
+  for (let i = 0; i < modules; i++) b.box(-w / 2, w / 2, 0.06 + i * mh + 0.004, 0.06 + (i + 1) * mh, -d / 2, d / 2, C.white, C.whiteTop, EDGE_FURN);
+  // charge bar: five short segments
+  for (let k = 0; k < 5; k++) {
+    const y = 0.06 + h * 0.18 + k * ((h - 0.3) / 5);
+    b.seg(-w * 0.04, y, d / 2 + 0.003, w * 0.04, y, d / 2 + 0.003, EDGE_GLOW);
+  }
+}
+
 /** Height of the underside of a radiator. */
 export const RADIATOR_Y = 0.12;
 
@@ -932,6 +972,15 @@ function buildFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f:
     case "radiator":
       radiator(b, w, d, h);
       return; // on the wall, no shadow on the floor
+    case "inverter":
+      inverter(b, w, d, h);
+      return;
+    case "wallbox":
+      wallbox(b, w, d, h);
+      return;
+    case "home_battery":
+      homeBattery(b, w, d, h);
+      break;
     default: {
       const item = packItem(f.type);
       if (item) {

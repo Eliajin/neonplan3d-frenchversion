@@ -358,6 +358,21 @@ A simple house gets a flat or gable roof over the whole top floor under **Settin
 
 ![The Roof tool with a selected roof section](images/editor-roof.jpg)
 
+#### Solar fields
+
+Below the roof sections, the **Roof** tool lists the **Solar fields**. **+ Solar field** puts a field on the sunniest free roof face, as large as fits. The modules lie in the slope of the face; on a flat roof they stand on frames. This works on the single gable and flat roof and on all roof sections (gable, hip, pent, flat).
+
+| Field | Effect |
+|---|---|
+| **Roof face** | The face with its compass direction and pitch, e.g. "Main roof · south · 35°" |
+| **Rows** and **Modules per row** | Size of the field; modules that would reach beyond the face are left out |
+| **Portrait** / **Landscape** | How the modules (1.13 × 1.72 m) lie |
+| **Distance from the edge** / **from the eave** | Position of the field; you can also drag it in the plan |
+| **Tilt of the frames** | Flat roofs only: the angle of the frames, plus the direction |
+| **Fill face** | Puts as many modules on the face as fit |
+
+Below the field you see its power, counted with 400 W per module. Solar inverter, home battery and wallbox are in the library under **Energy & solar**. Like every electric item, they show their watts with a power sensor.
+
 ---
 
 ## 5. The 3D view

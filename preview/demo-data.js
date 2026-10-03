@@ -414,7 +414,18 @@ DEMO_BUILDING.floors[0].outdoor = [
   area("a8", "bed", 1.5, 10.2, 5.5, 11.2),
   area("a9", "fence", -4, -9, 19, 14.5),
 ];
-DEMO_BUILDING.settings = { ...DEMO_BUILDING.settings, north: 0, roof: { type: "gable", pitch: 35, overhang: 0.4 } };
+// solar inverter, home battery and wallbox on the back wall of the garage
+DEMO_BUILDING.floors[0].furniture.push(
+  { ...item("inverter", 13.0, 0.11, 0.5, 0.2, 0.65), power: "sensor.pv_leistung" },
+  { ...item("home_battery", 12.3, 0.14, 0.6, 0.25, 1.1), power: "sensor.akku_leistung" },
+  item("wallbox", 10.6, 0.09, 0.3, 0.15, 0.42),
+);
+DEMO_BUILDING.settings = {
+  ...DEMO_BUILDING.settings,
+  north: 0,
+  // a solar field of 2 × 7 modules on the south side of the roof
+  roof: { type: "gable", pitch: 35, overhang: 0.4, solar: [{ id: "pv_sued", face: "main:b", u: 1.4, v: 0.75, rows: 2, cols: 7, portrait: true }] },
+};
 
 // an invented furniture pack (the preview does not check signatures)
 export const DEMO_PACK = {

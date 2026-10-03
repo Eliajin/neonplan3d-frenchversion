@@ -240,6 +240,30 @@ export interface RoofSettings {
   ridge?: "long" | "short" | null;
   /** Roof sections of a "custom" roof. */
   sections?: RoofSection[];
+  /** Solar fields on the roof faces. */
+  solar?: SolarField[];
+}
+
+/**
+ * A field of solar modules on a roof face (see solar.ts): rows × columns from its lower left corner (u along
+ * the eave, v up the slope, in metres). On a flat roof the modules stand on frames, tilted by `tilt`.
+ */
+export interface SolarField {
+  id: string;
+  /** Roof face: "main:a" / "main:b" / "main:top" (single roof) or "<section id>:a" / ":b" / ":top". */
+  face: string;
+  u: number;
+  v: number;
+  rows: number;
+  cols: number;
+  /** Portrait (default) or landscape modules. */
+  portrait: boolean;
+  /** Flat roofs: tilt of the frames in degrees (null = 15°). */
+  tilt?: number | null;
+  /** Flat roofs: the modules lean the other way. */
+  flip?: boolean;
+  /** PV power sensor of this field (null = the plant's sensor from the energy settings). */
+  entity?: string | null;
 }
 
 export interface BuildingSettings {
@@ -474,6 +498,9 @@ export const FURNITURE_TYPES = [
   "coat_rack",
   "stairs",
   "robot_vacuum",
+  "inverter",
+  "home_battery",
+  "wallbox",
   "parking",
   "fridge_smart",
   "stairwell",
@@ -488,6 +515,7 @@ export const FURNITURE_GROUPS: Record<string, FurnitureType[]> = {
   sleeping: ["bed", "bunk_bed", "nightstand", "wardrobe", "dresser"],
   bath: ["bathtub", "shower", "wc", "washbasin", "washer", "dryer"],
   work: ["desk", "worktop", "office_chair", "tall_cabinet", "coat_rack", "radiator", "stairs", "robot_vacuum"],
+  energy: ["inverter", "home_battery", "wallbox"],
   vehicles: ["parking"],
 };
 
@@ -579,6 +607,10 @@ export function builtinBase(f: Pick<Furniture, "type" | "h">): number {
       return Math.max(0, 1.3 - f.h / 2);
     case "radiator":
       return 0.12;
+    case "inverter":
+      return 1.1;
+    case "wallbox":
+      return 1.0;
     default:
       return 0;
   }
@@ -597,6 +629,9 @@ export const ELECTRIC_FURNITURE = new Set<string>([
   ...LAMP_TYPES,
   "radiator",
   "robot_vacuum",
+  "inverter",
+  "home_battery",
+  "wallbox",
   "tv_board",
   "tv_wall",
   "desk",
@@ -627,6 +662,10 @@ export const FURNITURE_SIZE: Record<FurnitureType, [number, number, number]> = {
   kitchen: [2.4, 0.62, 0.92],
   // a worktop on its own (over a gap, on self-built desk pedestals): the height is its top edge
   worktop: [1.2, 0.62, 0.91],
+  // solar inverter and wallbox hang on the wall, the home battery stands on the floor
+  inverter: [0.5, 0.2, 0.65],
+  home_battery: [0.6, 0.25, 1.1],
+  wallbox: [0.3, 0.15, 0.42],
   fridge: [0.6, 0.65, 1.8],
   fridge_smart: [0.91, 0.73, 1.78],
   stairwell: [1.0, 2.6, 0.02],

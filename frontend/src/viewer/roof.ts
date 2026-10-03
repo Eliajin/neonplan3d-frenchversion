@@ -7,6 +7,7 @@ import { Color } from "three";
 import type { Building, Floor, RoofSection } from "../model.ts";
 import { sectionFrame, sectionOverhang, sectionProfile, type SectionOverhang } from "../roof-sections.ts";
 import { DEG, GeoBuffer, LineBuffer, pushPrism, shade } from "./geo.ts";
+import { fieldModules, roofFaces } from "../solar.ts";
 
 const ROOF = 0x1a2338;
 const ROOF_TOP = 0x222d48;
@@ -18,6 +19,11 @@ const THICK = 0.14;
 const GLASS = 0x8fd8ff;
 const FRAME = 0xc9d3e6;
 const FRAME_TOP = 0xe3e9f5;
+/** Solar modules: deep blue glass, a light frame and faint cell lines. */
+const PANEL = new Color(0x15295a);
+const PANEL_EDGE = shade(0x9fb8ff, 0.55);
+const PANEL_CELLS = shade(0x3d6cff, 0.35);
+const PANEL_POST = shade(0xc9d3e6, 0.5);
 
 /** Roof geometry that sits on a floor: y = 0 is `base` above the floor's own level. */
 export interface RoofGeometry {
@@ -27,6 +33,8 @@ export interface RoofGeometry {
   lines: LineBuffer;
   /** See-through roof panels of canopies (drawn with their own, fainter material). */
   glass: GeoBuffer;
+  /** Roof sections in this part (sections roof only). */
+  sections?: string[];
 }
 
 /** The floor the roof sits on: the highest one with rooms. */
@@ -38,9 +46,41 @@ export function roofFloor(b: Building): Floor | null {
 /** The roof, in parts per floor (each part moves with its floor when the floors are pulled apart). */
 export function buildRoof(b: Building): RoofGeometry[] {
   const roof = b.settings.roof;
-  if (roof?.type === "custom") return buildSections(b, roof.sections ?? [], roof.overhang);
-  const one = buildSingleRoof(b);
-  return one ? [one] : [];
+  const one = roof?.type === "custom" ? null : buildSingleRoof(b);
+  const parts = roof?.type === "custom" ? buildSections(b, roof.sections ?? [], roof.overhang) : one ? [one] : [];
+  pushSolar(b, parts);
+  return parts;
+}
+
+/** Solar fields: every module on its face, in the coordinates of the roof part the face belongs to. */
+function pushSolar(b: Building, parts: RoofGeometry[]): void {
+  const fields = b.settings.roof?.solar ?? [];
+  if (!fields.length || !parts.length) return;
+  const faces = new Map(roofFaces(b).map((f) => [f.key, f]));
+  for (const field of fields) {
+    const face = faces.get(field.face);
+    if (!face) continue;
+    const part = face.section ? parts.find((p) => p.sections?.includes(face.section!)) : parts[0];
+    if (!part) continue;
+    // faces have heights above the ground; parts count from their floor's level plus their base
+    const dy = part.floor.elevation + part.base;
+    const L = (p: number[]): number[] => [p[0], p[1] - dy, p[2]];
+    const cu = field.portrait === false ? 10 : 6;
+    const cv = field.portrait === false ? 6 : 10;
+    for (const m of fieldModules(face, field)) {
+      const [a, c, d, e] = m.corners.map(L);
+      part.solid.tri(a, c, d, PANEL);
+      part.solid.tri(a, d, e, PANEL);
+      // the frame a hair above the glass, and the cell grid
+      const up = (p: number[], k = 0.004) => [p[0] + face.n[0] * k, p[1] + face.n[1] * k, p[2] + face.n[2] * k];
+      const mix = (p: number[], q: number[], t: number) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t];
+      const ring = [a, c, d, e].map((p) => up(p));
+      for (let i = 0; i < 4; i++) part.lines.seg(ring[i], ring[(i + 1) % 4], PANEL_EDGE);
+      for (let i = 1; i < cu; i++) part.lines.seg(up(mix(a, c, i / cu)), up(mix(e, d, i / cu)), PANEL_CELLS);
+      for (let j = 1; j < cv; j++) part.lines.seg(up(mix(a, e, j / cv)), up(mix(c, d, j / cv)), PANEL_CELLS);
+      for (const [p, q] of m.posts) part.lines.seg(L(p), L(q), PANEL_POST);
+    }
+  }
 }
 
 /** One roof over the top floor, in floor coordinates with y = 0 at the top of the floor's walls. */
@@ -117,7 +157,8 @@ function buildSections(b: Building, sections: readonly RoofSection[], overhang: 
     // the floor the section sits on: the highest one that starts below its walls' top
     const floor = [...floors].reverse().find((f) => f.elevation < sec.base - 0.05) ?? floors[0];
     let part = parts.get(floor.id);
-    if (!part) parts.set(floor.id, (part = { floor, base: 0, solid: new GeoBuffer(), lines: new LineBuffer(), glass: new GeoBuffer() }));
+    if (!part) parts.set(floor.id, (part = { floor, base: 0, solid: new GeoBuffer(), lines: new LineBuffer(), glass: new GeoBuffer(), sections: [] }));
+    part.sections!.push(sec.id);
     pushSection(part.solid, part.lines, sec, sectionOverhang(b, sec, sec.overhang ?? overhang), floor.elevation, part.glass);
   }
   return [...parts.values()];

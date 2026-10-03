@@ -225,11 +225,30 @@ ROOF_SECTION_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
+# a field of solar modules on a roof face: rows x columns from its lower left corner on the face
+SOLAR_FIELD_SCHEMA = vol.Schema(
+    {
+        vol.Required("id"): _ID,
+        vol.Required("face"): vol.All(str, vol.Length(max=80)),
+        vol.Required("u"): vol.All(vol.Coerce(float), vol.Range(min=-50, max=200)),
+        vol.Required("v"): vol.All(vol.Coerce(float), vol.Range(min=-50, max=200)),
+        vol.Required("rows"): vol.All(int, vol.Range(min=1, max=40)),
+        vol.Required("cols"): vol.All(int, vol.Range(min=1, max=60)),
+        vol.Optional("portrait", default=True): bool,
+        vol.Optional("tilt", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=45))),
+        vol.Optional("flip", default=False): bool,
+        vol.Optional("entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+    },
+    extra=vol.ALLOW_EXTRA,
+)
+
 ROOF_SCHEMA = vol.Schema(
     {
         vol.Optional("type", default="none"): vol.In(["none", "flat", "gable", "custom"]),
         # roof sections of a "custom" roof
         vol.Optional("sections", default=list): vol.All([ROOF_SECTION_SCHEMA], vol.Length(max=64)),
+        # solar fields on the roof faces
+        vol.Optional("solar", default=list): vol.All([SOLAR_FIELD_SCHEMA], vol.Length(max=32)),
         vol.Optional("pitch", default=35): vol.All(vol.Coerce(float), vol.Range(min=5, max=60)),
         vol.Optional("overhang", default=0.4): vol.All(vol.Coerce(float), vol.Range(min=0, max=2)),
         # gable roof: ridge along the long side (None) or along the short side (terraced houses)

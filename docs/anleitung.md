@@ -358,6 +358,21 @@ Ein einfaches Haus bekommt unter **Einstellungen → Dach** ein Flach- oder Satt
 
 ![Das Werkzeug Dach mit einer ausgewählten Dachfläche](images/editor-roof.jpg)
 
+#### Solarfelder
+
+Unter den Dachflächen findest du im Werkzeug **Dach** die **Solarfelder**. **+ Solarfeld** legt ein Feld auf die sonnigste freie Dachfläche, so groß, wie es passt. Die Module liegen in der Neigung der Dachfläche, auf einem Flachdach stehen sie aufgeständert. Das klappt beim einfachen Sattel- und Flachdach und auf allen Dachabschnitten (Satteldach, Walmdach, Pultdach, Flachdach).
+
+| Feld | Wirkung |
+|---|---|
+| **Dachfläche** | Die Fläche mit Himmelsrichtung und Neigung, zum Beispiel „Hauptdach · Süd · 35°“ |
+| **Reihen** und **Module pro Reihe** | Größe des Feldes; Module, die über die Fläche hinausragen würden, fallen weg |
+| **Hochformat** / **Querformat** | Lage der Module (1,13 × 1,72 m) |
+| **Abstand vom Rand** / **von der Traufe** | Position des Feldes; im Grundriss lässt es sich auch mit der Maus verschieben |
+| **Neigung der Aufständerung** | Nur auf dem Flachdach: Winkel der Gestelle, dazu die Richtung |
+| **Fläche füllen** | Legt so viele Module auf die Fläche, wie passen |
+
+Unter dem Feld steht die Leistung, gerechnet mit 400 W je Modul. Wechselrichter, Stromspeicher und Wallbox findest du als Möbel in der Bibliothek unter **Energie & Solar**. Wie jedes elektrische Möbel zeigen sie mit einem Leistungssensor ihre Watt.
+
 ---
 
 ## 5. Die 3D-Ansicht
