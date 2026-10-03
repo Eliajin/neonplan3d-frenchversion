@@ -1,5 +1,6 @@
-// UI strings. German first, English as fallback.
+// UI strings. German first, French (i18n-fr.ts), English as fallback.
 
+import { fr } from "./i18n-fr.ts";
 import type { HomeAssistant } from "./types.ts";
 
 const de = {
@@ -1843,8 +1844,9 @@ const en: Record<Key, string> = {
 export type I18nKey = Key;
 
 export function translate(hass: HomeAssistant | undefined, key: Key, vars: Record<string, string | number> = {}): string {
-  const table = (hass?.language ?? navigator.language).startsWith("de") ? de : en;
-  let s: string = table[key] ?? de[key] ?? key;
+  const lang = hass?.language ?? navigator.language;
+  const table = lang.startsWith("de") ? de : lang.startsWith("fr") ? fr : en;
+  let s: string = table[key] ?? en[key] ?? key;
   for (const [k, v] of Object.entries(vars)) s = s.replace(`{${k}}`, String(v));
   return s;
 }

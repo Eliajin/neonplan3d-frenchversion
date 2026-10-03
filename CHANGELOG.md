@@ -4,6 +4,12 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 [releases page](https://github.com/Mastershort/neonplan3d/releases). Ideas and votes:
 [Discussions → Ideas](https://github.com/Mastershort/neonplan3d/discussions/categories/ideas).
 
+## 1.8.1 (French fork)
+
+### New
+
+- **French interface**: every UI string is translated (`frontend/src/i18n-fr.ts`) and used when Home Assistant is set to French; the setup dialog is translated too.
+
 ## 1.8.0
 
 ### New

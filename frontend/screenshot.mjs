@@ -220,6 +220,10 @@ const shots = [
   { name: "empty", query: "?empty", width: 1280, height: 800 },
   { name: "site-demo", query: "?site&lang=en", width: 1280, height: 800 },
   { name: "site-demo-phone", query: "?site&lang=de", width: 390, height: 844 },
+  // French fork: the UI in French
+  { name: "fr-view", query: "?lang=fr", width: 1280, height: 800, click: "Erdgeschoss", then: "Wohnzimmer" },
+  { name: "fr-editor", query: "?lang=fr", width: 1280, height: 800, editor: true, editorState: { _tool: "furniture" } },
+  { name: "fr-card-editor", query: "?card&lang=fr", width: 1400, height: 900 },
 ];
 
 const errors = [];
@@ -273,7 +277,7 @@ for (const shot of shots.filter((s) => !only || only.includes(s.name))) {
     await new Promise((r) => setTimeout(r, 1500));
   };
   if (shot.wait) await new Promise((r) => setTimeout(r, shot.wait));
-  if (shot.editor) await clickText("Editor");
+  if (shot.editor) await clickText(shot.query.includes("lang=fr") ? "Éditeur" : "Editor");
   if (shot.select) await clickText(shot.select);
   if (shot.click) await clickText(shot.click);
   if (shot.then) await clickText(shot.then);

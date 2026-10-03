@@ -1,128 +1,112 @@
-# NeonPlan 3D
+# NeonPlan 3D – version française
 
-[![Spenden mit PayPal](https://img.shields.io/badge/PayPal-Spenden-00457C?logo=paypal&logoColor=white)](https://www.paypal.com/donate/?hosted_button_id=Z3G2VWKSK5VJL)
+Fork en français de **[NeonPlan 3D](https://github.com/Mastershort/neonplan3d)** de **Mastershort** : dessinez votre maison directement dans Home Assistant et pilotez-la dans une vue 3D néon – les lumières brillent dans leurs couleurs, les volets bougent, portes et fenêtres s'ouvrent, les caméras surveillent et la TV affiche ce qui passe. Sans outil externe, sans cloud, pensé pour les tablettes murales.
 
-**by Mastershort** – draw your home right inside Home Assistant and control it in a neon 3D view: lights glow in their colours, blinds move, doors and windows open, cameras watch, and the TV shows what is playing. No external tools, no cloud, made for wall tablets.
+Ce fork ajoute une **interface entièrement traduite en français** (affichée quand Home Assistant est réglé en français ; l'allemand et l'anglais restent disponibles). Tout le mérite du projet revient à son auteur original.
 
-▶️ **[Try the online demo](https://neonplan3d.mastershort.de/)** – right in your browser, with invented demo data: turn the house, switch lights, open the editor. Nothing to install.
+▶️ **[Démo en ligne de l'original](https://neonplan3d.mastershort.de/)** (en anglais/allemand, données inventées).
 
-[![Open your Home Assistant instance and open the NeonPlan 3D repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Mastershort&repository=neonplan3d&category=integration)
+[![NeonPlan 3D : la maison tourne, la vue plonge dans le rez-de-chaussée, les lumières s'éteignent et se rallument](docs/images/demo.webp)](https://neonplan3d.mastershort.de/)
 
-[![NeonPlan 3D: the house turns, the view flies into the ground floor, lights go off and on, then the kitchen with its room panel](docs/images/demo.webp)](https://neonplan3d.mastershort.de/)
+📖 **Manuel (original) :** [English](https://mastershort.de/en/neonplan3d/manual/?lang=en) · [Deutsch](https://mastershort.de/neonplan3d/anleitung/?lang=de)
 
-📖 **Manual:** [English](https://mastershort.de/en/neonplan3d/manual/?lang=en) · [Deutsch](https://mastershort.de/neonplan3d/anleitung/?lang=de) (also in this repository: [manual.md](docs/manual.md), [anleitung.md](docs/anleitung.md))
-
-## What it does
+## Ce que ça fait
 
 | | |
 |---|---|
-| ![Editor](docs/images/editor-split-3d.jpg) | **Plan editor in Home Assistant** – floors, rooms as rectangles or free shapes, automatic walls and free-standing partitions, doors, windows, garage doors, stairs and floor openings, outdoor areas and a roof. The 3D view runs next to the plan while you draw. |
-| ![Room](docs/images/view-room-panel.jpg) | **Live 3D view** – tap a lamp to switch it, swipe to dim, long press for colours; blinds follow their position, windows tilt and open, doors swing. A room panel lists everything of the room's area. |
-| ![Library](docs/images/editor-library.jpg) | **Furniture and lamps** – 40 built-in models plus furniture packs. Lamps light their room in their own colour, TVs, washing machines and radiators glow while they run. |
-| ![Camera](docs/images/view-camera-model.jpg) | **Cameras** – mounted on walls or ceilings with their field of view on the floor, red while they see motion; a tap shows the snapshot. |
-| ![Alerts](docs/images/view-alert-banner.jpg) | **Wall tablet ready** – warnings for smoke, gas, water, alarm and windows open in the rain, a kiosk mode with idle return and night dimming, scene buttons, and a *Tablet* quality level for Fire tablets. |
-| ![Card](docs/images/card-og-dim.jpg) | **Dashboard card** – `custom:neonplan3d-card` with a visual editor, loaded automatically. |
+| ![Éditeur](docs/images/editor-split-3d.jpg) | **Éditeur de plan dans Home Assistant** – étages, pièces en rectangles ou formes libres, murs automatiques et cloisons, portes, fenêtres, portes de garage, escaliers et trémies, espaces extérieurs et toit. La vue 3D tourne à côté du plan pendant que vous dessinez. |
+| ![Pièce](docs/images/view-room-panel.jpg) | **Vue 3D en direct** – touchez une lampe pour la commuter, glissez pour varier, appui long pour les couleurs ; les volets suivent leur position, les fenêtres basculent et s'ouvrent, les portes pivotent. Un panneau liste tout ce que contient la pièce. |
+| ![Bibliothèque](docs/images/editor-library.jpg) | **Meubles et luminaires** – 40 modèles intégrés plus des packs de meubles. Les lampes éclairent leur pièce dans leur couleur, TV, lave-linge et radiateurs brillent quand ils fonctionnent. |
+| ![Caméra](docs/images/view-camera-model.jpg) | **Caméras** – au mur ou au plafond avec leur champ de vision au sol, rouges quand elles détectent un mouvement ; un appui affiche l'image. |
+| ![Alertes](docs/images/view-alert-banner.jpg) | **Prêt pour tablette murale** – alertes fumée, gaz, eau, alarme et fenêtres ouvertes sous la pluie, mode kiosque avec retour automatique et atténuation nocturne, boutons de scène, et un niveau de qualité *Tablette*. |
+| ![Carte](docs/images/card-og-dim.jpg) | **Carte de tableau de bord** – `custom:neonplan3d-card` avec éditeur visuel, chargée automatiquement. |
 
-Also included: parking spots with vehicles that appear while a car is home, a heatmap for temperature, humidity and CO₂, sunlight through the windows from `sun.sun`, three looks (*Neon*, *Blueprint*, *Day*), a search, restore points, and a full backup of plan, pictures and packs.
+Aussi inclus : places de parking avec véhicules qui apparaissent quand la voiture est là, carte thermique (température, humidité, CO₂), lumière du soleil par les fenêtres via `sun.sun`, trois apparences (*Néon*, *Plan bleu*, *Jour*), recherche, points de restauration et sauvegarde complète.
 
-### Free, packs and Pro add-ons
+### Gratuit, packs et modules Pro
 
-The integration and everything above are free and open source (MIT). Optional extras are sold at [mastershort.de](https://mastershort.de/en/neonplan3d/?lang=en) and install from the **Extensions** tab:
-
-- **Furniture packs** – rooms (living, kitchen, bedroom, bath), areas (kids, office, garden, garage, fitness, smart home), vehicles, stairs & railings.
-- **Pro add-ons** – *Camera cockpit* (look through a camera, motion trail), *Weather outside* (rain, snow, clouds, lightning, sun and moon), *Live screens* (app colours and artwork on TVs, pictures by rules, camera live pictures on screens).
-
-Bought packs are signed for your installation and update by themselves once a day. Everything installed keeps working without the shop.
+L'intégration est gratuite et open source (MIT). Des extras optionnels (packs de meubles, modules Pro) sont vendus par l'auteur original sur [mastershort.de](https://mastershort.de/en/neonplan3d/?lang=en) et s'installent depuis l'onglet **Extensions**.
 
 ## Installation
 
 ### HACS
 
-[![Open your Home Assistant instance and open the NeonPlan 3D repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Mastershort&repository=neonplan3d&category=integration)
+[![Ouvrir le dépôt dans HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Eliajin&repository=neonplan3d-frenchversion&category=integration)
 
-1. Click the button above, or in HACS: ⋮ → *Custom repositories* → add `https://github.com/Mastershort/neonplan3d` as **Integration**.
-2. Install **NeonPlan 3D** and restart Home Assistant.
-3. Add the integration:
+1. Cliquez sur le bouton ci-dessus, ou dans HACS : ⋮ → *Dépôts personnalisés* → ajoutez `https://github.com/Eliajin/neonplan3d-frenchversion` comme **Intégration**.
+2. Installez **NeonPlan 3D** et redémarrez Home Assistant.
+3. Ajoutez l'intégration : *Paramètres → Appareils et services → Ajouter une intégration → NeonPlan 3D*.
+4. Ouvrez **NeonPlan 3D** dans la barre latérale, passez à l'**Éditeur** et dessinez votre premier étage.
 
-   [![Open your Home Assistant instance and start setting up NeonPlan 3D.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=neonplan3d)
+L'interface est en français quand la langue de votre profil Home Assistant est le français.
 
-   or *Settings → Devices & services → Add integration → NeonPlan 3D*.
-4. Open **NeonPlan 3D** in the sidebar, switch to **Editor** and draw your first floor.
+### Remplacer la version originale
 
-### Manual
+Les deux versions utilisent le même domaine `neonplan3d` : votre plan, vos images et vos packs (stockés dans `.storage`) sont conservés.
 
-Copy `custom_components/neonplan3d` into `config/custom_components/` and restart Home Assistant.
+1. HACS → NeonPlan 3D (original) → ⋮ → **Supprimer** (ne supprimez **pas** l'intégration dans *Appareils et services*).
+2. HACS → ⋮ → *Dépôts personnalisés* : retirez `Mastershort/neonplan3d`, ajoutez `https://github.com/Eliajin/neonplan3d-frenchversion` (type **Intégration**).
+3. Installez **NeonPlan 3D** depuis ce dépôt, redémarrez Home Assistant, puis rechargez le navigateur (Ctrl+F5).
 
-Requires Home Assistant 2025.1 or newer.
+### Manuelle
 
-## Dashboard card
+Copiez `custom_components/neonplan3d` dans `config/custom_components/` et redémarrez Home Assistant.
 
-All options can be set in the card's visual editor; in YAML:
+Nécessite Home Assistant 2025.1 ou plus récent.
+
+## Carte de tableau de bord
+
+Toutes les options se règlent dans l'éditeur visuel de la carte ; en YAML :
 
 ```yaml
 type: custom:neonplan3d-card
-floor: floor_ab12cd34   # optional: show a single floor (id from the editor)
-height: 420             # optional: height in pixels
-fill: false             # optional: fill the screen below the dashboard header instead of a height
-walls: auto             # optional: auto | cut
-explode: true           # optional: pull floors apart in the house view
-floor_stack: dim        # optional: floors below an opened floor: dim | stacked | single
-quality: auto           # optional: auto | low | high
-theme: neon             # optional: neon | blueprint | day
-markers: important      # optional: none | important | all
-heatmap: none           # optional: none | temperature | humidity | co2
-room_panel: true        # optional: tapping a room opens its details
-room_names: true        # optional: room names in 3D
-controls: true          # optional: switches in the card, or a list of walls, floors, temperature, humidity, co2
-floor_thumbs: true      # optional: floor pictures to switch floors
+floor: floor_ab12cd34   # facultatif : un seul étage (id depuis l'éditeur)
+height: 420             # facultatif : hauteur en pixels
+fill: false             # facultatif : remplir l'écran au lieu d'une hauteur fixe
+walls: auto             # facultatif : auto | cut
+explode: true           # facultatif : écarter les étages dans la vue maison
+floor_stack: dim        # facultatif : étages inférieurs : dim | stacked | single
+quality: auto           # facultatif : auto | low | high
+theme: neon             # facultatif : neon | blueprint | day
+markers: important      # facultatif : none | important | all
+heatmap: none           # facultatif : none | temperature | humidity | co2
+room_panel: true        # facultatif : toucher une pièce ouvre ses détails
+room_names: true        # facultatif : noms des pièces en 3D
+controls: true          # facultatif : boutons dans la carte, ou une liste parmi walls, floors, temperature, humidity, co2
+floor_thumbs: true      # facultatif : miniatures des étages
 fullscreen_button: false
-stats: false            # optional: performance display
-alerts: true            # optional: smoke, gas, CO, water, alarm and windows open in the rain pulse
-alert_jump: false       # optional: jump to the room of a new warning
-scenes: true            # optional: scene and script buttons of the selected room
-motion_trail: false     # optional: motion of the last 30 minutes (Pro: camera cockpit)
-weather: true           # optional: weather outside (Pro: weather)
-weather_entity: weather.home   # optional: which weather entity (default: as set in the plan)
-idle_return: 0          # optional: kiosk – seconds without a touch until the start view returns
-night: "off"            # optional: kiosk – dim at night: off | sun | "22:00-06:00"
-idle_orbit: false       # optional: kiosk – slow camera turn after the idle return
+stats: false            # facultatif : indicateur de performance
+alerts: true            # facultatif : fumée, gaz, CO, eau, alarme, fenêtres ouvertes sous la pluie
+alert_jump: false       # facultatif : aller à la pièce d'une nouvelle alerte
+scenes: true            # facultatif : boutons de scènes et scripts de la pièce sélectionnée
+motion_trail: false     # facultatif : mouvements des 30 dernières minutes (Pro : cockpit caméra)
+weather: true           # facultatif : météo extérieure (Pro : météo)
+weather_entity: weather.home   # facultatif : quelle entité météo
+idle_return: 0          # facultatif : kiosque – secondes sans contact avant le retour à la vue de départ
+night: "off"            # facultatif : kiosque – atténuation nocturne : off | sun | "22:00-06:00"
+idle_orbit: false       # facultatif : kiosque – rotation lente après le retour
 ```
 
-## Privacy
+## Confidentialité
 
-NeonPlan 3D stores the plan, its pictures and the packs in Home Assistant's `.storage`. It talks to the internet only when you enter a licence key in **Extensions**: then it asks mastershort.de once a day for updates of your packs, sending the key and an anonymous installation fingerprint (a hash).
+NeonPlan 3D stocke le plan, ses images et les packs dans le `.storage` de Home Assistant. Il ne contacte internet que si vous saisissez une clé de licence dans **Extensions** : il interroge alors mastershort.de une fois par jour pour les mises à jour de vos packs.
 
-## Development
+## Développement
 
 ```bash
 cd frontend
 npm install
-npm test            # pure logic
+npm test            # logique pure
 npm run typecheck
-npm run build       # writes the bundles to custom_components/neonplan3d/frontend (committed)
-npm run screenshot  # renders preview/index.html (invented demo data) with a local Chrome or Edge
+npm run build       # écrit les bundles dans custom_components/neonplan3d/frontend (versionnés)
+npm run screenshot  # rend preview/index.html (données de démo) ; ?lang=fr pour le français
 ```
 
-- **Preview without Home Assistant**: open `preview/index.html` through any local web server.
-- **Deploy to a test instance**: create `deploy.local.json` with `{"target": "<config>/custom_components/neonplan3d"}` and run `npm run deploy` in `frontend/`.
-- **Python tests** run in CI with `pytest-homeassistant-custom-component`.
-- **Furniture pack format**: [docs/packs.md](docs/packs.md) (German).
-
-## Ideas, questions and bugs
-
-- **Ideas and voting:** [Discussions → Ideas](https://github.com/Mastershort/neonplan3d/discussions/categories/ideas) – vote with 👍 on what you want most.
-- **Questions:** [Discussions → Q&A](https://github.com/Mastershort/neonplan3d/discussions/categories/q-a).
-- **Bugs:** [open an issue](https://github.com/Mastershort/neonplan3d/issues/new/choose).
-- **What changed:** [CHANGELOG](CHANGELOG.md).
+- Les textes français sont dans [`frontend/src/i18n-fr.ts`](frontend/src/i18n-fr.ts). Toute nouvelle clé ajoutée dans `i18n.ts` (par exemple lors d'une synchronisation avec l'original) doit y être traduite – sinon `npm run typecheck` échoue.
+- Synchroniser avec l'original : `git remote add upstream https://github.com/Mastershort/neonplan3d` puis `git pull upstream main`.
 
 ## Licence
 
-MIT – see [LICENSE](LICENSE). Furniture packs and Pro add-ons sold in the shop are not part of this repository.
+MIT – voir [LICENSE](LICENSE). © Mastershort pour le projet original. Les packs de meubles et modules Pro vendus dans la boutique ne font pas partie de ce dépôt.
 
-## Unterstützen / Support
-
-NeonPlan 3D ist kostenlos. Wenn es dir gefällt, freue ich mich über einen Kaffee ☕ –
-oder schau dir die Möbel-Packs im Shop an: https://mastershort.de/neonplan3d/
-NeonPlan 3D is free. If you like it, you can buy me a coffee or check out the furniture packs.
-
-[![PayPal](https://img.shields.io/badge/PayPal-Spenden-00457C?logo=paypal&logoColor=white)](https://www.paypal.com/donate/?hosted_button_id=Z3G2VWKSK5VJL)
+Si le projet vous plaît, soutenez son auteur original : [PayPal](https://www.paypal.com/donate/?hosted_button_id=Z3G2VWKSK5VJL) · [boutique](https://mastershort.de/neonplan3d/).

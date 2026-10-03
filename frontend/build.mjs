@@ -64,7 +64,8 @@ function copyFonts() {
   }
 }
 
-const BUDGET = { "neonplan3d.js": 280 * 1024, "neonplan3d-3d.js": 700 * 1024, "neonplan3d-editor.js": 400 * 1024, "neonplan3d-card-editor.js": 110 * 1024 };
+// Raised in the French fork: the French string table adds ~45 KB to every bundle that has the UI strings.
+const BUDGET = { "neonplan3d.js": 330 * 1024, "neonplan3d-3d.js": 700 * 1024, "neonplan3d-editor.js": 430 * 1024, "neonplan3d-card-editor.js": 165 * 1024 };
 
 copyFonts();
 if (watch) {
