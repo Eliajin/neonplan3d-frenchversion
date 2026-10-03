@@ -52,6 +52,7 @@ import { pushCameraModel, pushPackLamp, screenRect, pushFridgeDoors } from "./fu
 import { mountBase, packItem, setPacks, type FurniturePack } from "../packs.ts";
 import { withVehicles } from "../parking.ts";
 import { buildRoof } from "./roof.ts";
+import { GROUND, groundFace, groundFloor } from "../solar.ts";
 import { lineBlending, themed, themeIndex, type Theme, type ThemeUniform } from "./theme.ts";
 
 export type { Theme } from "./theme.ts";
@@ -1372,7 +1373,9 @@ export class FloorplanViewer {
     if (!b) return;
     const ordered = [...b.floors].sort((p, q) => p.elevation - q.elevation);
     for (const floor of b.floors) {
-      const geo = buildFloorGeometry(withVehicles(floor, this.parked), b.settings.wall_exterior, b.settings.wall_interior, stairHoles(b.floors, floor));
+      // solar fields in the garden stand on the ground floor
+      const garden = groundFloor(b)?.id === floor.id ? (b.settings.roof?.solar ?? []).filter((f) => f.face === GROUND).map((field) => ({ field, face: groundFace(b, field) })) : [];
+      const geo = buildFloorGeometry(withVehicles(floor, this.parked), b.settings.wall_exterior, b.settings.wall_interior, stairHoles(b.floors, floor), garden);
       const mask: FoldMasks = { standing: { value: 0xffff }, glass: { value: 0 } };
       const materials = this.makeMaterials(mask);
       const group = new Group();

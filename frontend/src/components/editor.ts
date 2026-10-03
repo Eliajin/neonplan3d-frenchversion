@@ -13,7 +13,7 @@ import { SHOW_ENERGY, SHOW_PRESENCE } from "../flags.ts";
 import { hasFeature, manualUrl, shopUrl } from "../features.ts";
 import { isStatusSensor, robotRoomSensor, TOGGLE_KINDS } from "../devices.ts";
 import { ridgeHeight, roofSectionsFromRooms, sectionFrame, sectionProfile, wallTopUnder } from "../roof-sections.ts";
-import { bestFace, clampField, faceAt, faceCompass, fieldModules, pointOnFace, proposeField, roofFaces, rowCounts, type RoofFace } from "../solar.ts";
+import { bestFace, clampField, faceAt, faceCompass, fieldFace, fieldModules, GROUND, pointOnFace, proposeField, proposeGroundField, roofFaces, rowCounts, type RoofFace } from "../solar.ts";
 import { storedImageIds } from "../transfer.ts";
 import { DEFAULT_WEATHER_EFFECTS, WEATHER_EFFECTS,
   normalizeBuilding,
@@ -89,7 +89,7 @@ import { furnitureSize, isElectric, mountBase, packItem, packItemName, packType,
 /** Items that can be fixed against moving. */
 type FixKind = "room" | "opening" | "furniture" | "device" | "wall" | "outdoor";
 
-type Tool = "select" | "rect" | "polygon" | "measure" | "opening" | "furniture" | "outdoor" | "hole" | "wall" | "meter" | "roof";
+type Tool = "select" | "rect" | "polygon" | "measure" | "opening" | "furniture" | "outdoor" | "hole" | "wall" | "meter" | "roof" | "energy";
 
 type Drag =
   | { kind: "pan"; last: [number, number] }
@@ -364,9 +364,9 @@ export class Fp3dEditor extends LitElement {
     if (changed.has("packs")) setPacks(this.packs ?? []);
     if (changed.has("_doc") && this._split) this.queue3d();
     if (changed.has("_split") && this._split) this._doc3d = this._doc;
-    if (changed.has("_tool") && this._tool === "roof" && !this._split && !this.narrow) this._split = true;
+    if (changed.has("_tool") && this.houseTool && !this._split && !this.narrow) this._split = true;
     // entering or leaving the roof tool: the 3D half frames the whole house (or the floor) again
-    if (changed.has("_tool") && (this._tool === "roof" || changed.get("_tool") === "roof")) this.reframe3d = true;
+    if (changed.has("_tool") && (this.houseTool || changed.get("_tool") === "roof" || changed.get("_tool") === "energy")) this.reframe3d = true;
     if (changed.has("building") && this.building !== this._doc) {
       this._doc = this.building;
       this._doc3d = this.building;
@@ -536,9 +536,14 @@ export class Fp3dEditor extends LitElement {
     return nothing;
   }
 
+  /** Tools that work on the whole house (roof, solar): the 3D pane shows all floors with the roof. */
+  private get houseTool(): boolean {
+    return this._tool === "roof" || this._tool === "energy";
+  }
+
   private render3d() {
     return html`<div class="fp3d-editor-3d">
-      ${this._tool === "roof"
+      ${this.houseTool
         ? nothing
         : html`<div class="fp3d-seg fp3d-3d-walls">
             <button aria-pressed=${this._wall3d === "auto"} @click=${() => (this._wall3d = "auto")}>${this.t("walls_auto")}</button>
@@ -548,9 +553,9 @@ export class Fp3dEditor extends LitElement {
       <fp3d-view3d
         .hass=${this.hass}
         .building=${this._doc3d}
-        .floorId=${this._tool === "roof" ? null : this._floorId}
+        .floorId=${this.houseTool ? null : this._floorId}
         .roomId=${null}
-        .wallMode=${this._tool === "roof" ? "auto" : this._wall3d}
+        .wallMode=${this.houseTool ? "auto" : this._wall3d}
         .explode=${false}
         .markerMode=${"important"}
         .heatMode=${"none"}
@@ -564,7 +569,7 @@ export class Fp3dEditor extends LitElement {
         .quality=${"auto"}
         .floorThumbs=${false}
         .roomLabels=${true}
-        .floorStack=${this._tool === "roof" ? "stacked" : "single"}
+        .floorStack=${this.houseTool ? "stacked" : "single"}
         .panelOpen=${false}
         .alerts=${false}
         .scenes=${false}
@@ -851,10 +856,10 @@ export class Fp3dEditor extends LitElement {
       this.drag = { kind: "freewall", start, end: start };
       return;
     }
-    if (this._tool === "roof") {
+    if (this._tool === "roof" || this._tool === "energy") {
       const corner = target.closest("[data-roof-corner]")?.getAttribute("data-roof-corner");
       const body = target.closest("[data-roof]")?.getAttribute("data-roof");
-      const solar = target.closest("[data-solar]")?.getAttribute("data-solar");
+      const solar = this._tool === "energy" ? target.closest("[data-solar]")?.getAttribute("data-solar") : null;
       if (solar) {
         const cell = target.closest("[data-cell]")?.getAttribute("data-cell");
         // pick mode on the selected field: a tap switches the module on or off
@@ -868,14 +873,19 @@ export class Fp3dEditor extends LitElement {
         this._solarId = solar;
         this._roofId = null;
         const field = this._doc.settings.roof.solar?.find((x) => x.id === solar);
-        const face = field ? roofFaces(this._doc).find((f) => f.key === field.face) : undefined;
+        const face = field ? (fieldFace(this._doc, field) ?? undefined) : undefined;
         const hit = face ? pointOnFace(face, world) : null;
         const grab = field && hit ? { du: hit.u - field.u, ds: hit.s - field.v } : null;
         // solar fields are fittings like furniture: the plan lock (rooms, walls, openings) does not hold them
         this.drag = this.isAdmin ? { kind: "solarmove", id: solar, start: world, startScreen: local, base: this._doc, moved: false, grab } : { kind: "pan", last: local };
         return;
       }
-      this._solarId = null;
+      if (this._tool === "energy") {
+        // beside the fields the energy tool only pans the plan
+        this._solarId = null;
+        this.drag = { kind: "pan", last: local };
+        return;
+      }
       if (corner && this.isAdmin) {
         const [id, cx, cz] = corner.split(":");
         this.drag = { kind: "roofcorner", id, corner: [cx === "1" ? 1 : 0, cz === "1" ? 1 : 0], base: this._doc, moved: false };
@@ -1152,12 +1162,12 @@ export class Fp3dEditor extends LitElement {
         drag.moved = true;
         const src = drag.base.settings.roof.solar?.find((x) => x.id === drag.id);
         const faces = roofFaces(drag.base);
-        const own = src ? faces.find((f) => f.key === src.face) : undefined;
+        const own = src ? fieldFace(drag.base, src, faces) : null;
         if (!src || !own) return;
         const step = e.altKey ? 0.01 : 0.05;
         const snapTo = (v: number) => round(Math.round(v / step) * step);
         // over a roof face the field follows the cursor there (it may change to that face) …
-        const hit = faceAt(faces, world);
+        const hit = own.unbounded ? null : faceAt(faces, world);
         let face = own;
         let u: number;
         let v: number;
@@ -2016,9 +2026,9 @@ export class Fp3dEditor extends LitElement {
   private renderSolarFields() {
     const fields = this._doc.settings.roof.solar ?? [];
     if (!fields.length) return nothing;
-    const faces = new Map(roofFaces(this._doc).map((f) => [f.key, f]));
+    const faces = roofFaces(this._doc);
     return svg`<g class="fp3d-solar-layer">${fields.map((f) => {
-      const face = faces.get(f.face);
+      const face = fieldFace(this._doc, f, faces);
       if (!face) return nothing;
       const sel = f.id === this._solarId;
       // the selected field also shows its switched-off modules (dashed), so they can be switched on again
@@ -2030,6 +2040,7 @@ export class Fp3dEditor extends LitElement {
 
   /** "Main roof · south · 35°" or "Section 2 · flat roof". */
   private faceLabel(face: RoofFace): string {
+    if (face.key === GROUND) return this.t("solar_ground");
     const sections = this._doc.settings.roof.sections ?? [];
     const part = face.section ? this.t("solar_section", { n: sections.findIndex((x) => x.id === face.section) + 1 }) : this.t("solar_main");
     if (face.flat) return `${part} · ${this.t("solar_flat")}`;
@@ -2048,6 +2059,13 @@ export class Fp3dEditor extends LitElement {
     this.change((doc) => (doc.settings.roof.solar = [...(doc.settings.roof.solar ?? []), field]));
     this._solarId = field.id;
     this._roofId = null;
+  }
+
+  private addGroundField(): void {
+    if (!this.isAdmin) return;
+    const field = proposeGroundField(this._doc, uid("pv"));
+    this.change((doc) => (doc.settings.roof.solar = [...(doc.settings.roof.solar ?? []), field]));
+    this._solarId = field.id;
   }
 
   private updateSolar(patch: Partial<SolarField>): void {
@@ -2126,15 +2144,16 @@ export class Fp3dEditor extends LitElement {
   /** The overview of the solar fields, below the roof sections. */
   private renderSolarList() {
     const fields = this._doc.settings.roof.solar ?? [];
-    const faces = new Map(roofFaces(this._doc).map((f) => [f.key, f]));
+    const roofList = roofFaces(this._doc);
+    const faces = new Map(fields.map((f) => [f.id, fieldFace(this._doc, f, roofList)] as const));
     const admin = this.isAdmin;
     return html`<section>
       <h3>☀ ${this.t("solar_fields")}</h3>
-      <p class="fp3d-sub">${this.t(faces.size ? "solar_hint" : "solar_no_roof")}</p>
+      <p class="fp3d-sub">${this.t(roofList.length ? "solar_hint" : "solar_no_roof")}</p>
       ${fields.length
         ? html`<div class="fp3d-room-list">
             ${fields.map((f, i) => {
-              const face = faces.get(f.face);
+              const face = faces.get(f.id);
               const n = face ? fieldModules(face, f).length : 0;
               return html`<div class="fp3d-row">
                 <button
@@ -2150,12 +2169,15 @@ export class Fp3dEditor extends LitElement {
             })}
           </div>`
         : nothing}
-      <div class="fp3d-actions"><button class="fp3d-btn fp3d-primary" ?disabled=${!admin || !faces.size} @click=${() => this.addSolarField()}>+ ${this.t("solar_add")}</button></div>
+      <div class="fp3d-actions">
+        <button class="fp3d-btn fp3d-primary" ?disabled=${!admin || !roofList.length} @click=${() => this.addSolarField()}>+ ${this.t("solar_add")}</button>
+        <button class="fp3d-btn" ?disabled=${!admin} @click=${() => this.addGroundField()}>+ ${this.t("solar_add_ground")}</button>
+      </div>
       ${(this._doc.settings.roof.strings ?? []).length
         ? html`<h4 class="fp3d-lib-head">${this.t("solar_strings")}</h4>
             ${(this._doc.settings.roof.strings ?? []).map((st) => {
               const own = fields.filter((f) => f.string === st.id);
-              const n = own.reduce((a, f) => a + (faces.get(f.face) ? fieldModules(faces.get(f.face)!, f).length : 0), 0);
+              const n = own.reduce((a, f) => a + (faces.get(f.id) ? fieldModules(faces.get(f.id)!, f).length : 0), 0);
               return html`<p class="fp3d-sub">🔗 <b>${st.name}</b> · ${this.t("solar_string_sum", { fields: own.length, n, kwp: formatNumber(this.hass, n * 0.4, 1) })}</p>`;
             })}`
         : nothing}
@@ -2165,14 +2187,15 @@ export class Fp3dEditor extends LitElement {
   private renderSolarForm(f: SolarField) {
     const admin = this.isAdmin;
     const faces = roofFaces(this._doc);
-    const face = faces.find((x) => x.key === f.face);
+    const face = fieldFace(this._doc, f, faces);
+    const ground = f.face === GROUND;
     const n = face ? fieldModules(face, f).length : 0;
     const counts = rowCounts(f);
     const total = counts.reduce((a, b) => a + b, 0) - (f.skip?.length ?? 0);
     const power = this.entityOptions((id) => id.startsWith("sensor.") && this.hass?.states[id]?.attributes.device_class === "power");
     const set = (patch: Partial<SolarField>) => this.updateSolar(patch);
     const index = (this._doc.settings.roof.solar ?? []).findIndex((x) => x.id === f.id) + 1;
-    return html`<button class="fp3d-btn fp3d-back" @click=${() => (this._solarId = null)}>‹ ${this.t("roof_sections")}</button>
+    return html`<button class="fp3d-btn fp3d-back" @click=${() => (this._solarId = null)}>‹ ${this.t("solar_fields")}</button>
       <section>
         <h3>☀ ${f.name || `${this.t("solar_field")} ${index}`}</h3>
         <div class="fp3d-form">
@@ -2190,13 +2213,17 @@ export class Fp3dEditor extends LitElement {
             <select
               ?disabled=${!admin}
               @change=${(e: Event) => {
-                const next = faces.find((x) => x.key === (e.target as HTMLSelectElement).value);
+                const key = (e.target as HTMLSelectElement).value;
+                const keep = { portrait: f.portrait, look: f.look, name: f.name, string: f.string, entity: f.entity, module_w: f.module_w, module_h: f.module_h };
                 // on another face the field starts again from a proposal that fits it
-                if (next) set({ ...proposeField(next, f.id), portrait: f.portrait });
+                if (key === GROUND) set({ ...proposeGroundField(this._doc, f.id), ...keep });
+                const next = faces.find((x) => x.key === key);
+                if (next) set({ ...proposeField(next, f.id), ...keep, rotation: null, flip: false });
               }}
             >
               ${face ? nothing : html`<option selected>${this.t("solar_face_gone")}</option>`}
               ${faces.map((x) => html`<option value=${x.key} ?selected=${x.key === f.face}>${this.faceLabel(x)}</option>`)}
+              <option value=${GROUND} ?selected=${ground}>${this.t("solar_ground")}</option>
             </select></label
           >
           ${this.num(this.t("solar_rows"), counts.length, (v) => {
@@ -2222,7 +2249,7 @@ export class Fp3dEditor extends LitElement {
           /></label>
         </div>
         <p class="fp3d-sub">
-          ${face ? html`${this.t("solar_face_size", { w: formatNumber(this.hass, face.lu, 1), h: formatNumber(this.hass, face.ls, 1) })} · ` : nothing}${this.t("solar_cols_hint")}
+          ${face && !face.unbounded ? html`${this.t("solar_face_size", { w: formatNumber(this.hass, face.lu, 1), h: formatNumber(this.hass, face.ls, 1) })} · ` : nothing}${this.t("solar_cols_hint")}
         </p>
         ${f.layout?.length && new Set(f.layout).size > 1
           ? html`<div class="fp3d-seg fp3d-dev-source">
@@ -2247,8 +2274,9 @@ export class Fp3dEditor extends LitElement {
         </div>
         ${this._solarPick ? html`<p class="fp3d-sub">${this.t("solar_pick_hint")}</p>` : nothing}
         <div class="fp3d-form">
-          ${this.num(this.t("solar_u"), f.u, (v) => set({ u: round(v) }), 0.05)}
-          ${this.num(this.t("solar_v"), f.v, (v) => set({ v: round(v) }), 0.05)}
+          ${ground
+            ? this.num(this.t("solar_rotation"), f.rotation ?? 0, (v) => set({ rotation: ((Math.round(v) % 360) + 360) % 360 }), 5)
+            : html`${this.num(this.t("solar_u"), f.u, (v) => set({ u: round(v) }), 0.05)} ${this.num(this.t("solar_v"), f.v, (v) => set({ v: round(v) }), 0.05)}`}
           ${face?.flat
             ? html`${this.num(this.t("solar_tilt"), f.tilt ?? 15, (v) => set({ tilt: Math.max(0, Math.min(45, Math.round(v))) }), 1, 0)}
                 <label class="fp3d-check fp3d-wide"
@@ -2307,8 +2335,6 @@ export class Fp3dEditor extends LitElement {
     const roof = this._doc.settings.roof;
     const admin = this.isAdmin;
     const sec = roof.type === "custom" ? this.roofSection : undefined;
-    const field = this._solarId ? roof.solar?.find((x) => x.id === this._solarId) : undefined;
-    if (field) return this.renderSolarForm(field);
     if (sec) return this.renderRoofSectionForm(sec);
     const sections = roof.type === "custom" ? (roof.sections ?? []) : [];
     return html`<section>
@@ -2330,8 +2356,13 @@ export class Fp3dEditor extends LitElement {
               <button class="fp3d-btn" ?disabled=${!admin} @click=${() => this.useRoofSections(true)}>${this.t("roof_sections_regen")}</button>
               <button class="fp3d-btn" ?disabled=${!admin} @click=${() => this.change((doc) => (doc.settings.roof.type = "gable"))}>${this.t("roof_sections_off")}</button>
             </div>`}
-    </section>
-    ${this.renderSolarList()}`;
+    </section>`;
+  }
+
+  /** Sidebar of the energy tool: the selected solar field, or the overview (fields, strings). */
+  private renderEnergyPanel() {
+    const field = this._solarId ? this._doc.settings.roof.solar?.find((x) => x.id === this._solarId) : undefined;
+    return field ? this.renderSolarForm(field) : this.renderSolarList();
   }
 
   private renderRoofSectionForm(sec: RoofSection) {
@@ -2906,7 +2937,7 @@ export class Fp3dEditor extends LitElement {
         <div class="fp3d-main">
           <div class="fp3d-toolbar">
             <div class="fp3d-seg" role="group" aria-label=${this.t("tool_select")}>
-              ${(["select", "rect", "polygon", "wall", "opening", "furniture", "outdoor", "hole", "roof"] as Tool[]).map(
+              ${(["select", "rect", "polygon", "wall", "opening", "furniture", "outdoor", "hole", "roof", "energy"] as Tool[]).map(
                 (tool) => html`<button
                   aria-pressed=${this._tool === tool}
                   ?disabled=${!floor || (!this.isAdmin && tool !== "select")}
@@ -2952,7 +2983,7 @@ export class Fp3dEditor extends LitElement {
               ${floor && this._tool === "select" ? this.renderDevices(floor) : nothing}
               ${this.room && this.isAdmin && this._tool === "select" && !this._openingId && !this._furnitureId && !this.isFixedItem("room", this.room.id) ? this.renderHandles(this.room) : nothing}
               ${floor ? this.renderOutdoorHandles(floor) : nothing}
-              ${this._tool === "roof" ? svg`${this.renderRoofSections()}${this.renderSolarFields()}` : nothing} ${this.renderDraft()} ${this.renderGuides()}
+              ${this._tool === "roof" ? this.renderRoofSections() : this._tool === "energy" ? svg`${this.renderRoofSections()}${this.renderSolarFields()}` : nothing} ${this.renderDraft()} ${this.renderGuides()}
             </svg>
             ${this.renderContext()}
             <p class="fp3d-hint ${this._fixedHint ? "fp3d-hint-fixed" : ""}">${!floor ? this.t("hint_empty") : this._fixedHint ? this.t("fixed_drag_hint") : this.t(`hint_${this._tool}` as I18nKey)}</p>
@@ -3514,6 +3545,7 @@ export class Fp3dEditor extends LitElement {
     const admin = this.isAdmin;
     const areas = Object.values(this.hass?.areas ?? {}).sort((a, b) => a.name.localeCompare(b.name));
     if (this._tool === "roof") return this.renderRoofPanel();
+    if (this._tool === "energy") return this.renderEnergyPanel();
     // furnishing: the library and the selected item come first
     if (this._tool === "furniture" && floor && admin) {
       return html`${this.furnitureItem ? this.renderFurnitureForm(this.furnitureItem) : nothing} ${this.renderFurnitureLibrary()}`;
@@ -5684,6 +5716,9 @@ export class Fp3dEditor extends LitElement {
         stroke-dasharray: none;
       }
       /* solar modules: dark blue panes with a light frame, so they do not look like a selected room */
+      .fp3d-tool-energy .fp3d-roof-layer {
+        opacity: 0.45;
+      }
       .fp3d-solar polygon {
         fill: color-mix(in srgb, #1b3a8f 75%, transparent);
         stroke: #9fb8ff;
@@ -5721,6 +5756,13 @@ export class Fp3dEditor extends LitElement {
         stroke-width: 3px;
         pointer-events: none;
       }
+      .fp3d-tool-energy .fp3d-room,
+      .fp3d-tool-energy [data-furniture],
+      .fp3d-tool-energy [data-device],
+      .fp3d-tool-energy [data-opening],
+      .fp3d-tool-energy [data-free-wall],
+      .fp3d-tool-energy [data-outdoor],
+      .fp3d-tool-energy .fp3d-roof-layer,
       .fp3d-tool-roof .fp3d-room,
       .fp3d-tool-roof [data-furniture],
       .fp3d-tool-roof [data-device],

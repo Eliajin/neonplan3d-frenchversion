@@ -4,10 +4,10 @@
 // it out when the camera zooms in.
 
 import { Color } from "three";
-import type { Building, Floor, RoofSection } from "../model.ts";
+import type { Building, Floor, RoofSection, SolarField } from "../model.ts";
 import { sectionFrame, sectionOverhang, sectionProfile, type SectionOverhang } from "../roof-sections.ts";
 import { DEG, GeoBuffer, LineBuffer, pushPrism, shade } from "./geo.ts";
-import { fieldModules, roofFaces } from "../solar.ts";
+import { fieldModules, roofFaces, type RoofFace } from "../solar.ts";
 
 const ROOF = 0x1a2338;
 const ROOF_TOP = 0x222d48;
@@ -53,7 +53,7 @@ export function buildRoof(b: Building): RoofGeometry[] {
   return parts;
 }
 
-/** Solar fields: every module on its face, in the coordinates of the roof part the face belongs to. */
+/** Solar fields on the roof: every module on its face, in the coordinates of the roof part the face belongs to. */
 function pushSolar(b: Building, parts: RoofGeometry[]): void {
   const fields = b.settings.roof?.solar ?? [];
   if (!fields.length || !parts.length) return;
@@ -62,26 +62,29 @@ function pushSolar(b: Building, parts: RoofGeometry[]): void {
     const face = faces.get(field.face);
     if (!face) continue;
     const part = face.section ? parts.find((p) => p.sections?.includes(face.section!)) : parts[0];
-    if (!part) continue;
     // faces have heights above the ground; parts count from their floor's level plus their base
-    const dy = part.floor.elevation + part.base;
-    const L = (p: number[]): number[] => [p[0], p[1] - dy, p[2]];
-    const look = PANEL_LOOKS[field.look === "blue" ? "blue" : "black"];
-    const cu = field.portrait === false ? 10 : 6;
-    const cv = field.portrait === false ? 6 : 10;
-    for (const m of fieldModules(face, field)) {
-      const [a, c, d, e] = m.corners.map(L);
-      part.solid.tri(a, c, d, look.glass);
-      part.solid.tri(a, d, e, look.glass);
-      // the frame a hair above the glass, and the cell grid
-      const up = (p: number[], k = 0.004) => [p[0] + face.n[0] * k, p[1] + face.n[1] * k, p[2] + face.n[2] * k];
-      const mix = (p: number[], q: number[], t: number) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t];
-      const ring = [a, c, d, e].map((p) => up(p));
-      for (let i = 0; i < 4; i++) part.lines.seg(ring[i], ring[(i + 1) % 4], look.edge);
-      for (let i = 1; i < cu; i++) part.lines.seg(up(mix(a, c, i / cu)), up(mix(e, d, i / cu)), look.cells);
-      for (let j = 1; j < cv; j++) part.lines.seg(up(mix(a, e, j / cv)), up(mix(c, d, j / cv)), look.cells);
-      for (const [p, q] of m.posts) part.lines.seg(L(p), L(q), PANEL_POST);
-    }
+    if (part) pushModules(part.solid, part.lines, face, field, part.floor.elevation + part.base);
+  }
+}
+
+/** The modules of a field (glass, frame, cell grid, frames on flat ground), lowered by `dy` into local coordinates. */
+export function pushModules(solid: GeoBuffer, lines: LineBuffer, face: RoofFace, field: SolarField, dy: number): void {
+  const L = (p: number[]): number[] => [p[0], p[1] - dy, p[2]];
+  const look = PANEL_LOOKS[field.look === "blue" ? "blue" : "black"];
+  const cu = field.portrait === false ? 10 : 6;
+  const cv = field.portrait === false ? 6 : 10;
+  for (const m of fieldModules(face, field)) {
+    const [a, c, d, e] = m.corners.map(L);
+    solid.tri(a, c, d, look.glass);
+    solid.tri(a, d, e, look.glass);
+    // the frame a hair above the glass, and the cell grid
+    const up = (p: number[], k = 0.004) => [p[0] + face.n[0] * k, p[1] + face.n[1] * k, p[2] + face.n[2] * k];
+    const mix = (p: number[], q: number[], t: number) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t];
+    const ring = [a, c, d, e].map((p) => up(p));
+    for (let i = 0; i < 4; i++) lines.seg(ring[i], ring[(i + 1) % 4], look.edge);
+    for (let i = 1; i < cu; i++) lines.seg(up(mix(a, c, i / cu)), up(mix(e, d, i / cu)), look.cells);
+    for (let j = 1; j < cv; j++) lines.seg(up(mix(a, e, j / cv)), up(mix(c, d, j / cv)), look.cells);
+    for (const [p, q] of m.posts) lines.seg(L(p), L(q), PANEL_POST);
   }
 }
 

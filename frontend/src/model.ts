@@ -281,6 +281,8 @@ export interface SolarField {
   module_h?: number | null;
   /** The string the field belongs to (see RoofSettings.strings); fields on several roofs can share one. */
   string?: string | null;
+  /** Garden fields (face "ground"): rotation of the rows in the plan, degrees. */
+  rotation?: number | null;
 }
 
 /** A string of solar modules: one or more fields wired together to one inverter. */

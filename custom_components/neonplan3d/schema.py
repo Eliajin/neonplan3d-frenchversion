@@ -252,6 +252,8 @@ SOLAR_FIELD_SCHEMA = vol.Schema(
         vol.Optional("module_w", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.3, max=3))),
         vol.Optional("module_h", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.3, max=3))),
         vol.Optional("string", default=None): vol.Any(None, _ID),
+        # garden fields (face "ground"): rotation of the rows in the plan
+        vol.Optional("rotation", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=-360, max=360))),
     },
     extra=vol.ALLOW_EXTRA,
 )

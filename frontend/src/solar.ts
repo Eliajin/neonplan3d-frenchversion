@@ -5,6 +5,7 @@
 // length); on a flat roof s runs across, level. A field's u and v place its lower left corner on the face.
 
 import type { Building, Floor, RoofSection, SolarField, Vec2 } from "./model.ts";
+import { outdoorGround } from "./model.ts";
 import { sectionFrame, sectionOverhang, sectionProfile } from "./roof-sections.ts";
 
 const DEG = Math.PI / 180;
@@ -39,6 +40,46 @@ export interface RoofFace {
   span(s: number): [number, number];
   /** Plan direction the face looks to (down the slope); for a flat roof the direction of +s. */
   facing: Vec2;
+  /** The ground in the garden: no edges, the field goes where it is put. */
+  unbounded?: boolean;
+}
+
+/** Face key of fields standing in the garden. */
+export const GROUND = "ground";
+
+/** The floor whose garden ground-mounted fields stand in: the lowest with rooms. */
+export function groundFloor(b: Building): Floor | null {
+  const withRooms = b.floors.filter((f) => f.rooms.some((r) => r.points.length >= 3));
+  return [...withRooms].sort((p, q) => p.elevation - q.elevation)[0] ?? b.floors[0] ?? null;
+}
+
+/**
+ * The ground under a garden field: level, turned by the field's rotation; u and v are plan coordinates
+ * along the turned axes, so the field's corner sits at u · (cos r, sin r) + v · (−sin r, cos r).
+ */
+export function groundFace(b: Building, f: Pick<SolarField, "u" | "v" | "rotation">): RoofFace {
+  const r = ((f.rotation ?? 0) * Math.PI) / 180;
+  const eu: V3 = [Math.cos(r), 0, Math.sin(r)];
+  const es: V3 = [-Math.sin(r), 0, Math.cos(r)];
+  const floor = groundFloor(b);
+  const x = eu[0] * f.u + es[0] * f.v;
+  const z = eu[2] * f.u + es[2] * f.v;
+  const y = floor ? floor.elevation + outdoorGround(floor, x, z) : 0;
+  return { key: GROUND, section: null, side: "top", flat: true, o: [0, y, 0], eu, es, n: [0, 1, 0], lu: 1e4, ls: 1e4, pitch: 0, span: () => [-1e4, 1e4], facing: [es[0], es[2]], unbounded: true };
+}
+
+/** The face a field lies on (a roof face, or the ground in the garden); null when its roof face is gone. */
+export function fieldFace(b: Building, f: SolarField, faces: readonly RoofFace[] = roofFaces(b)): RoofFace | null {
+  return f.face === GROUND ? groundFace(b, f) : (faces.find((x) => x.key === f.face) ?? null);
+}
+
+/** A new garden field beside the house: two rows of four, tilted 25°, towards the south. */
+export function proposeGroundField(b: Building, id: string): SolarField {
+  const pts = b.floors.flatMap((fl) => fl.rooms.flatMap((r) => r.points));
+  const x = pts.length ? Math.max(...pts.map((p) => p[0])) + 3 : 0;
+  const z = pts.length ? Math.min(...pts.map((p) => p[1])) : 0;
+  // rows run along x, the modules lean up towards -z: with north up in the plan they look south
+  return { id, face: GROUND, u: Math.round(x * 100) / 100, v: Math.round(z * 100) / 100, rows: 2, cols: 4, portrait: true, tilt: 25, flip: true, rotation: (b.settings.north ?? 0) || 0, look: "black", entity: null };
 }
 
 /** The floor the single roof sits on: the highest with rooms (as the roof itself). */
@@ -204,6 +245,7 @@ export function fieldModules(face: RoofFace, f: SolarField, withSkipped = false)
     face.o[2] + face.eu[2] * u + face.es[2] * s + face.n[2] * up,
   ];
   const inside = (u: number, s: number) => {
+    if (face.unbounded) return true;
     if (s < -1e-6 || s > face.ls + 1e-6) return false;
     const [a, b] = face.span(s);
     return u >= a - 1e-6 && u <= b + 1e-6;
@@ -264,6 +306,7 @@ export function faceAt(faces: readonly RoofFace[], p: Vec2): { face: RoofFace; u
 
 /** A field kept on its face: its corner moved so the whole field stays on the face where it can. */
 export function clampField(face: RoofFace, f: SolarField): { u: number; v: number } {
+  if (face.unbounded) return { u: f.u, v: f.v };
   const [w, d] = fieldSize(face, f);
   // rounded down to centimetres, so a field pushed to the far edge still fits completely
   const r = (x: number) => Math.floor(x * 100 + 1e-6) / 100;

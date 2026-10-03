@@ -108,6 +108,7 @@ The editor has the floor plan in the middle, the toolbar at the top and the side
 | **Outdoor** | Draw outdoor areas such as lawn, terrace or pool |
 | **Floor opening** | Draw a hole into the floor, e.g. above the staircase |
 | **Roof** | Draw, move and set up roof sections, see [4.19](#419-roof) |
+| **Energy** | Solar fields on the roof and in the garden, strings, see [4.20](#420-energy-solar-fields) |
 
 Next to them are **Undo**, **Redo**, **Show all** and **3D beside**. A short hint for the active tool is always shown at the bottom of the plan.
 
@@ -358,9 +359,9 @@ A simple house gets a flat or gable roof over the whole top floor under **Settin
 
 ![The Roof tool with a selected roof section](images/editor-roof.jpg)
 
-#### Solar fields
+### 4.20 Energy: solar fields
 
-Below the roof sections, the **Roof** tool lists the **Solar fields**. **+ Solar field** puts a field on the sunniest free roof face, as large as fits. The modules lie in the slope of the face; on a flat roof they stand on frames. This works on the single gable and flat roof and on all roof sections (gable, hip, pent, flat).
+The **Energy** tool gathers everything about energy in the house, starting with the **solar fields** (meters, heating and heat pump will follow). **+ Solar field** puts a field on the sunniest free roof face, as large as fits. **+ In the garden** puts a field on frames beside the house. The modules lie in the slope of the face; on a flat roof they stand on frames. This works on the single gable and flat roof and on all roof sections (gable, hip, pent, flat).
 
 | Field | Effect |
 |---|---|
@@ -374,7 +375,8 @@ Below the roof sections, the **Roof** tool lists the **Solar fields**. **+ Solar
 | **PV power of this field** | The power sensor of its string, for the coming Pro add-on |
 | **Portrait** / **Landscape** | How the modules (1.13 × 1.72 m) lie |
 | **Distance from the edge** / **from the eave** | Position of the field. Drag it in the plan, also onto another roof face; it does not slide beyond the edge of its face |
-| **Tilt of the frames** | Flat roofs only: the angle of the frames, plus the direction |
+| **Tilt of the frames** | Flat roofs and the garden: the angle of the frames, plus the direction |
+| **Garden / ground** | Chosen as the roof face, the field stands on frames in the garden; **Rotation** turns the rows, dragging moves it freely |
 | **Fill face** | Puts as many modules on the face as fit |
 
 Below the field you see its power, counted with 400 W per module. The plan lock does not hold solar fields; like furniture they can always be moved. Solar inverter, home battery and wallbox are in the library under **Energy & solar**. Like every electric item, they show their watts with a power sensor.

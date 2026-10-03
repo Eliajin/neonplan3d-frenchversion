@@ -11,13 +11,15 @@
 //   fold = 48 + b    top face of the lower part at the cut height: visible while bucket b is cut
 
 import { Color, type BufferGeometry } from "three";
-import type { Floor, Opening, Room, Vec2 } from "../model.ts";
+import type { Floor, Opening, Room, SolarField, Vec2 } from "../model.ts";
 import { furnitureFootprint, isLamp, pointInPolygon } from "../model.ts";
 import { generateWalls, locateOpening, openingHost, type Wall } from "../geometry/walls.ts";
 import { holeInRoom, insetHole, mergeHoles } from "../geometry/holes.ts";
 import { pushFurniture } from "./furniture.ts";
 import { mountBase, packItem } from "../packs.ts";
 import { pushOutdoor } from "./outdoor.ts";
+import { pushModules } from "./roof.ts";
+import type { RoofFace } from "../solar.ts";
 import { ALWAYS, CAP_OFFSET, CUT_OFFSET, EDGE_BASE, EDGE_CUT, EDGE_SOFT, EDGE_TOP, GeoBuffer, LineBuffer, LOWER_OFFSET, pushPrism, triangulate } from "./geo.ts";
 
 export { ALWAYS, CUT_OFFSET, GeoBuffer, LineBuffer, pushPrism, shade } from "./geo.ts";
@@ -97,7 +99,14 @@ interface Span {
   info: OpeningInfo;
 }
 
-export function buildFloorGeometry(floor: Floor, wallExterior: number, wallInterior: number, holes: Vec2[][] = []): FloorGeometry {
+export function buildFloorGeometry(
+  floor: Floor,
+  wallExterior: number,
+  wallInterior: number,
+  holes: Vec2[][] = [],
+  /** Solar fields standing in this floor's garden, with their ground. */
+  solar: { face: RoofFace; field: SolarField }[] = [],
+): FloorGeometry {
   const { walls } = generateWalls(floor.rooms, { exterior: wallExterior, interior: wallInterior }, floor.walls ?? []);
 
   // ---------------------------------------------------------------- floors (with stair holes)
@@ -275,6 +284,7 @@ export function buildFloorGeometry(floor: Floor, wallExterior: number, wallInter
   // ---------------------------------------------------------------- furniture and shadows
   const shadow = buildShadow(outline.edges, floor.rooms, spans);
   pushOutdoor(wallBuf, lines, floor);
+  for (const s of solar) pushModules(wallBuf, lines, s.face, s.field, floor.elevation);
 
   // lamps are drawn live by the viewer (they glow with their light)
   const furnitureTris: FloorGeometry["furnitureTris"] = [];

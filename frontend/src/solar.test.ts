@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding, newFloor, type Building, type RoofSection, type SolarField } from "./model.ts";
-import { bestFace, clampField, faceAt, faceCompass, fieldModules, fieldPlan, proposeField, roofFaces } from "./solar.ts";
+import { bestFace, clampField, faceAt, faceCompass, fieldFace, fieldModules, fieldPlan, groundFace, proposeField, proposeGroundField, roofFaces } from "./solar.ts";
 
 /** A 10 × 8 m house of one floor (walls 2.5 m high) with the given roof. */
 function house(roof: Building["settings"]["roof"]): Building {
@@ -123,4 +123,19 @@ test("the face under a plan point, and a field kept on its face", () => {
   const far: SolarField = { id: "s", face: f.key, u: 40, v: 9, rows: 2, cols: 3, portrait: true };
   const kept = clampField(f, far);
   assert.equal(fieldModules(f, { ...far, ...kept }).length, 6);
+});
+
+test("a garden field stands beside the house on frames, turned as wanted", () => {
+  const b = house({ type: "gable", pitch: 35, overhang: 0.4 });
+  const f = proposeGroundField(b, "g");
+  const face = fieldFace(b, f)!;
+  assert.ok(face.unbounded && face.flat);
+  const mods = fieldModules(face, f);
+  assert.equal(mods.length, 8);
+  // beside the house (it reaches to x = 10), standing on the ground (-0.2 below the ground floor)
+  for (const m of mods) for (const p of m.corners) assert.ok(p[0] > 12 && p[1] > -0.2);
+  // turned by 90°, the rows run along z instead of x
+  const turned = fieldModules(groundFace(b, { ...f, rotation: 90 }), { ...f, rotation: 90 });
+  const spanX = (ms: typeof mods) => Math.max(...ms.flatMap((m) => m.corners.map((p) => p[0]))) - Math.min(...ms.flatMap((m) => m.corners.map((p) => p[0])));
+  assert.ok(spanX(turned) < spanX(mods));
 });
