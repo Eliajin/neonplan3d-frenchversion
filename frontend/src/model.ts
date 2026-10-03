@@ -283,8 +283,10 @@ export interface SolarField {
   module_h?: number | null;
   /** The string the field belongs to (see RoofSettings.strings); fields on several roofs can share one. */
   string?: string | null;
-  /** Garden fields (face "ground"): rotation of the rows in the plan, degrees. */
+  /** Free-standing fields (face "ground"): rotation of the rows in the plan, degrees. */
   rotation?: number | null;
+  /** Free-standing fields: height of the surface they stand on above the ground floor (a garage roof); null = the ground. */
+  base?: number | null;
 }
 
 /**

@@ -44,7 +44,7 @@ import { furnitureFootprint, isLamp, LAMP_MODEL, outdoorGround, pointInPolygon, 
 import { floorCounts, floorInfoText, personsInRooms } from "../presence.ts";
 import { controls, tokens } from "../styles.ts";
 import type { HassEntity, HomeAssistant } from "../types.ts";
-import type { DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Quality, ScreenState, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
+import type { DeviceMarker, FloorplanViewer, FloorStack, RobotInfo, Quality, ScreenState, SurfaceGrab, ViewerStats, WallMode } from "../viewer/viewer3d.ts";
 
 /** Which HTML markers are shown: none, only what has no 3D object or shows a value, or all. */
 export type MarkerMode = "none" | "important" | "all";
@@ -65,6 +65,7 @@ export class Fp3dView3d extends LitElement {
     showEnergy: { attribute: false },
     flows: { attribute: false },
     furnish: { type: Boolean },
+    surfaceGrab: { attribute: false },
     trail: { type: Boolean },
     weather: { type: Boolean },
     weatherEntityId: { attribute: false },
@@ -117,6 +118,8 @@ export class Fp3dView3d extends LitElement {
   declare flows: boolean | null;
   /** Furnishing: furniture and lamps are dragged in 3D (admins, panel only). */
   declare furnish: boolean;
+  /** Editor: moves solar fields and roof windows with rays from the camera (null: none). */
+  declare surfaceGrab: SurfaceGrab | null;
   /** Motion trail: where motion was reported in the last half hour, with times. */
   declare trail: boolean;
   /** Weather outside: rain, snow, fog and clouds from a weather entity, sun and moon from sun.sun. */
@@ -344,6 +347,7 @@ export class Fp3dView3d extends LitElement {
       this.viewer.setWallMode(this.wallMode);
       this.viewer.setTheme(this.theme);
       this.viewer.setFurnishMode(this.furnish);
+      this.viewer.setSurfaceGrab(this.surfaceGrab ?? null);
       this.viewer.setFloorStack(this.floorStack);
       this.viewer.setStats(this.showStats);
       this.viewer.setAutoOrbit(this.autoOrbit ? 0.06 : 0);
@@ -389,6 +393,7 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("explode")) v.setExplode(this.explode);
     if (changed.has("floorStack")) v.setFloorStack(this.floorStack);
     if (changed.has("theme")) v.setTheme(this.theme);
+    if (changed.has("surfaceGrab")) v.setSurfaceGrab(this.surfaceGrab ?? null);
     if (changed.has("furnish")) {
       v.setFurnishMode(this.furnish);
       this.syncDevices(true);

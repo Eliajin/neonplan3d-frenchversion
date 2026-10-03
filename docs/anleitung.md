@@ -365,7 +365,9 @@ Unter den Dachflächen legt **+ Dachfenster** ein Fenster in eine Dachfläche (S
 
 ### 4.20 Energie: Solarfelder
 
-Das Werkzeug **Energie** sammelt alles rund um Energie im Haus, zuerst die **Solarfelder** (Zähler, Heizung und Wärmepumpe folgen). **+ Solarfeld** legt ein Feld auf die sonnigste freie Dachfläche, so groß, wie es passt. **+ Im Garten** stellt ein aufgeständertes Feld neben das Haus. Die Module liegen in der Neigung der Dachfläche, auf einem Flachdach stehen sie aufgeständert. Das klappt beim einfachen Sattel- und Flachdach und auf allen Dachabschnitten (Satteldach, Walmdach, Pultdach, Flachdach).
+Das Werkzeug **Energie** sammelt alles rund um Energie im Haus, zuerst die **Solarfelder** (Zähler, Heizung und Wärmepumpe folgen). **+ Solarfeld** legt ein Feld auf die sonnigste freie Dachfläche, so groß, wie es passt. **+ Frei aufgeständert** stellt ein Feld auf Gestellen neben das Haus, etwa in den Garten oder auf ein flaches Garagendach. **+ An der Wand** hängt eine Reihe Module an die sonnigste Außenwand der angezeigten Etage (Fassade, Balkon).
+
+Felder lassen sich im Grundriss und in der **3D-Ansicht daneben** mit der Maus verschieben, auch auf eine andere Dachfläche oder Wand. Dachfenster genauso, im Werkzeug **Dach**. Die Module liegen in der Neigung der Dachfläche, auf einem Flachdach stehen sie aufgeständert. Das klappt beim einfachen Sattel- und Flachdach und auf allen Dachabschnitten (Satteldach, Walmdach, Pultdach, Flachdach).
 
 | Feld | Wirkung |
 |---|---|
@@ -380,7 +382,8 @@ Das Werkzeug **Energie** sammelt alles rund um Energie im Haus, zuerst die **Sol
 | **Hochformat** / **Querformat** | Lage der Module (1,13 × 1,72 m) |
 | **Abstand vom Rand** / **von der Traufe** | Position des Feldes. Im Grundriss lässt es sich mit der Maus verschieben, auch auf eine andere Dachfläche; über den Rand der Fläche hinaus rutscht es nicht |
 | **Neigung der Aufständerung** | Flachdach und Garten: Winkel der Gestelle, dazu die Richtung |
-| **Garten / Boden** | Als Dachfläche gewählt, steht das Feld aufgeständert im Garten; **Drehung** richtet die Reihen aus, ziehen verschiebt es frei |
+| **Frei aufgeständert** | Das Feld steht auf Gestellen, frei verschiebbar. **Höhe der Aufstellfläche** hebt es an, z. B. 2,8 m auf ein Garagendach (0 = Boden). **Drehung** richtet die Reihen aus, ebenso die Knöpfe ↺/↻ 15° und der Dreh-Griff im Grundriss; das Feld dreht sich dabei um seine Mitte |
+| **Wand** | Module hängen senkrecht an einer Außenwand; statt „Abstand von der Traufe“ gibt es die **Höhe über dem Boden** |
 | **Fläche füllen** | Legt so viele Module auf die Fläche, wie passen |
 
 Unter dem Feld steht die Leistung, gerechnet mit 400 W je Modul. Die Grundriss-Sperre hält Solarfelder nicht fest, sie lassen sich wie Möbel jederzeit verschieben. Wechselrichter, Stromspeicher und Wallbox findest du als Möbel in der Bibliothek unter **Energie & Solar**. Wie jedes elektrische Möbel zeigen sie mit einem Leistungssensor ihre Watt.

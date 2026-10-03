@@ -6,6 +6,7 @@
 
 import type { Building, Floor, RoofSection, RoofWindow, SolarField, Vec2 } from "./model.ts";
 import { outdoorGround } from "./model.ts";
+import { generateWalls } from "./geometry/walls.ts";
 import { sectionFrame, sectionOverhang, sectionProfile } from "./roof-sections.ts";
 
 const DEG = Math.PI / 180;
@@ -42,6 +43,46 @@ export interface RoofFace {
   facing: Vec2;
   /** The ground in the garden: no edges, the field goes where it is put. */
   unbounded?: boolean;
+  /** A house wall: upright, on this floor (its modules hang flat on the facade). */
+  wall?: { floorId: string };
+}
+
+/** Outer faces of the house walls, per floor: modules can hang on a facade or a balcony. */
+export function wallFaces(b: Building, floorId?: string): RoofFace[] {
+  const out: RoofFace[] = [];
+  for (const floor of b.floors) {
+    if (floorId && floor.id !== floorId) continue;
+    const { walls } = generateWalls(floor.rooms, { exterior: b.settings.wall_exterior, interior: b.settings.wall_interior }, floor.walls ?? []);
+    for (const w of walls) {
+      if (!w.exterior || w.free) continue;
+      const dx = w.b[0] - w.a[0];
+      const dz = w.b[1] - w.a[1];
+      const l = Math.hypot(dx, dz);
+      if (l < 1.2) continue;
+      // exterior walls have their room on the left: the outer face lies on the right
+      const nx = dz / l;
+      const nz = -dx / l;
+      const o: V3 = [w.a[0] + nx * w.right, floor.elevation, w.a[1] + nz * w.right];
+      const height = Math.min(floor.height, w.height ?? floor.height);
+      out.push({
+        key: `wall:${floor.id}:${w.id}`,
+        section: null,
+        side: "top",
+        flat: false,
+        o,
+        eu: [dx / l, 0, dz / l],
+        es: [0, 1, 0],
+        n: [nx, 0, nz],
+        lu: l,
+        ls: height,
+        pitch: 90,
+        span: () => [0, l],
+        facing: [nx, nz],
+        wall: { floorId: floor.id },
+      });
+    }
+  }
+  return out;
 }
 
 /** Face key of fields standing in the garden. */
@@ -57,20 +98,40 @@ export function groundFloor(b: Building): Floor | null {
  * The ground under a garden field: level, turned by the field's rotation; u and v are plan coordinates
  * along the turned axes, so the field's corner sits at u · (cos r, sin r) + v · (−sin r, cos r).
  */
-export function groundFace(b: Building, f: Pick<SolarField, "u" | "v" | "rotation">): RoofFace {
+export function groundFace(b: Building, f: Pick<SolarField, "u" | "v" | "rotation" | "base">): RoofFace {
   const r = ((f.rotation ?? 0) * Math.PI) / 180;
   const eu: V3 = [Math.cos(r), 0, Math.sin(r)];
   const es: V3 = [-Math.sin(r), 0, Math.cos(r)];
   const floor = groundFloor(b);
   const x = eu[0] * f.u + es[0] * f.v;
   const z = eu[2] * f.u + es[2] * f.v;
-  const y = floor ? floor.elevation + outdoorGround(floor, x, z) : 0;
+  // on a surface of its own height (a flat garage roof), else on the ground (a terrace raises it)
+  const y = floor ? floor.elevation + (f.base != null ? f.base : outdoorGround(floor, x, z)) : (f.base ?? 0);
   return { key: GROUND, section: null, side: "top", flat: true, o: [0, y, 0], eu, es, n: [0, 1, 0], lu: 1e4, ls: 1e4, pitch: 0, span: () => [-1e4, 1e4], facing: [es[0], es[2]], unbounded: true };
 }
 
 /** The face a field lies on (a roof face, or the ground in the garden); null when its roof face is gone. */
 export function fieldFace(b: Building, f: SolarField, faces: readonly RoofFace[] = roofFaces(b)): RoofFace | null {
-  return f.face === GROUND ? groundFace(b, f) : (faces.find((x) => x.key === f.face) ?? null);
+  if (f.face === GROUND) return groundFace(b, f);
+  if (f.face.startsWith("wall:")) return wallFaces(b, f.face.split(":")[1]).find((x) => x.key === f.face) ?? null;
+  return faces.find((x) => x.key === f.face) ?? null;
+}
+
+/** A new wall field: on the longest wall towards the sun, one row of landscape modules at head height. */
+export function proposeWallField(b: Building, id: string, floorId: string): SolarField | null {
+  const faces = wallFaces(b, floorId);
+  const north = b.settings.north ?? 0;
+  const score = (f: RoofFace) => {
+    const bearing = (Math.atan2(f.facing[0], -f.facing[1]) * 180) / Math.PI - north;
+    return f.lu * (1.3 + Math.cos(((bearing - 180) * Math.PI) / 180));
+  };
+  const face = [...faces].sort((p, q) => score(q) - score(p))[0];
+  if (!face) return null;
+  const f = { ...proposeField(face, id), portrait: false, rows: 1 };
+  f.cols = Math.max(1, Math.floor((face.lu - 0.8 + MODULE_GAP) / (MODULE_H + MODULE_GAP)));
+  f.u = Math.round(((face.lu - (f.cols * MODULE_H + (f.cols - 1) * MODULE_GAP)) / 2) * 100) / 100;
+  f.v = Math.round(Math.max(0, face.ls - MODULE_W - 0.3) * 100) / 100;
+  return f;
 }
 
 /** A new garden field beside the house: two rows of four, tilted 25°, towards the south. */
@@ -296,6 +357,16 @@ export function pointOnFace(face: RoofFace, p: Vec2): { u: number; s: number } |
 export function faceAt(faces: readonly RoofFace[], p: Vec2): { face: RoofFace; u: number; s: number } | null {
   let best: { face: RoofFace; u: number; s: number; y: number } | null = null;
   for (const face of faces) {
+    if (face.wall) {
+      // a wall: the pointer just outside its face (up to 80 cm); the height stays as it is (s = NaN)
+      const d = [p[0] - face.o[0], p[1] - face.o[2]];
+      const u = d[0] * face.eu[0] + d[1] * face.eu[2];
+      const out = d[0] * face.n[0] + d[1] * face.n[2];
+      // right in front of the wall it wins over a roof overhang above; further out only where no roof is
+      if (u >= 0 && u <= face.lu && out >= -0.05 && out <= 0.35) return { face, u, s: Number.NaN };
+      if (u >= 0 && u <= face.lu && out > 0.35 && out <= 0.8 && !best) best = { face, u, s: Number.NaN, y: -Infinity };
+      continue;
+    }
     const hit = pointOnFace(face, p);
     if (!hit) continue;
     const y = face.o[1] + face.es[1] * hit.s;
@@ -396,4 +467,63 @@ export function proposeWindow(face: RoofFace, id: string): RoofWindow {
   const h = ROOF_WINDOW_H;
   const [a, b] = face.span(face.ls / 2);
   return { id, face: face.key, u: Math.round(((a + b - w) / 2) * 100) / 100, v: Math.round(Math.max(0, Math.min(face.ls - h, face.ls * 0.45 - h / 2)) * 100) / 100, w: null, h: null, cover: null, contact: null, tilt: null };
+}
+
+/**
+ * A garden field turned to a new rotation about its middle: u and v are measured along the turned axes, so
+ * they are worked out again from the field's centre in the plan (otherwise the field would jump away).
+ */
+export function turnGroundField(b: Building, f: SolarField, rotation: number): { u: number; v: number; rotation: number } {
+  const face = groundFace(b, f);
+  const [w, d] = fieldSize(face, f);
+  const cx = face.eu[0] * (f.u + w / 2) + face.es[0] * (f.v + d / 2);
+  const cz = face.eu[2] * (f.u + w / 2) + face.es[2] * (f.v + d / 2);
+  const r = (rotation * Math.PI) / 180;
+  const eu = [Math.cos(r), Math.sin(r)];
+  const es = [-Math.sin(r), Math.cos(r)];
+  // the centre stays: the corner is half the size back along the new axes
+  const u = cx * eu[0] + cz * eu[1] - w / 2;
+  const v = cx * es[0] + cz * es[1] - d / 2;
+  const round = (x: number) => Math.round(x * 100) / 100;
+  return { u: round(u), v: round(v), rotation: ((Math.round(rotation) % 360) + 360) % 360 };
+}
+
+/** Middle of a field in the plan. */
+export function fieldCenter(face: RoofFace, f: SolarField): Vec2 {
+  const [w, d] = fieldSize(face, f);
+  return [face.o[0] + face.eu[0] * (f.u + w / 2) + face.es[0] * (f.v + d / 2), face.o[2] + face.eu[2] * (f.u + w / 2) + face.es[2] * (f.v + d / 2)];
+}
+
+/** Where a ray (origin o, direction d, building coordinates) meets a face: distance t and the face coordinates. */
+export function rayOnFace(face: RoofFace, o: V3, d: V3): { t: number; u: number; s: number } | null {
+  const denom = d[0] * face.n[0] + d[1] * face.n[1] + d[2] * face.n[2];
+  if (Math.abs(denom) < 1e-6) return null;
+  const t = ((face.o[0] - o[0]) * face.n[0] + (face.o[1] - o[1]) * face.n[1] + (face.o[2] - o[2]) * face.n[2]) / denom;
+  if (t <= 0) return null;
+  const p: V3 = [o[0] + d[0] * t - face.o[0], o[1] + d[1] * t - face.o[1], o[2] + d[2] * t - face.o[2]];
+  const u = p[0] * face.eu[0] + p[1] * face.eu[1] + p[2] * face.eu[2];
+  const s = p[0] * face.es[0] + p[1] * face.es[1] + p[2] * face.es[2];
+  return { t, u, s };
+}
+
+/** Whether a point on a face (u, s) lies on the face itself (inside its edges; the ground has none). */
+export function onFace(face: RoofFace, u: number, s: number): boolean {
+  if (face.unbounded) return true;
+  if (s < 0 || s > face.ls) return false;
+  const [a, b] = face.span(s);
+  return u >= a && u <= b;
+}
+
+/** Whether a point on a face (u, s) lies on one of the field's modules (by their outline on the face). */
+export function onField(face: RoofFace, f: SolarField, u: number, s: number): boolean {
+  for (const m of fieldModules(face, f)) {
+    const us = m.corners.map((p) => {
+      const q = [p[0] - face.o[0], p[1] - face.o[1], p[2] - face.o[2]];
+      return [q[0] * face.eu[0] + q[1] * face.eu[1] + q[2] * face.eu[2], q[0] * face.es[0] + q[1] * face.es[1] + q[2] * face.es[2]];
+    });
+    const [u0, u1] = [Math.min(...us.map((x) => x[0])), Math.max(...us.map((x) => x[0]))];
+    const [s0, s1] = [Math.min(...us.map((x) => x[1])), Math.max(...us.map((x) => x[1]))];
+    if (u >= u0 - 0.05 && u <= u1 + 0.05 && s >= s0 - 0.05 && s <= s1 + 0.05) return true;
+  }
+  return false;
 }

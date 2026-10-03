@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding, newFloor, type Building, type RoofSection, type SolarField } from "./model.ts";
-import { bestFace, clampField, faceAt, faceCompass, fieldFace, fieldModules, fieldPlan, groundFace, proposeField, proposeGroundField, roofFaces } from "./solar.ts";
+import { bestFace, clampField, faceAt, faceCompass, fieldFace, fieldModules, fieldPlan, fieldCenter, groundFace, proposeField, proposeGroundField, proposeWallField, roofFaces, turnGroundField, wallFaces } from "./solar.ts";
 
 /** A 10 × 8 m house of one floor (walls 2.5 m high) with the given roof. */
 function house(roof: Building["settings"]["roof"]): Building {
@@ -138,4 +138,35 @@ test("a garden field stands beside the house on frames, turned as wanted", () =>
   const turned = fieldModules(groundFace(b, { ...f, rotation: 90 }), { ...f, rotation: 90 });
   const spanX = (ms: typeof mods) => Math.max(...ms.flatMap((m) => m.corners.map((p) => p[0]))) - Math.min(...ms.flatMap((m) => m.corners.map((p) => p[0])));
   assert.ok(spanX(turned) < spanX(mods));
+});
+
+test("turning a garden field keeps it in place, turning about its middle", () => {
+  const b = house({ type: "gable", pitch: 35, overhang: 0.4 });
+  const f = proposeGroundField(b, "g");
+  const before = fieldCenter(groundFace(b, f), f);
+  const turned = { ...f, ...turnGroundField(b, f, 45) };
+  const after = fieldCenter(groundFace(b, turned), turned);
+  near(after[0], before[0], 0.01);
+  near(after[1], before[1], 0.01);
+  assert.equal(turned.rotation, 45);
+});
+
+test("house walls carry upright fields; close in front of a wall the wall wins over the roof", () => {
+  const b = house({ type: "gable", pitch: 35, overhang: 0.4 });
+  const walls = wallFaces(b);
+  assert.equal(walls.length, 4);
+  const south = walls.find((w) => faceCompass(w, 0) === "s")!;
+  const f = proposeWallField(b, "w", "eg")!;
+  assert.equal(f.face, south.key);
+  const mods = fieldModules(south, f);
+  assert.ok(mods.length >= 4);
+  // upright: the module's lower and upper edge differ in height, not in the plan
+  const m = mods[0];
+  assert.ok(m.corners[3][1] - m.corners[0][1] > 1);
+  near(m.corners[3][2], m.corners[0][2], 1e-9);
+  // 10 cm in front of the south wall (outer face at z = 8.24) under the roof overhang: the wall
+  const all = [...roofFaces(b), ...walls];
+  assert.equal(faceAt(all, [5, 8.34])?.face.key, south.key);
+  // 38 cm out, still under the overhang (the eave is at 8.64): the roof
+  assert.equal(faceAt(all, [5, 8.62])?.face.key, "main:b");
 });

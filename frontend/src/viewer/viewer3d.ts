@@ -52,7 +52,7 @@ import { pushCameraModel, pushPackLamp, screenRect, pushFridgeDoors } from "./fu
 import { mountBase, packItem, setPacks, type FurniturePack } from "../packs.ts";
 import { withVehicles } from "../parking.ts";
 import { buildRoof, type RoofWindowState } from "./roof.ts";
-import { GROUND, groundFace, groundFloor } from "../solar.ts";
+import { GROUND, groundFace, groundFloor, wallFaces } from "../solar.ts";
 import { lineBlending, themed, themeIndex, type Theme, type ThemeUniform } from "./theme.ts";
 
 export type { Theme } from "./theme.ts";
@@ -170,6 +170,19 @@ export interface TrailSpot {
 export type LampModel = "ceiling" | "downlight" | "spot" | "panel" | "pendant" | "floor" | "uplight" | "table" | "wall" | "strip" | "bollard" | "garden";
 
 /** Piece of energy cable (floor-local coordinates); the flow runs from a to b. */
+/** A ray from the camera through the pointer, in building coordinates (heights above the ground). */
+export interface SurfaceRay {
+  o: [number, number, number];
+  d: [number, number, number];
+}
+
+/** Grab and move things on surfaces with rays: start says whether something was grabbed. */
+export interface SurfaceGrab {
+  start(ray: SurfaceRay): boolean;
+  move(ray: SurfaceRay): void;
+  end(): void;
+}
+
 export interface FlowPiece {
   floorId: string;
   a: [number, number, number];
@@ -392,6 +405,9 @@ export class FloorplanViewer {
   /** Lamps flashing after a tap (entity id -> end time). */
   private flashes = new Map<string, number>();
   private flows: FlowPiece[] = [];
+  /** Editor: things on surfaces (solar fields, roof windows) are grabbed and moved with a ray from the camera. */
+  private surfaceGrab: SurfaceGrab | null = null;
+  private surfaceDragging = false;
   /** Live state of the roof windows (the roof is rebuilt when it changes). */
   private roofWindows = new Map<string, RoofWindowState>();
   private roofWindowsKey = "";
@@ -1386,8 +1402,17 @@ export class FloorplanViewer {
     if (!b) return;
     const ordered = [...b.floors].sort((p, q) => p.elevation - q.elevation);
     for (const floor of b.floors) {
-      // solar fields in the garden stand on the ground floor
-      const garden = groundFloor(b)?.id === floor.id ? (b.settings.roof?.solar ?? []).filter((f) => f.face === GROUND).map((field) => ({ field, face: groundFace(b, field) })) : [];
+      // solar fields in the garden stand on the ground floor, wall fields hang on their floor's walls
+      const fields = b.settings.roof?.solar ?? [];
+      const garden = groundFloor(b)?.id === floor.id ? fields.filter((f) => f.face === GROUND).map((field) => ({ field, face: groundFace(b, field) })) : [];
+      const onWalls = fields.filter((f) => f.face.startsWith(`wall:${floor.id}:`));
+      if (onWalls.length) {
+        const walls = new Map(wallFaces(b, floor.id).map((w) => [w.key, w]));
+        for (const field of onWalls) {
+          const face = walls.get(field.face);
+          if (face) garden.push({ field, face });
+        }
+      }
       const geo = buildFloorGeometry(withVehicles(floor, this.parked), b.settings.wall_exterior, b.settings.wall_interior, stairHoles(b.floors, floor), garden);
       const mask: FoldMasks = { standing: { value: 0xffff }, glass: { value: 0 } };
       const materials = this.makeMaterials(mask);
@@ -2418,7 +2443,22 @@ export class FloorplanViewer {
     return [ray.ray.origin.x + dir.x * t, ray.ray.origin.z + dir.z * t];
   }
 
+  /** The editor's handler for things on roof faces and walls (null: none). */
+  setSurfaceGrab(grab: SurfaceGrab | null): void {
+    this.surfaceGrab = grab;
+  }
+
+  private surfaceRay(x: number, y: number): { o: [number, number, number]; d: [number, number, number] } {
+    const r = this.rayAt(x, y).ray;
+    return { o: [r.origin.x, r.origin.y, r.origin.z], d: [r.direction.x, r.direction.y, r.direction.z] };
+  }
+
   private grabFurniture(x: number, y: number): boolean {
+    // the editor's surface handler first: a solar field or roof window under the pointer is moved by it
+    if (this.surfaceGrab?.start(this.surfaceRay(x, y))) {
+      this.surfaceDragging = true;
+      return true;
+    }
     if (!this.furnish) return false;
     // a device whose pin was pressed; the pin of a furniture item (the washer's watts) moves the item
     const pending = this.pendingDevice;
@@ -2499,6 +2539,10 @@ export class FloorplanViewer {
   }
 
   private dragFurniture(x: number, y: number): void {
+    if (this.surfaceDragging) {
+      this.surfaceGrab?.move(this.surfaceRay(x, y));
+      return;
+    }
     const dg = this.deviceGrab;
     if (dg) {
       const fv = this.floorMap.get(dg.floorId);
@@ -2527,6 +2571,11 @@ export class FloorplanViewer {
   }
 
   private dropFurniture(): void {
+    if (this.surfaceDragging) {
+      this.surfaceDragging = false;
+      this.surfaceGrab?.end();
+      return;
+    }
     const dg = this.deviceGrab;
     this.deviceGrab = null;
     if (dg?.moved) this.options.onDeviceMove?.(dg.id, Math.round(dg.x * 1000) / 1000, Math.round(dg.z * 1000) / 1000);

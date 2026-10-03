@@ -134,8 +134,11 @@ export function pushModules(solid: GeoBuffer, lines: LineBuffer, face: RoofFace,
   const cv = field.portrait === false ? 6 : 10;
   for (const m of fieldModules(face, field)) {
     const [a, c, d, e] = m.corners.map(L);
+    // both sides: on a floor (garden, walls) only front faces are drawn, and a module leans either way
     solid.tri(a, c, d, look.glass);
     solid.tri(a, d, e, look.glass);
+    solid.tri(a, d, c, look.glass);
+    solid.tri(a, e, d, look.glass);
     // the frame a hair above the glass, and the cell grid
     const up = (p: number[], k = 0.004) => [p[0] + face.n[0] * k, p[1] + face.n[1] * k, p[2] + face.n[2] * k];
     const mix = (p: number[], q: number[], t: number) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t];

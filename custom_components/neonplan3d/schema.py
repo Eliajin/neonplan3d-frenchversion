@@ -254,6 +254,8 @@ SOLAR_FIELD_SCHEMA = vol.Schema(
         vol.Optional("string", default=None): vol.Any(None, _ID),
         # garden fields (face "ground"): rotation of the rows in the plan
         vol.Optional("rotation", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=-360, max=360))),
+        # free-standing fields: height of the surface they stand on (a garage roof); None = the ground
+        vol.Optional("base", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=60))),
     },
     extra=vol.ALLOW_EXTRA,
 )
