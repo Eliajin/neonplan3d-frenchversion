@@ -643,6 +643,7 @@ export class Fp3dEditor extends LitElement {
         .flows=${false}
         ?furnish=${this.isAdmin}
         .surfaceGrab=${this.isAdmin && this.houseTool ? this.surfaceGrabber : null}
+        .furnishTypes=${this._tool === "energy" ? ENERGY_DEVICES : this._tool === "roof" ? [] : null}
         .selectedFurniture=${this._furnitureId}
         .selectedDevice=${this._deviceId}
         .quality=${"auto"}
@@ -3419,6 +3420,7 @@ export class Fp3dEditor extends LitElement {
           </div>
           <div class="fp3d-stage-pair ${this._split ? "fp3d-split" : ""}" style=${this._split && !this.narrow ? `--fp3d-split:${Math.round(this._splitRatio * 100)}%` : ""}>
           <div class="fp3d-canvas-wrap">
+            ${this.houseTool ? html`<div class="fp3d-tool-note">${this.t(this._tool === "energy" ? "energy_only_note" : "roof_only_note")}</div>` : nothing}
             <svg
               class="fp3d-plan fp3d-tool-${this._tool}"
               @pointerdown=${this.onPointerDown}
@@ -6188,6 +6190,23 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-energy-marker {
         cursor: move;
+      }
+      /* the roof and energy tools say what can be moved there (everything else is locked) */
+      .fp3d-tool-note {
+        position: absolute;
+        top: 8px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 2;
+        max-width: calc(100% - 24px);
+        padding: 5px 12px;
+        border-radius: 999px;
+        background: color-mix(in srgb, #0b1426 85%, transparent);
+        border: 1px solid color-mix(in srgb, #ffd75a 60%, transparent);
+        color: #ffe7a3;
+        font-size: 12px;
+        text-align: center;
+        pointer-events: none;
       }
       .fp3d-energy-marker circle {
         fill: color-mix(in srgb, #0b1426 80%, transparent);

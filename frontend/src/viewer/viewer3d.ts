@@ -408,6 +408,8 @@ export class FloorplanViewer {
   /** Editor: things on surfaces (solar fields, roof windows) are grabbed and moved with a ray from the camera. */
   private surfaceGrab: SurfaceGrab | null = null;
   private surfaceDragging = false;
+  /** Furnishing limited to these furniture types (the editor's energy tool); null = all. */
+  private furnishTypes: ReadonlySet<string> | null = null;
   /** Live state of the roof windows (the roof is rebuilt when it changes). */
   private roofWindows = new Map<string, RoofWindowState>();
   private roofWindowsKey = "";
@@ -2443,6 +2445,11 @@ export class FloorplanViewer {
     return [ray.ray.origin.x + dir.x * t, ray.ray.origin.z + dir.z * t];
   }
 
+  /** Only these furniture types can be grabbed while furnishing (null: all); placed devices then cannot. */
+  setFurnishTypes(types: readonly string[] | null): void {
+    this.furnishTypes = types ? new Set(types) : null;
+  }
+
   /** The editor's handler for things on roof faces and walls (null: none). */
   setSurfaceGrab(grab: SurfaceGrab | null): void {
     this.surfaceGrab = grab;
@@ -2463,6 +2470,16 @@ export class FloorplanViewer {
     // a device whose pin was pressed; the pin of a furniture item (the washer's watts) moves the item
     const pending = this.pendingDevice;
     this.pendingDevice = null;
+    // a tool that only moves some furniture (energy devices): everything else stays where it is
+    const only = this.furnishTypes;
+    if (only) {
+      const owner = pending ? this.devices.find((m) => m.id === pending)?.furnitureId : undefined;
+      const hit = owner ? null : this.furnitureAt(x, y);
+      const id = owner ?? hit?.id;
+      const fv = id ? this.floors.find((v) => v.floor.furniture.some((m) => m.id === id)) : undefined;
+      const type = fv?.floor.furniture.find((m) => m.id === id)?.type;
+      return !!(fv && id && type && only.has(type)) && this.grabItem(fv, id, x, y);
+    }
     if (pending) {
       const owner = this.devices.find((m) => m.id === pending)?.furnitureId;
       const fv = owner ? this.floors.find((v) => v.floor.furniture.some((m) => m.id === owner)) : undefined;

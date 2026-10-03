@@ -66,6 +66,7 @@ export class Fp3dView3d extends LitElement {
     flows: { attribute: false },
     furnish: { type: Boolean },
     surfaceGrab: { attribute: false },
+    furnishTypes: { attribute: false },
     trail: { type: Boolean },
     weather: { type: Boolean },
     weatherEntityId: { attribute: false },
@@ -120,6 +121,8 @@ export class Fp3dView3d extends LitElement {
   declare furnish: boolean;
   /** Editor: moves solar fields and roof windows with rays from the camera (null: none). */
   declare surfaceGrab: SurfaceGrab | null;
+  /** Editor: only these furniture types can be moved in 3D (null: all). */
+  declare furnishTypes: readonly string[] | null;
   /** Motion trail: where motion was reported in the last half hour, with times. */
   declare trail: boolean;
   /** Weather outside: rain, snow, fog and clouds from a weather entity, sun and moon from sun.sun. */
@@ -348,6 +351,7 @@ export class Fp3dView3d extends LitElement {
       this.viewer.setTheme(this.theme);
       this.viewer.setFurnishMode(this.furnish);
       this.viewer.setSurfaceGrab(this.surfaceGrab ?? null);
+      this.viewer.setFurnishTypes(this.furnishTypes ?? null);
       this.viewer.setFloorStack(this.floorStack);
       this.viewer.setStats(this.showStats);
       this.viewer.setAutoOrbit(this.autoOrbit ? 0.06 : 0);
@@ -394,6 +398,7 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("floorStack")) v.setFloorStack(this.floorStack);
     if (changed.has("theme")) v.setTheme(this.theme);
     if (changed.has("surfaceGrab")) v.setSurfaceGrab(this.surfaceGrab ?? null);
+    if (changed.has("furnishTypes")) v.setFurnishTypes(this.furnishTypes ?? null);
     if (changed.has("furnish")) {
       v.setFurnishMode(this.furnish);
       this.syncDevices(true);
