@@ -223,6 +223,7 @@ const shots = [
   // French fork: the UI in French
   { name: "fr-view", query: "?lang=fr", width: 1280, height: 800, click: "Erdgeschoss", then: "Wohnzimmer" },
   { name: "fr-editor", query: "?lang=fr", width: 1280, height: 800, editor: true, editorState: { _tool: "furniture" } },
+  { name: "fr-upstream", query: "?lang=fr&upstream", width: 1280, height: 800 },
   { name: "fr-card-editor", query: "?card&lang=fr", width: 1400, height: 900 },
 ];
 

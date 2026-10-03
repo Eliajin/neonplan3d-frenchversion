@@ -18,7 +18,7 @@ import { confirmEntities, defaultHeight, entityName, kindOf } from "./devices.ts
 import { canLift, type LampMount } from "./model.ts";
 import { mountBase } from "./packs.ts";
 import { hasFeature } from "./features.ts";
-import { getLicense, unseenOffers, unseenUpdates } from "./api.ts";
+import { getLicense, getUpstreamUpdate, unseenOffers, unseenUpdates, type UpstreamUpdate } from "./api.ts";
 import type { FloorStack, Quality, WallMode } from "./viewer/viewer3d.ts";
 
 type Mode = "view" | "editor" | "extensions";
@@ -49,6 +49,7 @@ export class Floorplan3dPanel extends LitElement {
     panel: { attribute: false },
     _mode: { state: true },
     _newOffers: { state: true },
+    _upstream: { state: true },
     _editorReady: { state: true },
     _floorId: { state: true },
     _roomId: { state: true },
@@ -76,6 +77,8 @@ export class Floorplan3dPanel extends LitElement {
   /** Shop offers not seen yet (a dot on the extensions tab). */
   private declare _newOffers: number;
   private offersChecked = false;
+  /** French fork: a newer release of the original, shown as a notice to admins. */
+  private declare _upstream: UpstreamUpdate | null;
   /** The editor bundle is loaded (it is fetched the first time the editor opens). */
   private declare _editorReady: boolean;
   private declare _floorId: string | null;
@@ -383,6 +386,9 @@ export class Floorplan3dPanel extends LitElement {
     getLicense(this.hass)
       .then((lic) => (this._newOffers = lic.active ? unseenOffers(lic.offers ?? []).length + unseenUpdates(lic.updates ?? []).length : 0))
       .catch(() => undefined);
+    getUpstreamUpdate(this.hass)
+      .then((u) => (this._upstream = u))
+      .catch(() => undefined);
   }
 
   disconnectedCallback(): void {
@@ -480,6 +486,15 @@ export class Floorplan3dPanel extends LitElement {
     const d = this.data;
     const notices = [];
     if (d.needsRestart) notices.push(html`<div class="fp3d-notice fp3d-notice-warn">${d.backendVersion ? this.t("needs_restart", { version: d.backendVersion }) : this.t("needs_restart_old")}</div>`);
+    if (this._upstream && this.isAdmin) {
+      const u = this._upstream;
+      notices.push(
+        html`<div class="fp3d-notice">
+          <span>${this.t("upstream_update", { latest: u.latest, base: u.base })}</span>
+          <a class="fp3d-btn" href=${u.url} target="_blank" rel="noopener">${this.t("upstream_notes")}</a>
+        </div>`,
+      );
+    }
     if (d.saveState === "error" && d.saveError) {
       notices.push(html`<div class="fp3d-notice fp3d-notice-error">${this.t("save_failed_detail", { error: d.saveError })}</div>`);
     }
@@ -792,6 +807,11 @@ export class Floorplan3dPanel extends LitElement {
       .fp3d-notice span {
         flex: 1;
         min-width: 200px;
+      }
+      .fp3d-notice a.fp3d-btn {
+        display: inline-flex;
+        align-items: center;
+        text-decoration: none;
       }
       .fp3d-notice-warn {
         border-color: rgba(255, 181, 71, 0.6);

@@ -27,3 +27,8 @@ PANEL_ICON = "mdi:floor-plan"
 PANEL_TITLE = "NeonPlan 3D"
 
 SIGNAL_BUILDING_UPDATED = f"{DOMAIN}_building_updated"
+
+# French fork: the original repository and its release this fork is based on (raise it after merging
+# a newer release of the original; until then upstream.py reports the newer one)
+UPSTREAM_REPO = "Mastershort/neonplan3d"
+UPSTREAM_BASE_VERSION = "1.8.0"

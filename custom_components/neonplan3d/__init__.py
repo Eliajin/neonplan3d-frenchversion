@@ -25,6 +25,9 @@ from .const import (
 )
 from .license import FIRST_CHECK_DELAY, REFRESH_INTERVAL, async_refresh_quietly
 from .storage import FloorplanData
+from .upstream import CHECK_INTERVAL as UPSTREAM_CHECK_INTERVAL
+from .upstream import FIRST_CHECK_DELAY as UPSTREAM_FIRST_CHECK_DELAY
+from .upstream import async_check as async_check_upstream
 from .websocket import async_register_commands
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -55,6 +58,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     entry.async_on_unload(async_track_time_interval(hass, _check, REFRESH_INTERVAL))
     entry.async_on_unload(async_call_later(hass, random.uniform(*FIRST_CHECK_DELAY), _check))
+
+    # French fork: once a day, is there a newer release of the original? (repair issue and panel notice)
+    async def _check_upstream(_now) -> None:
+        await async_check_upstream(hass)
+
+    entry.async_on_unload(async_track_time_interval(hass, _check_upstream, UPSTREAM_CHECK_INTERVAL))
+    entry.async_on_unload(async_call_later(hass, UPSTREAM_FIRST_CHECK_DELAY, _check_upstream))
 
     # static paths cannot be unregistered, so they are registered once per run
     if not hass.data.get(_STATIC_REGISTERED):

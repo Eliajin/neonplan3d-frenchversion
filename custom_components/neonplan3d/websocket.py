@@ -14,6 +14,7 @@ from homeassistant.loader import async_get_integration
 import voluptuous as vol
 
 from . import license as lic
+from . import upstream
 from .const import DOMAIN, SIGNAL_BUILDING_UPDATED
 from .packs import MAX_PACK_SIZE, PackError, parts_of, verify_pack
 from .schema import BUILDING_SCHEMA, IMAGE_DATA
@@ -45,6 +46,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_license_refresh,
         ws_backup_export,
         ws_backup_import,
+        ws_upstream_get,
     ):
         websocket_api.async_register_command(hass, command)
 
@@ -379,3 +381,11 @@ async def ws_backup_import(
             "skipped": skipped,
         },
     )
+
+
+@websocket_api.websocket_command({vol.Required("type"): "neonplan3d/upstream/get"})
+@websocket_api.require_admin
+@callback
+def ws_upstream_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """French fork: the original's newer release ({"base", "latest", "url"}), or None."""
+    connection.send_result(msg["id"], upstream.status(hass))

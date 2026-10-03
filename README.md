@@ -87,9 +87,15 @@ night: "off"            # facultatif : kiosque – atténuation nocturne : off |
 idle_orbit: false       # facultatif : kiosque – rotation lente après le retour
 ```
 
+## Alerte de mise à jour de l'original
+
+Une fois par jour, l'intégration regarde sur GitHub la dernière version publiée du [NeonPlan 3D original](https://github.com/Mastershort/neonplan3d/releases). Si elle est plus récente que celle sur laquelle ce fork est basé, une alerte apparaît dans **Paramètres → Réparations** et un bandeau s'affiche en haut du panneau NeonPlan 3D (administrateurs uniquement).
+
+Après avoir intégré la nouvelle version dans le fork (`git pull upstream main`, puis traduction des nouveaux textes dans `i18n-fr.ts`), mettez à jour `UPSTREAM_BASE_VERSION` dans `custom_components/neonplan3d/const.py` : l'alerte disparaît.
+
 ## Confidentialité
 
-NeonPlan 3D stocke le plan, ses images et les packs dans le `.storage` de Home Assistant. Il ne contacte internet que si vous saisissez une clé de licence dans **Extensions** : il interroge alors mastershort.de une fois par jour pour les mises à jour de vos packs.
+NeonPlan 3D stocke le plan, ses images et les packs dans le `.storage` de Home Assistant. Il contacte internet dans deux cas : une fois par jour l'API publique de GitHub pour connaître la dernière version de l'original (sans clé, aucune donnée de votre installation n'est envoyée), et, si vous saisissez une clé de licence dans **Extensions**, mastershort.de une fois par jour pour les mises à jour de vos packs.
 
 ## Développement
 

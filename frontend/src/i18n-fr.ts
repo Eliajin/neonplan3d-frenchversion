@@ -919,4 +919,6 @@ export const fr: Record<I18nKey, string> = {
   presence_hint: "Capteur de pièce par personne (p. ex. ESPresense, Bermuda) : son état indique la pièce ou la pièce HA.",
   presence_sensor: "Capteur de pièce",
   no_persons: "Il n'y a aucune personne dans Home Assistant.",
+  upstream_update: "Le NeonPlan 3D original a publié la version {latest} (cette version française est basée sur la {base}).",
+  upstream_notes: "Notes de version",
 };

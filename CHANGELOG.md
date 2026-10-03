@@ -4,6 +4,12 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 [releases page](https://github.com/Mastershort/neonplan3d/releases). Ideas and votes:
 [Discussions → Ideas](https://github.com/Mastershort/neonplan3d/discussions/categories/ideas).
 
+## 1.8.3 (French fork)
+
+### New
+
+- **Notice when the original has a newer release**: once a day the latest release of Mastershort/neonplan3d is read from GitHub; a newer one than the fork's base (`UPSTREAM_BASE_VERSION` in `const.py`) shows in Settings → Repairs and as a notice in the panel for administrators.
+
 ## 1.8.2 (French fork)
 
 ### Fixed

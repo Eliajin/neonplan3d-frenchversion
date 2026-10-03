@@ -2,6 +2,7 @@
 
 - Spec and phase plan: `docs/plan.md` (German). This is the French fork (`Eliajin/neonplan3d-frenchversion`): talk to the user in French; code, identifiers and comments in English.
 - French UI strings live in `frontend/src/i18n-fr.ts`; every new key in `i18n.ts` needs a French entry there (the typecheck enforces it).
+- After merging a release of the original, raise `UPSTREAM_BASE_VERSION` in `const.py` to it (upstream.py warns while the original is ahead).
 - Domain `neonplan3d`, repo `mastershort/neonplan3d`, minimum Home Assistant 2025.1.
 - Frontend lives in `frontend/` (Lit 3 + TypeScript, no decorators; three.js in a separate lazily loaded bundle).
   Bundles are committed to `custom_components/neonplan3d/frontend/`, and CI fails when they are stale, so run `npm run build` before committing.

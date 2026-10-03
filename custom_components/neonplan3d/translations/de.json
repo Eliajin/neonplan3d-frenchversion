@@ -9,5 +9,11 @@
     "abort": {
       "single_instance_allowed": "NeonPlan 3D ist bereits eingerichtet."
     }
+  },
+  "issues": {
+    "upstream_update": {
+      "title": "Neuere Version des originalen NeonPlan 3D",
+      "description": "Das originale NeonPlan 3D (Mastershort) hat Version {latest} veröffentlicht; diese französische Version basiert auf {base}. Die neue Version in den Fork übernehmen und ihre neuen Texte übersetzen: `git pull upstream main`, dann die neuen Schlüssel in `frontend/src/i18n-fr.ts` ergänzen.\n\n[Versionshinweise]({url})"
+    }
   }
 }

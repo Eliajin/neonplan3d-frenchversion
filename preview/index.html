@@ -168,6 +168,9 @@
             case "neonplan3d/packs/remove":
               importedPacks = importedPacks.filter((p) => p.id !== msg.pack_id);
               return null;
+            case "neonplan3d/upstream/get":
+              // French fork: ?upstream shows the notice about a newer release of the original
+              return params.has("upstream") ? { base: "1.8.0", latest: "1.9.0", url: "https://github.com/Mastershort/neonplan3d/releases" } : null;
             case "neonplan3d/license/get":
               return license;
             case "neonplan3d/license/activate":

@@ -919,6 +919,8 @@ const de = {
   presence_hint: "Raumsensor je Person (z. B. ESPresense, Bermuda): sein Zustand nennt den Raum oder Bereich.",
   presence_sensor: "Raumsensor",
   no_persons: "In Home Assistant gibt es keine Personen.",
+  upstream_update: "Das originale NeonPlan 3D hat Version {latest} veröffentlicht (diese französische Version basiert auf {base}).",
+  upstream_notes: "Versionshinweise",
 };
 
 type Key = keyof typeof de;
@@ -1839,6 +1841,8 @@ const en: Record<Key, string> = {
   presence_hint: "Room sensor per person (e.g. ESPresense, Bermuda): its state names the room or area.",
   presence_sensor: "Room sensor",
   no_persons: "There are no people in Home Assistant.",
+  upstream_update: "The original NeonPlan 3D has released version {latest} (this French version is based on {base}).",
+  upstream_notes: "Release notes",
 };
 
 export type I18nKey = Key;

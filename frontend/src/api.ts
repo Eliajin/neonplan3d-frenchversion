@@ -174,6 +174,18 @@ export interface LicenseStatus {
   updates?: PackUpdate[];
 }
 
+/** French fork: a newer release of the original NeonPlan 3D than the fork is based on. */
+export interface UpstreamUpdate {
+  base: string;
+  latest: string;
+  url: string;
+}
+
+/** The original's newer release, or null while the fork is up to date (admins only). */
+export function getUpstreamUpdate(hass: HomeAssistant): Promise<UpstreamUpdate | null> {
+  return hass.callWS<UpstreamUpdate | null>({ type: "neonplan3d/upstream/get" });
+}
+
 export function getLicense(hass: HomeAssistant): Promise<LicenseStatus> {
   return hass.callWS<LicenseStatus>({ type: "neonplan3d/license/get" });
 }
