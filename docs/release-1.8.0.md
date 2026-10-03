@@ -5,7 +5,7 @@
 - **Full Black** als Standard-Optik, Blau bleibt wählbar. Die **Modulgröße** ist einstellbar (Standard 1,13 × 1,72 m).
 - **Stränge:** Felder, die zusammen verschaltet sind, kommen in denselben Strang, auch über mehrere Dächer hinweg (z. B. 5 Module auf dem Haus und 5 auf der Garage). Ein Strang hat Namen, PV-Sensor und Wechselrichter.
 - **Dachfenster:** Im Werkzeug **Dach** setzt du Dachfenster in jede Dachfläche, verschiebbar wie Solarfelder. Mit Kontakt und Rollladen klappt der Flügel in 3D auf und der Rollladen fährt über die Scheibe.
-- **Wechselrichter, Stromspeicher und Wallbox** legst du im Werkzeug **Energie** unter **Geräte** an. Mit einem Leistungssensor zeigen sie ihre Watt.
+- **Wechselrichter, Stromspeicher und Wallbox** legst du im Werkzeug **Energie** unter **Geräte** an; sie landen von selbst in Garage oder Technikraum an einer Wand. Der Speicher zeigt seinen Ladestand (z. B. „64 % · ▲ 1,5 kW“), die Wallbox, ob sie lädt oder das Auto angesteckt ist. Mit einem Leistungssensor zeigen sie ihre Watt.
 
 Bald folgt die Pro-Erweiterung **Solar & Energie**: Module, die bei Sonne leben, Stromflüsse durchs Haus und ein Hologramm mit den wichtigsten Werten.
 
@@ -18,6 +18,6 @@ Bald folgt die Pro-Erweiterung **Solar & Energie**: Module, die bei Sonne leben,
 - **Full black** as the default look, blue stays available. The **module size** can be set (1.13 × 1.72 m by default).
 - **Strings:** fields wired together go into the same string, also across several roofs (e.g. 5 modules on the house and 5 on the garage). A string has a name, a PV sensor and an inverter.
 - **Roof windows:** the **Roof** tool puts roof windows into any roof face, movable like solar fields. With a contact and a blind the sash opens in 3D and the blind comes down over the glass.
-- **Solar inverter, home battery and wallbox** are added in the **Energy** tool under **Devices**. With a power sensor they show their watts.
+- **Solar inverter, home battery and wallbox** are added in the **Energy** tool under **Devices**; they go into the garage or a utility room against a wall by themselves. The battery shows its charge (e.g. "64 % · ▲ 1.5 kW"), the wallbox whether it is charging or the car is plugged in. With a power sensor they show their watts.
 
 Coming soon: the Pro add-on **Solar & Energy** with modules that come alive in the sun, power flows through the house and a hologram with the key figures.

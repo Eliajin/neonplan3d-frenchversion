@@ -2726,7 +2726,23 @@ export class Fp3dEditor extends LitElement {
     if (device)
       return html`<button class="fp3d-btn fp3d-back" @click=${() => this.selectItem("furniture", null)}>‹ ${this.t("tool_energy")}</button>
         ${this.renderFurnitureForm(device)}`;
-    return html`${this.renderSolarList()}${this.renderEnergyDevices()}`;
+    return html`${this.renderSolarList()}${this.renderEnergyDevices()}${this.renderSolarProTeaser()}`;
+  }
+
+  /** The coming Pro add-on: a picture and what it will do. */
+  private renderSolarProTeaser() {
+    const picture = new URL("./images/solar-pro.jpg", import.meta.url).href;
+    return html`<section class="fp3d-teaser">
+      <div class="fp3d-teaser-head"><b>☀ ${this.t("solar_pro_title")}</b><span class="fp3d-teaser-soon">${this.t("solar_pro_soon")}</span></div>
+      <img src=${picture} alt=${this.t("solar_pro_title")} loading="lazy" />
+      <ul>
+        <li>${this.t("solar_pro_1")}</li>
+        <li>${this.t("solar_pro_2")}</li>
+        <li>${this.t("solar_pro_3")}</li>
+        <li>${this.t("solar_pro_4")}</li>
+      </ul>
+      <p class="fp3d-sub">${this.t("solar_pro_free")}</p>
+    </section>`;
   }
 
   /**
@@ -6212,6 +6228,42 @@ export class Fp3dEditor extends LitElement {
       }
       .fp3d-energy-marker {
         cursor: move;
+      }
+      .fp3d-teaser {
+        margin-top: 12px;
+        padding: 12px;
+        border-radius: 14px;
+        border: 1px solid color-mix(in srgb, #ffd75a 45%, transparent);
+        background: linear-gradient(160deg, color-mix(in srgb, #ffd75a 10%, transparent), transparent 60%);
+      }
+      .fp3d-teaser-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .fp3d-teaser-soon {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #0b1426;
+        background: #ffd75a;
+        border-radius: 999px;
+        padding: 2px 8px;
+        white-space: nowrap;
+      }
+      .fp3d-teaser img {
+        display: block;
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid color-mix(in srgb, var(--fp3d-accent) 40%, transparent);
+      }
+      .fp3d-teaser ul {
+        margin: 8px 0 4px;
+        padding-left: 18px;
+        font-size: 13px;
       }
       /* the roof and energy tools say what can be moved there (everything else is locked) */
       .fp3d-tool-note {
