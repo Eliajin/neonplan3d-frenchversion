@@ -4685,6 +4685,28 @@ export class Fp3dEditor extends LitElement {
             )}
           </div>`
         : nothing}
+      ${f.type === "home_battery"
+        ? html`<div class="fp3d-form fp3d-links">
+            ${this.entitySelect(
+              this.t("furn_soc"),
+              f.soc ?? null,
+              undefined,
+              this.entityOptions((id) => id.startsWith("sensor.") && (hass.states[id]?.attributes.device_class === "battery" || hass.states[id]?.attributes.unit_of_measurement === "%")),
+              (v) => this.updateFurniture({ soc: v === "none" ? null : v }),
+            )}
+          </div>`
+        : nothing}
+      ${f.type === "wallbox"
+        ? html`<div class="fp3d-form fp3d-links">
+            ${this.entitySelect(
+              this.t("furn_wallbox_status"),
+              f.status ?? null,
+              undefined,
+              this.entityOptions((id) => id.startsWith("binary_sensor.") || id.startsWith("sensor.")),
+              (v) => this.updateFurniture({ status: v === "none" ? null : v }),
+            )}
+          </div>`
+        : nothing}
       ${f.type === "fridge_smart"
         ? html`<div class="fp3d-form fp3d-links">
               ${this.entitySelect(this.t("furn_door_left"), f.door_left ?? null, undefined, doorSensors, (v) => this.updateFurniture({ door_left: v }))}

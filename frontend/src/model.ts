@@ -104,6 +104,9 @@ export interface Furniture {
   /** Smart fridge: door sensors of the left (freezer) and right (fridge) door; the doors open in 3D while they report open. */
   door_left?: EntityRef;
   door_right?: EntityRef;
+  /** Home battery: its state of charge (%). Wallbox: a status sensor (charging, car plugged in). */
+  soc?: EntityRef;
+  status?: EntityRef;
   /** Robot vacuum: sensor naming the room it cleans right now (null = automatic, "none" = the dock's room). */
   room_sensor?: EntityRef;
   /** Ask before switching the linked entity. */

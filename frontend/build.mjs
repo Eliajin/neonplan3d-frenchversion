@@ -54,6 +54,9 @@ const FONTS = [
 ];
 function copyFonts() {
   mkdirSync(`${out}/fonts`, { recursive: true });
+  // pictures shown in the app (a preview of a coming Pro add-on)
+  mkdirSync(`${out}/images`, { recursive: true });
+  copyFileSync("assets/solar-pro.jpg", `${out}/images/solar-pro.jpg`);
   for (const [pkg, file, name] of FONTS) {
     const dir = `node_modules/@fontsource-variable/${pkg}`;
     copyFileSync(`${dir}/files/${file}`, `${out}/fonts/${name}`);

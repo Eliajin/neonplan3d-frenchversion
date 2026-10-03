@@ -129,6 +129,9 @@ FURNITURE_SCHEMA = vol.Schema(
         # smart fridge: door sensors of the left and the right door
         vol.Optional("door_left", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Optional("door_right", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        # home battery: state of charge; wallbox: status (charging, plugged in)
+        vol.Optional("soc", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        vol.Optional("status", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # robot vacuum: sensor naming the room it cleans right now (None = automatic)
         vol.Optional("room_sensor", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         # ask before switching the linked entity

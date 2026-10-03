@@ -438,7 +438,7 @@ export class Fp3dView3d extends LitElement {
       const presence = b.presence.flatMap((p) => [p.person, p.sensor]);
       const lights = b.floors.flatMap((f) => f.rooms.flatMap((r) => areaEntities(hass, r.area_id).filter((id) => kindOf(id) === "light")));
       const furniture = [...this.furnitureLinks.values()].flatMap((l) => [l.entity, l.power]);
-      const doors = b.floors.flatMap((f) => f.furniture.flatMap((m) => [m.door_left ?? null, m.door_right ?? null]));
+      const doors = b.floors.flatMap((f) => f.furniture.flatMap((m) => [m.door_left ?? null, m.door_right ?? null, m.soc ?? null, m.status ?? null]));
       const roofWindowIds = (b.settings.roof?.windows ?? []).flatMap((w) => [w.cover, w.contact, w.tilt]).filter((x): x is string => !!x && x !== "none");
       const robotRooms = b.floors.flatMap((f) => f.furniture.filter((m) => m.type === "robot_vacuum").map((m) => robotRoomSensor(hass, this.furnitureLinks.get(m.id)?.entity ?? null, m.room_sensor)));
       const pictureRules = b.floors.flatMap((f) => f.furniture.flatMap((m) => (m.pictures ?? []).flatMap((r) => [r.entity, ...(r.image.startsWith("camera:") ? [r.image.slice(7)] : [])])));
@@ -663,14 +663,18 @@ export class Fp3dView3d extends LitElement {
     const targets = new Map<string, string>();
     for (const floor of b.floors) {
       for (const f of floor.furniture) {
-        const link = this.furnitureLinks.get(f.id);
+        const linked = this.furnitureLinks.get(f.id);
         if (isLamp(f.type)) {
-          markers.push(this.lampMarker(hass, floor, f, link?.entity ?? null));
+          markers.push(this.lampMarker(hass, floor, f, linked?.entity ?? null));
           continue;
         }
+        // a home battery with only its charge, a wallbox with only its status still gets its marker
+        const extraRef = f.type === "home_battery" ? f.soc : f.type === "wallbox" ? f.status : null;
+        const extra = extraRef && extraRef !== "none" ? extraRef : null;
+        const link = linked ?? (extra ? { entity: null, power: null } : undefined);
         if (!link) continue;
-        targets.set(f.id, link.entity ?? link.power!);
-        const id = link.entity ?? link.power!;
+        targets.set(f.id, link.entity ?? link.power ?? extra!);
+        const id = link.entity ?? link.power ?? extra!;
         const st = link.entity ? hass.states[link.entity] : undefined;
         const power = link.power ? readPower(hass.states[link.power]) : null;
         if (link.power && power !== null && !consumerSensors.has(link.power)) {
@@ -710,7 +714,7 @@ export class Fp3dView3d extends LitElement {
           y: markerHeight(f) + mountBase(floor, f),
           icon: iconSvg(kind ?? "switch"),
           name: link.entity ? entityName(hass, link.entity) : furnitureName(hass, f.type),
-          text: st ? stateText(hass, st) : power !== null ? formatPower(hass, Math.max(0, power)) : "",
+          text: f.type === "home_battery" ? this.batteryText(hass, extra, power) : f.type === "wallbox" ? this.wallboxText(hass, extra, power) : st ? stateText(hass, st) : power !== null ? formatPower(hass, Math.max(0, power)) : "",
           active: st ? isActive(st) : (power ?? 0) > 5,
           unavailable: st ? isUnavailable(st) : false,
           glow: null,
@@ -865,6 +869,26 @@ export class Fp3dView3d extends LitElement {
       }
     }
     return out;
+  }
+
+  /** Home battery: "64 % · ▲ 1,5 kW" (▲ charging, ▼ discharging; its power sensor counts discharging positive). */
+  private batteryText(hass: HomeAssistant, soc: string | null, power: number | null): string {
+    const v = soc ? Number(hass.states[soc]?.state) : Number.NaN;
+    const parts: string[] = [];
+    if (Number.isFinite(v)) parts.push(`${formatNumber(hass, v, 0)} %`);
+    if (power !== null && Math.abs(power) >= 10) parts.push(`${power < 0 ? "▲" : "▼"} ${formatPower(hass, Math.abs(power))}`);
+    return parts.join(" · ");
+  }
+
+  /** Wallbox: "lädt · 11 kW", "angesteckt" or its power, from a status sensor (on/off or a state such as charging). */
+  private wallboxText(hass: HomeAssistant, status: string | null, power: number | null): string {
+    const st = status ? hass.states[status] : undefined;
+    const raw = String(st?.state ?? "").toLowerCase();
+    const charging = (power ?? 0) > 50 || /charg|laden|lädt/.test(raw);
+    const plugged = st?.entity_id.startsWith("binary_sensor.") ? raw === "on" : /connect|plug|ready|angesteckt|verbunden|wait|paused|suspend/.test(raw);
+    const label = charging ? translate(hass, "wallbox_charging") : plugged ? translate(hass, "wallbox_plugged") : st && !isUnavailable(st) && !st.entity_id.startsWith("binary_sensor.") ? stateText(hass, st) : "";
+    const watts = power !== null && power > 50 ? formatPower(hass, power) : "";
+    return [label, watts].filter(Boolean).join(" · ");
   }
 
   /** A lamp: its 3D model glows with the linked light and is tapped directly. */
