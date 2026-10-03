@@ -5,7 +5,7 @@
 // length); on a flat roof s runs across, level. A field's u and v place its lower left corner on the face.
 
 import type { Building, Floor, RoofSection, SolarField, Vec2 } from "./model.ts";
-import { sectionFrame, sectionProfile } from "./roof-sections.ts";
+import { sectionFrame, sectionOverhang, sectionProfile } from "./roof-sections.ts";
 
 const DEG = Math.PI / 180;
 type V3 = [number, number, number];
@@ -51,7 +51,7 @@ function topFloor(b: Building): Floor | null {
 export function roofFaces(b: Building): RoofFace[] {
   const roof = b.settings.roof;
   if (!roof || roof.type === "none") return [];
-  if (roof.type === "custom") return (roof.sections ?? []).flatMap((s) => sectionFaces(s));
+  if (roof.type === "custom") return (roof.sections ?? []).flatMap((s) => sectionFaces(s, sectionOverhang(b, s, s.overhang ?? roof.overhang)));
   const floor = topFloor(b);
   if (!floor) return [];
   const xs = floor.rooms.flatMap((r) => r.points.map((p) => p[0]));
@@ -73,32 +73,42 @@ export function roofFaces(b: Building): RoofFace[] {
   return ([-1, 1] as const).map((side) => slopeFace(`main:${side < 0 ? "a" : "b"}`, null, side < 0 ? "a" : "b", P(u0, side * half, 0), P(u1, side * half, 0), P(u0, 0, rise), roof.pitch, () => [0, u1 - u0]));
 }
 
-function sectionFaces(s: RoofSection): RoofFace[] {
+/**
+ * The faces of a section as the roof draws them: with the overhang at the eaves and the gable ends (none
+ * where the section meets a taller part of the house), so modules can reach down to the eave.
+ */
+function sectionFaces(s: RoofSection, ov: { u0: number; u1: number; a: number; b: number }): RoofFace[] {
   const fr = sectionFrame(s);
   const pr = sectionProfile(s);
   const P = (u: number, v: number, y: number): V3 => {
     const [x, z] = fr.at(u, v);
     return [x, y, z];
   };
-  const lu = fr.u1 - fr.u0;
+  const oa = Math.max(0, ov.a);
+  const ob = Math.max(0, ov.b);
+  const U0 = fr.u0 - Math.max(0, ov.u0);
+  const U1 = fr.u1 + Math.max(0, ov.u1);
+  const lu = U1 - U0;
   if (s.shape === "flat") {
-    const a = fr.at(fr.u0, 0);
-    const c = fr.at(fr.u1, fr.w);
+    const a = fr.at(U0, -oa);
+    const c = fr.at(U1, fr.w + ob);
     return [flatFace(s.id, s.id, Math.min(a[0], c[0]), Math.min(a[1], c[1]), Math.max(a[0], c[0]), Math.max(a[1], c[1]), s.eave_a + FLAT_SLAB)];
   }
-  if (s.shape === "pent") return [slopeFace(`${s.id}:a`, s.id, "a", P(fr.u0, 0, pr.y(0)), P(fr.u1, 0, pr.y(0)), P(fr.u0, fr.w, pr.y(fr.w)), s.pitch_a, () => [0, lu])];
+  if (s.shape === "pent") return [slopeFace(`${s.id}:a`, s.id, "a", P(U0, -oa, pr.y(-oa)), P(U1, -oa, pr.y(-oa)), P(U0, fr.w + ob, pr.y(fr.w + ob)), s.pitch_a, () => [0, lu])];
   const hip = s.shape === "hip";
-  const d = hip ? Math.min(lu / 2, Math.min(pr.vr, fr.w - pr.vr) || fr.w / 2) : 0;
+  const d = hip ? Math.min((fr.u1 - fr.u0) / 2, Math.min(pr.vr, fr.w - pr.vr) || fr.w / 2) : 0;
+  // a hip slope narrows from the full eave (with the overhang) to the ridge, which starts d in from the walls
+  const in0 = hip ? fr.u0 + d - U0 : 0;
+  const in1 = hip ? U1 - (fr.u1 - d) : 0;
   const out: RoofFace[] = [];
   if (pr.vr > 0.3) {
-    const len = Math.hypot(pr.vr, pr.rh - pr.y(0));
-    // a hip slope narrows by d over its plan run vr: at slope distance s the inset is d * (s / len)
-    out.push(slopeFace(`${s.id}:a`, s.id, "a", P(fr.u0, 0, pr.y(0)), P(fr.u1, 0, pr.y(0)), P(fr.u0, pr.vr, pr.rh), s.pitch_a, (t) => [d * (t / len), lu - d * (t / len)]));
+    const len = Math.hypot(pr.vr + oa, pr.rh - pr.y(-oa));
+    out.push(slopeFace(`${s.id}:a`, s.id, "a", P(U0, -oa, pr.y(-oa)), P(U1, -oa, pr.y(-oa)), P(U0, pr.vr, pr.rh), s.pitch_a, (t) => [in0 * (t / len), lu - in1 * (t / len)]));
   }
   if (fr.w - pr.vr > 0.3) {
-    const len = Math.hypot(fr.w - pr.vr, pr.rh - pr.y(fr.w));
-    // side b: the eave at v = w, running the other way so the face looks outwards
-    out.push(slopeFace(`${s.id}:b`, s.id, "b", P(fr.u1, fr.w, pr.y(fr.w)), P(fr.u0, fr.w, pr.y(fr.w)), P(fr.u1, pr.vr, pr.rh), s.pitch_b, (t) => [d * (t / len), lu - d * (t / len)]));
+    const len = Math.hypot(fr.w + ob - pr.vr, pr.rh - pr.y(fr.w + ob));
+    // side b: the eave at v = w + overhang, running the other way so the face looks outwards
+    out.push(slopeFace(`${s.id}:b`, s.id, "b", P(U1, fr.w + ob, pr.y(fr.w + ob)), P(U0, fr.w + ob, pr.y(fr.w + ob)), P(U1, pr.vr, pr.rh), s.pitch_b, (t) => [in1 * (t / len), lu - in0 * (t / len)]));
   }
   return out;
 }

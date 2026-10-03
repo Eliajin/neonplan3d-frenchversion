@@ -56,12 +56,16 @@ test("hip roof faces narrow towards the ridge", () => {
   const b = house({ type: "custom", pitch: 30, overhang: 0.4, sections: [sec] });
   const [a] = roofFaces(b);
   assert.equal(a.key, "h:a");
+  // with the 0.4 m overhang: 10.8 m along the eave, the ridge 4 m in from the walls (4.4 m from the eave's end)
   const [l0, r0] = a.span(0);
   const [l1, r1] = a.span(a.ls);
   near(l0, 0);
-  near(r0, 10);
-  near(l1, 4);
-  near(r1, 6);
+  near(r0, 10.8);
+  near(l1, 4.4);
+  near(r1, 6.4);
+  // the face starts at the eave, 0.4 m beyond the wall and lower by the overhang's rise
+  near(a.o[2], -0.4);
+  near(a.o[1], 2.5 - 0.4 * Math.tan((30 * Math.PI) / 180));
   const field = proposeField(a, "s");
   assert.equal(fieldModules(a, field).length, field.rows * field.cols);
 });
