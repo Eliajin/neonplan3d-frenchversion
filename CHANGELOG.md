@@ -4,6 +4,12 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 [releases page](https://github.com/Mastershort/neonplan3d/releases). Ideas and votes:
 [Discussions → Ideas](https://github.com/Mastershort/neonplan3d/discussions/categories/ideas).
 
+## 1.6.2
+
+### Fixed
+
+- The 3D view did not load on older iPads (iOS 15 and 16) with "SyntaxError: Unexpected token '{'"; the bundles are now built for Safari 15 and newer ([#42](https://github.com/Mastershort/neonplan3d/issues/42)).
+
 ## 1.6.1
 
 ### Fixed

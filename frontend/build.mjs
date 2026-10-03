@@ -10,7 +10,9 @@ const watch = process.argv.includes("--watch");
 const common = {
   bundle: true,
   format: "esm",
-  target: "es2022",
+  // older iPads stay on iOS 15/16: Safari 15 is the oldest with WebGL 2 (three.js needs it); newer syntax such as
+  // static class blocks (Safari 16.4) is turned into older code, otherwise the 3D view fails to load there
+  target: ["safari15", "chrome94", "firefox93", "edge94"],
   minify: !watch,
   sourcemap: false,
   legalComments: "none",
