@@ -242,6 +242,8 @@ export interface RoofSettings {
   sections?: RoofSection[];
   /** Solar fields on the roof faces. */
   solar?: SolarField[];
+  /** Strings that fields belong to. */
+  strings?: SolarString[];
 }
 
 /**
@@ -274,6 +276,21 @@ export interface SolarField {
   skip?: string[] | null;
   /** Look: full black (default) or classic blue. */
   look?: "black" | "blue" | null;
+  /** Module size in portrait, width × height in metres (null = 1.13 × 1.72). */
+  module_w?: number | null;
+  module_h?: number | null;
+  /** The string the field belongs to (see RoofSettings.strings); fields on several roofs can share one. */
+  string?: string | null;
+}
+
+/** A string of solar modules: one or more fields wired together to one inverter. */
+export interface SolarString {
+  id: string;
+  name: string;
+  /** PV power sensor of the string. */
+  entity?: string | null;
+  /** The inverter it feeds (an "inverter" furniture item). */
+  inverter?: string | null;
 }
 
 export interface BuildingSettings {

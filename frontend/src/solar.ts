@@ -145,8 +145,10 @@ export interface SolarModule {
 }
 
 /** Size of a module along the eave and up the slope. */
-export function moduleSize(f: Pick<SolarField, "portrait">): [number, number] {
-  return f.portrait === false ? [MODULE_H, MODULE_W] : [MODULE_W, MODULE_H];
+export function moduleSize(f: Pick<SolarField, "portrait" | "module_w" | "module_h">): [number, number] {
+  const w = f.module_w || MODULE_W;
+  const h = f.module_h || MODULE_H;
+  return f.portrait === false ? [h, w] : [w, h];
 }
 
 /** Modules in each row: the layout (rows of their own length) or `cols` in every row. */
@@ -166,7 +168,7 @@ export function fieldSize(face: RoofFace, f: SolarField): [number, number] {
 }
 
 /** Rows a flat-roof field needs per row of modules (module depth plus the distance against shading). */
-export function rowPitch(face: RoofFace, f: Pick<SolarField, "portrait" | "tilt">): number {
+export function rowPitch(face: RoofFace, f: Pick<SolarField, "portrait" | "tilt" | "module_w" | "module_h">): number {
   const [, mh] = moduleSize(f);
   if (!face.flat) return mh + MODULE_GAP;
   const t = Math.min(45, Math.max(0, f.tilt ?? 15)) * DEG;

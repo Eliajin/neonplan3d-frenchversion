@@ -58,6 +58,7 @@ import {
   type LampMount,
   type RoofSection,
   type SolarField,
+  type SolarString,
   ROOF_SHAPES,
   type MarkerShow,
   MARKER_SHOWS,
@@ -870,7 +871,8 @@ export class Fp3dEditor extends LitElement {
         const face = field ? roofFaces(this._doc).find((f) => f.key === field.face) : undefined;
         const hit = face ? pointOnFace(face, world) : null;
         const grab = field && hit ? { du: hit.u - field.u, ds: hit.s - field.v } : null;
-        this.drag = this.isAdmin && !this._doc.settings.lock_plan ? { kind: "solarmove", id: solar, start: world, startScreen: local, base: this._doc, moved: false, grab } : { kind: "pan", last: local };
+        // solar fields are fittings like furniture: the plan lock (rooms, walls, openings) does not hold them
+        this.drag = this.isAdmin ? { kind: "solarmove", id: solar, start: world, startScreen: local, base: this._doc, moved: false, grab } : { kind: "pan", last: local };
         return;
       }
       this._solarId = null;
@@ -2061,6 +2063,36 @@ export class Fp3dEditor extends LitElement {
     });
   }
 
+  /** Put the selected field into a string ("new" makes one), or take it out (null). */
+  private setSolarString(value: string | null): void {
+    const id = this._solarId;
+    if (!id || !this.isAdmin) return;
+    this.change((doc) => {
+      const roof = doc.settings.roof;
+      const f = roof.solar?.find((x) => x.id === id);
+      if (!f) return;
+      if (value === "new") {
+        const strings = roof.strings ?? [];
+        const s: SolarString = { id: uid("str"), name: this.t("solar_string_n", { n: strings.length + 1 }), entity: f.entity ?? null, inverter: null };
+        roof.strings = [...strings, s];
+        f.string = s.id;
+      } else f.string = value;
+      // strings without fields go away
+      const used = new Set((roof.solar ?? []).map((x) => x.string).filter(Boolean));
+      roof.strings = (roof.strings ?? []).filter((x) => used.has(x.id));
+    });
+  }
+
+  private updateSolarString(patch: Partial<SolarString>): void {
+    const field = this._doc.settings.roof.solar?.find((x) => x.id === this._solarId);
+    const sid = field?.string;
+    if (!sid || !this.isAdmin) return;
+    this.change((doc) => {
+      const s = doc.settings.roof.strings?.find((x) => x.id === sid);
+      if (s) Object.assign(s, patch);
+    });
+  }
+
   private toggleSolarCell(cell: string): void {
     this.updateSolarField((f) => {
       const skip = new Set(f.skip ?? []);
@@ -2082,7 +2114,12 @@ export class Fp3dEditor extends LitElement {
   private deleteSolar(): void {
     const id = this._solarId;
     if (!id || !this.isAdmin) return;
-    this.change((doc) => (doc.settings.roof.solar = (doc.settings.roof.solar ?? []).filter((x) => x.id !== id)));
+    this.change((doc) => {
+      const roof = doc.settings.roof;
+      roof.solar = (roof.solar ?? []).filter((x) => x.id !== id);
+      const used = new Set(roof.solar.map((x) => x.string).filter(Boolean));
+      roof.strings = (roof.strings ?? []).filter((x) => used.has(x.id));
+    });
     this._solarId = null;
   }
 
@@ -2114,6 +2151,14 @@ export class Fp3dEditor extends LitElement {
           </div>`
         : nothing}
       <div class="fp3d-actions"><button class="fp3d-btn fp3d-primary" ?disabled=${!admin || !faces.size} @click=${() => this.addSolarField()}>+ ${this.t("solar_add")}</button></div>
+      ${(this._doc.settings.roof.strings ?? []).length
+        ? html`<h4 class="fp3d-lib-head">${this.t("solar_strings")}</h4>
+            ${(this._doc.settings.roof.strings ?? []).map((st) => {
+              const own = fields.filter((f) => f.string === st.id);
+              const n = own.reduce((a, f) => a + (faces.get(f.face) ? fieldModules(faces.get(f.face)!, f).length : 0), 0);
+              return html`<p class="fp3d-sub">🔗 <b>${st.name}</b> · ${this.t("solar_string_sum", { fields: own.length, n, kwp: formatNumber(this.hass, n * 0.4, 1) })}</p>`;
+            })}`
+        : nothing}
     </section>`;
   }
 
@@ -2192,6 +2237,10 @@ export class Fp3dEditor extends LitElement {
           <button aria-pressed=${f.look !== "blue"} ?disabled=${!admin} @click=${() => set({ look: "black" })}>${this.t("solar_look_black")}</button>
           <button aria-pressed=${f.look === "blue"} ?disabled=${!admin} @click=${() => set({ look: "blue" })}>${this.t("solar_look_blue")}</button>
         </div>
+        <div class="fp3d-form">
+          ${this.num(this.t("solar_module_w"), f.module_w ?? 1.13, (v) => set({ module_w: Math.max(0.3, Math.min(3, round(v))) }), 0.01, 0.3)}
+          ${this.num(this.t("solar_module_h"), f.module_h ?? 1.72, (v) => set({ module_h: Math.max(0.3, Math.min(3, round(v))) }), 0.01, 0.3)}
+        </div>
         <div class="fp3d-actions">
           <button class="fp3d-btn" aria-pressed=${this._solarPick} ?disabled=${!admin} @click=${() => (this._solarPick = !this._solarPick)}>${this._solarPick ? "✓ " : ""}${this.t("solar_pick")}</button>
           ${f.skip?.length ? html`<button class="fp3d-btn" ?disabled=${!admin} @click=${() => set({ skip: null })}>${this.t("solar_pick_all")}</button>` : nothing}
@@ -2211,7 +2260,38 @@ export class Fp3dEditor extends LitElement {
         <p class="fp3d-sub">
           ${this.t("solar_summary", { n, kwp: formatNumber(this.hass, n * 0.4, 1) })}${n < total ? html` · <b>${this.t("solar_partial", { n, total })}</b>` : nothing}
         </p>
-        <div class="fp3d-form">${this.entitySelect(this.t("solar_entity"), f.entity ?? null, undefined, power, (v) => set({ entity: v === "none" ? null : v }))}</div>
+        <h4 class="fp3d-lib-head">🔗 ${this.t("solar_string")}</h4>
+        <div class="fp3d-form">
+          <label class="fp3d-field fp3d-wide"
+            >${this.t("solar_string")}
+            <select ?disabled=${!admin} @change=${(e: Event) => {
+              const v = (e.target as HTMLSelectElement).value;
+              this.setSolarString(v === "" ? null : v);
+            }}>
+              <option value="" ?selected=${!f.string}>${this.t("solar_string_none")}</option>
+              ${(this._doc.settings.roof.strings ?? []).map((st) => html`<option value=${st.id} ?selected=${st.id === f.string}>${st.name}</option>`)}
+              <option value="new">+ ${this.t("solar_string_new")}</option>
+            </select></label
+          >
+          ${(() => {
+            const st = this._doc.settings.roof.strings?.find((x) => x.id === f.string);
+            if (!st) return this.entitySelect(this.t("solar_entity"), f.entity ?? null, undefined, power, (v) => set({ entity: v === "none" ? null : v }));
+            const inverters = this._doc.floors.flatMap((fl) => fl.furniture.filter((m) => m.type === "inverter").map((m, i) => ({ id: m.id, label: `${this.t("furn_inverter")} ${i + 1} · ${fl.name}` })));
+            return html`<label class="fp3d-field fp3d-wide"
+                >${this.t("solar_string_name")}
+                <input type="text" ?disabled=${!admin} .value=${st.name} @change=${(e: Event) => this.updateSolarString({ name: (e.target as HTMLInputElement).value.trim() || st.name })}
+              /></label>
+              ${this.entitySelect(this.t("solar_string_entity"), st.entity ?? null, undefined, power, (v) => this.updateSolarString({ entity: v === "none" ? null : v }))}
+              <label class="fp3d-field fp3d-wide"
+                >${this.t("solar_string_inverter")}
+                <select ?disabled=${!admin} @change=${(e: Event) => this.updateSolarString({ inverter: (e.target as HTMLSelectElement).value || null })}>
+                  <option value="" ?selected=${!st.inverter}>${this.t(inverters.length ? "solar_string_inverter_none" : "solar_string_inverter_missing")}</option>
+                  ${inverters.map((x) => html`<option value=${x.id} ?selected=${x.id === st.inverter}>${x.label}</option>`)}
+                </select></label
+              >`;
+          })()}
+        </div>
+        <p class="fp3d-sub">${this.t("solar_string_hint")}</p>
         <p class="fp3d-sub">${this.t("solar_form_hint")}</p>
         ${admin
           ? html`<div class="fp3d-actions">

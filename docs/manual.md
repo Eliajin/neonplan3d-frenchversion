@@ -369,13 +369,15 @@ Below the roof sections, the **Roof** tool lists the **Solar fields**. **+ Solar
 | **Rows** and **Modules per row** | Size of the field. A list like **"4, 4, 3"** gives every row its own length (from the eave); shorter rows sit left, centred or right. Modules that would reach beyond the face are left out |
 | **Modules on/off one by one** | Tap single modules in the plan to take them away or put them back, e.g. around a chimney or a roof window |
 | **Full black** / **Blue** | Look of the modules: all black (default) or classic blue |
+| **Module width** / **Module height** | Size of one module in portrait, 1.13 × 1.72 m by default |
+| **String** | Fields wired together, also on different roofs: e.g. 5 modules on the house and 5 on the garage in "String 1". A string has a name, a PV sensor and an inverter (an item from "Energy & solar") |
 | **PV power of this field** | The power sensor of its string, for the coming Pro add-on |
 | **Portrait** / **Landscape** | How the modules (1.13 × 1.72 m) lie |
 | **Distance from the edge** / **from the eave** | Position of the field. Drag it in the plan, also onto another roof face; it does not slide beyond the edge of its face |
 | **Tilt of the frames** | Flat roofs only: the angle of the frames, plus the direction |
 | **Fill face** | Puts as many modules on the face as fit |
 
-Below the field you see its power, counted with 400 W per module. Solar inverter, home battery and wallbox are in the library under **Energy & solar**. Like every electric item, they show their watts with a power sensor.
+Below the field you see its power, counted with 400 W per module. The plan lock does not hold solar fields; like furniture they can always be moved. Solar inverter, home battery and wallbox are in the library under **Energy & solar**. Like every electric item, they show their watts with a power sensor.
 
 ---
 

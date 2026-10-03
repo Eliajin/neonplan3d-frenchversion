@@ -369,13 +369,15 @@ Unter den Dachflächen findest du im Werkzeug **Dach** die **Solarfelder**. **+ 
 | **Reihen** und **Module pro Reihe** | Größe des Feldes. Eine Liste wie **„4, 4, 3“** gibt jeder Reihe ihre eigene Länge (von der Traufe aus), kürzere Reihen sitzen links, mittig oder rechts. Module, die über die Fläche hinausragen würden, fallen weg |
 | **Module einzeln an/aus** | Im Grundriss einzelne Module wegtippen oder wieder dazunehmen, etwa um einen Schornstein oder ein Dachfenster herum |
 | **Full Black** / **Blau** | Optik der Module: ganz schwarz (Standard) oder klassisch blau |
+| **Modulbreite** / **Modulhöhe** | Größe eines Moduls im Hochformat, Standard 1,13 × 1,72 m |
+| **Strang** | Felder, die zusammen verschaltet sind, auch auf verschiedenen Dächern: etwa 5 Module auf dem Haus und 5 auf der Garage in „Strang 1“. Der Strang hat einen Namen, einen PV-Sensor und einen Wechselrichter (ein Möbel aus „Energie & Solar“) |
 | **PV-Leistung dieses Feldes** | Der Leistungssensor seines Strangs, für die kommende Pro-Erweiterung |
 | **Hochformat** / **Querformat** | Lage der Module (1,13 × 1,72 m) |
 | **Abstand vom Rand** / **von der Traufe** | Position des Feldes. Im Grundriss lässt es sich mit der Maus verschieben, auch auf eine andere Dachfläche; über den Rand der Fläche hinaus rutscht es nicht |
 | **Neigung der Aufständerung** | Nur auf dem Flachdach: Winkel der Gestelle, dazu die Richtung |
 | **Fläche füllen** | Legt so viele Module auf die Fläche, wie passen |
 
-Unter dem Feld steht die Leistung, gerechnet mit 400 W je Modul. Wechselrichter, Stromspeicher und Wallbox findest du als Möbel in der Bibliothek unter **Energie & Solar**. Wie jedes elektrische Möbel zeigen sie mit einem Leistungssensor ihre Watt.
+Unter dem Feld steht die Leistung, gerechnet mit 400 W je Modul. Die Grundriss-Sperre hält Solarfelder nicht fest, sie lassen sich wie Möbel jederzeit verschieben. Wechselrichter, Stromspeicher und Wallbox findest du als Möbel in der Bibliothek unter **Energie & Solar**. Wie jedes elektrische Möbel zeigen sie mit einem Leistungssensor ihre Watt.
 
 ---
 

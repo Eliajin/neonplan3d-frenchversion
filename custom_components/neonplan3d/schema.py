@@ -248,6 +248,21 @@ SOLAR_FIELD_SCHEMA = vol.Schema(
             None, vol.All([vol.All(str, vol.Length(max=12))], vol.Length(max=2400))
         ),
         vol.Optional("look", default=None): vol.Any(None, vol.In(["black", "blue"])),
+        # module size in portrait (None = 1.13 x 1.72 m) and the string the field belongs to
+        vol.Optional("module_w", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.3, max=3))),
+        vol.Optional("module_h", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0.3, max=3))),
+        vol.Optional("string", default=None): vol.Any(None, _ID),
+    },
+    extra=vol.ALLOW_EXTRA,
+)
+
+# a string of solar modules: fields wired together to one inverter
+SOLAR_STRING_SCHEMA = vol.Schema(
+    {
+        vol.Required("id"): _ID,
+        vol.Required("name"): vol.All(str, vol.Length(max=80)),
+        vol.Optional("entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        vol.Optional("inverter", default=None): vol.Any(None, _ID),
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -259,6 +274,7 @@ ROOF_SCHEMA = vol.Schema(
         vol.Optional("sections", default=list): vol.All([ROOF_SECTION_SCHEMA], vol.Length(max=64)),
         # solar fields on the roof faces
         vol.Optional("solar", default=list): vol.All([SOLAR_FIELD_SCHEMA], vol.Length(max=32)),
+        vol.Optional("strings", default=list): vol.All([SOLAR_STRING_SCHEMA], vol.Length(max=16)),
         vol.Optional("pitch", default=35): vol.All(vol.Coerce(float), vol.Range(min=5, max=60)),
         vol.Optional("overhang", default=0.4): vol.All(vol.Coerce(float), vol.Range(min=0, max=2)),
         # gable roof: ridge along the long side (None) or along the short side (terraced houses)
