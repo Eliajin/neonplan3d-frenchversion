@@ -9,4 +9,4 @@
   HA integration tests only run in the Linux CI.
 - Visual self-check: `npm run screenshot` renders `preview/index.html` (invented demo data, mock hass) into `preview/screenshots/`.
 - Deploy to the user's HA: `npm run deploy` (target in the untracked `deploy.local.json`). Never commit real floor plans, IPs or device names.
-- After each phase: bump the version in `manifest.json`, commit, push, check CI, and tell the user in French what is new and how to test it.
+- After each phase: bump the version in `manifest.json` *before* `npm run build` (the bundle embeds it; a mismatch shows a false "restart Home Assistant" notice), commit, push, check CI, and tell the user in French what is new and how to test it.
