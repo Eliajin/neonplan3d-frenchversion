@@ -2053,7 +2053,11 @@ export class Fp3dEditor extends LitElement {
     if (!id || !this.isAdmin) return;
     this.change((doc) => {
       const f = doc.settings.roof.solar?.find((x) => x.id === id);
-      if (f) Object.assign(f, patch);
+      if (!f) return;
+      Object.assign(f, patch);
+      // a larger field (more rows, landscape …) moves back so that it stays on its face where it can
+      const face = roofFaces(doc).find((x) => x.key === f.face);
+      if (face) Object.assign(f, clampField(face, f));
     });
   }
 
@@ -2172,7 +2176,9 @@ export class Fp3dEditor extends LitElement {
               }}
           /></label>
         </div>
-        <p class="fp3d-sub">${this.t("solar_cols_hint")}</p>
+        <p class="fp3d-sub">
+          ${face ? html`${this.t("solar_face_size", { w: formatNumber(this.hass, face.lu, 1), h: formatNumber(this.hass, face.ls, 1) })} · ` : nothing}${this.t("solar_cols_hint")}
+        </p>
         ${f.layout?.length && new Set(f.layout).size > 1
           ? html`<div class="fp3d-seg fp3d-dev-source">
               ${(["left", "center", "right"] as const).map((a) => html`<button aria-pressed=${(f.align ?? "left") === a} ?disabled=${!admin} @click=${() => set({ align: a })}>${this.t(`solar_align_${a}` as I18nKey)}</button>`)}
