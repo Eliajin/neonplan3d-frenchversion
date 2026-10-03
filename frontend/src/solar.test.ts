@@ -170,3 +170,19 @@ test("house walls carry upright fields; close in front of a wall the wall wins o
   // 38 cm out, still under the overhang (the eave is at 8.64): the roof
   assert.equal(faceAt(all, [5, 8.62])?.face.key, "main:b");
 });
+
+test("a wall field in portrait fits after moving back, and tilts away from the wall", () => {
+  const b = house({ type: "gable", pitch: 35, overhang: 0.4 });
+  const f = proposeWallField(b, "w", "eg")!;
+  const face = fieldFace(b, f)!;
+  // portrait modules are 1.72 m high: at the old height they leave the wall, kept on it they fit
+  const portrait = { ...f, portrait: true };
+  assert.equal(fieldModules(face, portrait).length, 0);
+  assert.ok(fieldModules(face, { ...portrait, ...clampField(face, portrait) }).length > 0);
+  // tilted 30°: the upper edge stands off the wall by sin(30°) of the module height
+  const tilted = { ...f, tilt: 30 };
+  const [m] = fieldModules(face, tilted);
+  const off = (p: number[]) => (p[0] - face.o[0]) * face.n[0] + (p[2] - face.o[2]) * face.n[2];
+  near(off(m.corners[3]) - off(m.corners[0]), 1.13 * Math.sin(Math.PI / 6), 1e-9);
+  assert.equal(m.posts.length, 2);
+});

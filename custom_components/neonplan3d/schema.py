@@ -235,7 +235,8 @@ SOLAR_FIELD_SCHEMA = vol.Schema(
         vol.Required("rows"): vol.All(int, vol.Range(min=1, max=40)),
         vol.Required("cols"): vol.All(int, vol.Range(min=1, max=60)),
         vol.Optional("portrait", default=True): bool,
-        vol.Optional("tilt", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=45))),
+        # frames on flat ground (up to 45 degrees), away from a wall (up to 90: a canopy)
+        vol.Optional("tilt", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=90))),
         vol.Optional("flip", default=False): bool,
         vol.Optional("entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
         vol.Optional("name", default=None): vol.Any(None, vol.All(str, vol.Length(max=80))),

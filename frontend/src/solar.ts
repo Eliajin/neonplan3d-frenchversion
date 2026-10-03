@@ -269,21 +269,30 @@ export function rowCounts(f: Pick<SolarField, "rows" | "cols" | "layout">): numb
   return Array.from({ length: Math.max(1, f.rows) }, () => Math.max(1, f.cols));
 }
 
+/** Tilt of a field's modules in radians: frames on flat ground (15° by default), away from a wall (0 by default). */
+function tiltOf(face: RoofFace, f: Pick<SolarField, "tilt">): number {
+  if (face.flat) return Math.min(45, Math.max(0, f.tilt ?? 15)) * DEG;
+  if (face.wall) return Math.min(90, Math.max(0, f.tilt ?? 0)) * DEG;
+  return 0;
+}
+
 /** Width and depth of a field on its face (the longest row, all rows). */
 export function fieldSize(face: RoofFace, f: SolarField): [number, number] {
   const [mw, mh] = moduleSize(f);
   const counts = rowCounts(f);
   const most = Math.max(1, ...counts);
   const rows = counts.length;
-  const depth = face.flat ? (rows - 1) * rowPitch(face, f) + mh * Math.cos(Math.min(45, Math.max(0, f.tilt ?? 15)) * DEG) : rows * mh + (rows - 1) * MODULE_GAP;
+  const depth = (rows - 1) * rowPitch(face, f) + mh * Math.cos(tiltOf(face, f));
   return [most * mw + (most - 1) * MODULE_GAP, depth];
 }
 
 /** Rows a flat-roof field needs per row of modules (module depth plus the distance against shading). */
 export function rowPitch(face: RoofFace, f: Pick<SolarField, "portrait" | "tilt" | "module_w" | "module_h">): number {
   const [, mh] = moduleSize(f);
+  const t = tiltOf(face, f);
+  // a wall: rows one above the other, as high as the tilted module reaches
+  if (face.wall) return mh * Math.cos(t) + MODULE_GAP;
   if (!face.flat) return mh + MODULE_GAP;
-  const t = Math.min(45, Math.max(0, f.tilt ?? 15)) * DEG;
   return mh * Math.cos(t) + Math.max(0.3, 2 * mh * Math.sin(t));
 }
 
@@ -294,7 +303,7 @@ export function rowPitch(face: RoofFace, f: Pick<SolarField, "portrait" | "tilt"
 export function fieldModules(face: RoofFace, f: SolarField, withSkipped = false): SolarModule[] {
   const [mw, mh] = moduleSize(f);
   const out: SolarModule[] = [];
-  const t = face.flat ? Math.min(45, Math.max(0, f.tilt ?? 15)) * DEG : 0;
+  const t = tiltOf(face, f);
   const depth = mh * Math.cos(t);
   const pitch = rowPitch(face, f);
   const counts = rowCounts(f);
@@ -321,8 +330,18 @@ export function fieldModules(face: RoofFace, f: SolarField, withSkipped = false)
       const u0 = f.u + (c + shift) * (mw + MODULE_GAP);
       const s0 = f.v + r * pitch;
       const u1 = u0 + mw;
-      const s1 = s0 + (face.flat ? depth : mh);
+      const s1 = s0 + (face.flat || face.wall ? depth : mh);
       if (![[u0, s0], [u1, s0], [u1, s1], [u0, s1]].every(([u, s]) => inside(u, s))) continue;
+      if (face.wall && t > 0.001) {
+        // on a wall, tilted: the upper edge stands off the wall (flipped: the lower edge), on brackets
+        const away = LIFT + mh * Math.sin(t);
+        const [lo, hi] = f.flip ? [away, LIFT] : [LIFT, away];
+        const corners: [V3, V3, V3, V3] = [at(u0, s0, lo), at(u1, s0, lo), at(u1, s1, hi), at(u0, s1, hi)];
+        const edge = f.flip ? s0 : s1;
+        const posts = [u0 + 0.05, u1 - 0.05].map((u) => [at(u, edge, 0), at(u, edge, away)] as [V3, V3]);
+        out.push({ corners, posts, cell, skipped });
+        continue;
+      }
       if (!face.flat) {
         out.push({ corners: [at(u0, s0, LIFT), at(u1, s0, LIFT), at(u1, s1, LIFT), at(u0, s1, LIFT)], posts: [], cell, skipped });
         continue;

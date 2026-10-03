@@ -383,7 +383,7 @@ Drag fields in the plan and in the **3D view beside it**, also onto another roof
 | **Distance from the edge** / **from the eave** | Position of the field. Drag it in the plan, also onto another roof face; it does not slide beyond the edge of its face |
 | **Tilt of the frames** | Flat roofs and the garden: the angle of the frames, plus the direction |
 | **Free-standing** | The field stands on frames and moves freely. **Height of the surface** lifts it, e.g. 2.8 m onto a garage roof (0 = ground). **Rotation** turns the rows, as do the ↺/↻ 15° buttons and the turn handle in the plan; the field turns about its middle |
-| **Wall** | Modules hang upright on an outer wall; instead of "distance from the eave" there is the **height above the floor** |
+| **Wall** | Modules hang on an outer wall; instead of "distance from the eave" there is the **height above the floor**. **Tilt away from the wall** angles them: standing off at the top or at the bottom, up to 90° as a canopy. The floor buttons at the top choose the floor you work on |
 | **Fill face** | Puts as many modules on the face as fit |
 
 Below the field you see its power, counted with 400 W per module. The plan lock does not hold solar fields; like furniture they can always be moved. Solar inverter, home battery and wallbox are in the library under **Energy & solar**. Like every electric item, they show their watts with a power sensor.

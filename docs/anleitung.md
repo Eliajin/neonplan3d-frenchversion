@@ -383,7 +383,7 @@ Felder lassen sich im Grundriss und in der **3D-Ansicht daneben** mit der Maus v
 | **Abstand vom Rand** / **von der Traufe** | Position des Feldes. Im Grundriss lässt es sich mit der Maus verschieben, auch auf eine andere Dachfläche; über den Rand der Fläche hinaus rutscht es nicht |
 | **Neigung der Aufständerung** | Flachdach und Garten: Winkel der Gestelle, dazu die Richtung |
 | **Frei aufgeständert** | Das Feld steht auf Gestellen, frei verschiebbar. **Höhe der Aufstellfläche** hebt es an, z. B. 2,8 m auf ein Garagendach (0 = Boden). **Drehung** richtet die Reihen aus, ebenso die Knöpfe ↺/↻ 15° und der Dreh-Griff im Grundriss; das Feld dreht sich dabei um seine Mitte |
-| **Wand** | Module hängen senkrecht an einer Außenwand; statt „Abstand von der Traufe“ gibt es die **Höhe über dem Boden** |
+| **Wand** | Module hängen an einer Außenwand; statt „Abstand von der Traufe“ gibt es die **Höhe über dem Boden**. **Neigung von der Wand** stellt sie schräg: oben abstehend oder unten abstehend, bis 90° als Vordach. Die Etagen-Knöpfe oben wählen, an welcher Etage du arbeitest |
 | **Fläche füllen** | Legt so viele Module auf die Fläche, wie passen |
 
 Unter dem Feld steht die Leistung, gerechnet mit 400 W je Modul. Die Grundriss-Sperre hält Solarfelder nicht fest, sie lassen sich wie Möbel jederzeit verschieben. Wechselrichter, Stromspeicher und Wallbox findest du als Möbel in der Bibliothek unter **Energie & Solar**. Wie jedes elektrische Möbel zeigen sie mit einem Leistungssensor ihre Watt.

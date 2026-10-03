@@ -573,7 +573,7 @@ export class Fp3dEditor extends LitElement {
     const b = best as { id: string; win: boolean; du: number; ds: number };
     this.grab3d = { id: b.id, win: b.win, du: b.du, ds: b.ds, base: doc, moved: false };
     if (b.win) this._roofWinId = b.id;
-    else this._solarId = b.id;
+    else this.selectSolar(b.id);
     return true;
   }
 
@@ -2183,10 +2183,12 @@ export class Fp3dEditor extends LitElement {
       return svg`<g data-solar=${f.id} class=${`fp3d-solar${sel ? " fp3d-solar-sel" : ""}${sel && this._solarPick ? " fp3d-solar-pick" : ""}`}>${fieldModules(face, f, sel).map(
         (m) => {
           // on a wall the modules stand upright: in the plan a strip just outside the wall
+          // as deep as the modules stand off the wall (tilted ones further), at least 30 cm to grab
+          const depth = face.wall ? Math.max(0.3, ...m.corners.map((p) => (p[0] - face.o[0]) * face.n[0] + (p[2] - face.o[2]) * face.n[2])) : 0;
           const pts: Vec2[] = face.wall
             ? [m.corners[0], m.corners[1]].flatMap((p, i) => {
                 const q: Vec2 = [p[0], p[2]];
-                const o: Vec2 = [p[0] + face.n[0] * 0.3, p[2] + face.n[2] * 0.3];
+                const o: Vec2 = [p[0] + face.n[0] * depth, p[2] + face.n[2] * depth];
                 return i === 0 ? [q, o] : [o, q];
               })
             : m.corners.map((p) => [p[0], p[2]] as Vec2);
@@ -2324,6 +2326,14 @@ export class Fp3dEditor extends LitElement {
     this._roofId = null;
   }
 
+  /** Select a solar field; one on a house wall brings up its floor in the plan. */
+  private selectSolar(id: string): void {
+    this._solarId = id;
+    this._roofId = null;
+    const f = this._doc.settings.roof.solar?.find((x) => x.id === id);
+    if (f?.face.startsWith("wall:")) this._floorId = f.face.split(":")[1];
+  }
+
   private addWallField(): void {
     if (!this.isAdmin) return;
     const floorId = this._floorId ?? this._doc.floors[0]?.id;
@@ -2348,7 +2358,7 @@ export class Fp3dEditor extends LitElement {
       if (!f) return;
       Object.assign(f, patch);
       // a larger field (more rows, landscape …) moves back so that it stays on its face where it can
-      const face = roofFaces(doc).find((x) => x.key === f.face);
+      const face = fieldFace(doc, f);
       if (face) Object.assign(f, clampField(face, f));
     });
   }
@@ -2420,6 +2430,7 @@ export class Fp3dEditor extends LitElement {
     const faces = new Map(fields.map((f) => [f.id, fieldFace(this._doc, f, roofList)] as const));
     const admin = this.isAdmin;
     return html`<section>
+      ${this.renderRoofFloors()}
       <h3>☀ ${this.t("solar_fields")}</h3>
       <p class="fp3d-sub">${this.t(roofList.length ? "solar_hint" : "solar_no_roof")}</p>
       ${fields.length
@@ -2430,10 +2441,7 @@ export class Fp3dEditor extends LitElement {
               return html`<div class="fp3d-row">
                 <button
                   class="fp3d-dev-name"
-                  @click=${() => {
-                    this._solarId = f.id;
-                    this._roofId = null;
-                  }}
+                  @click=${() => this.selectSolar(f.id)}
                 >
                   <span>${f.name || `${this.t("solar_field")} ${i + 1}`} · ${face ? this.faceLabel(face) : this.t("solar_face_gone")} · ${this.t("solar_summary", { n, kwp: formatNumber(this.hass, n * 0.4, 1) })}</span>
                 </button>
@@ -2471,6 +2479,7 @@ export class Fp3dEditor extends LitElement {
     const index = (this._doc.settings.roof.solar ?? []).findIndex((x) => x.id === f.id) + 1;
     return html`<button class="fp3d-btn fp3d-back" @click=${() => (this._solarId = null)}>‹ ${this.t("solar_fields")}</button>
       <section>
+        ${this.renderRoofFloors()}
         <h3>☀ ${f.name || `${this.t("solar_field")} ${index}`}</h3>
         <div class="fp3d-form">
           <label class="fp3d-field fp3d-wide"
@@ -2559,6 +2568,13 @@ export class Fp3dEditor extends LitElement {
                   <button class="fp3d-chip" ?disabled=${!admin} @click=${() => set(turnGroundField(this._doc, f, (f.rotation ?? 0) + 15))}>↻ 15°</button>
                 </div>`
             : html`${this.num(this.t("solar_u"), f.u, (v) => set({ u: round(v) }), 0.05)} ${this.num(this.t(face?.wall ? "solar_v_wall" : "solar_v"), f.v, (v) => set({ v: round(v) }), 0.05)}`}
+          ${face?.wall
+            ? html`${this.num(this.t("solar_tilt_wall"), f.tilt ?? 0, (v) => set({ tilt: Math.max(0, Math.min(90, Math.round(v))) }), 5, 0)}
+                <label class="fp3d-check fp3d-wide"
+                  ><input type="checkbox" ?disabled=${!admin} .checked=${!!f.flip} @change=${(e: Event) => set({ flip: (e.target as HTMLInputElement).checked })} />
+                  ${this.t("solar_flip_wall")}</label
+                >`
+            : nothing}
           ${face?.flat
             ? html`${this.num(this.t("solar_tilt"), f.tilt ?? 15, (v) => set({ tilt: Math.max(0, Math.min(45, Math.round(v))) }), 1, 0)}
                 <label class="fp3d-check fp3d-wide"
