@@ -386,7 +386,7 @@ Drag fields in the plan and in the **3D view beside it**, also onto another roof
 | **Wall** | Modules hang on an outer wall; instead of "distance from the eave" there is the **height above the floor**. **Tilt away from the wall** angles them: standing off at the top or at the bottom, up to 90° as a canopy. The floor buttons at the top choose the floor you work on |
 | **Fill face** | Puts as many modules on the face as fit |
 
-Below the field you see its power, counted with 400 W per module. The plan lock does not hold solar fields; like furniture they can always be moved. **Devices:** solar inverters, home batteries and wallboxes are added in the **Energy** tool as well, under **Devices**, on the floor chosen at the top. In the plan you tap and move them there. With a power sensor they show their watts.
+Below the field you see its power, counted with 400 W per module. The plan lock does not hold solar fields; **🔓 Fix** in the form fixes a single field (and a roof window just the same). **Devices:** solar inverters, home batteries and wallboxes are added in the **Energy** tool as well, under **Devices**, on the floor chosen at the top. A wallbox goes into the garage by itself, inverters and batteries into a utility room (utility room, basement …), each against a wall without a door or gate, and the plan moves there. Tapping a device in the list shows it in the plan, where you tap and move it. With a power sensor they show their watts.
 
 ---
 

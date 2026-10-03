@@ -287,6 +287,8 @@ export interface SolarField {
   rotation?: number | null;
   /** Free-standing fields: height of the surface they stand on above the ground floor (a garage roof); null = the ground. */
   base?: number | null;
+  /** Fixed: cannot be moved by accident. */
+  locked?: boolean;
 }
 
 /**
@@ -304,6 +306,8 @@ export interface RoofWindow {
   cover?: EntityRef;
   contact?: EntityRef;
   tilt?: EntityRef;
+  /** Fixed: cannot be moved by accident. */
+  locked?: boolean;
 }
 
 /** A string of solar modules: one or more fields wired together to one inverter. */

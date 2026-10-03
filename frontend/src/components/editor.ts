@@ -562,14 +562,14 @@ export class Fp3dEditor extends LitElement {
     const doc = this._doc;
     const roof = roofFaces(doc);
     let best: { id: string; win: boolean; t: number; du: number; ds: number } | null = null;
-    const consider = (id: string, win: boolean, face: RoofFace | null, field: SolarField) => {
-      if (!face) return;
+    const consider = (id: string, win: boolean, face: RoofFace | null, field: SolarField, locked = false) => {
+      if (!face || locked) return;
       const hit = rayOnFace(face, ray.o, ray.d);
       if (!hit || !onField(face, field, hit.u, hit.s) || (best && best.t <= hit.t)) return;
       best = { id, win, t: hit.t, du: hit.u - field.u, ds: hit.s - field.v };
     };
-    if (this._tool === "energy") for (const f of doc.settings.roof.solar ?? []) consider(f.id, false, fieldFace(doc, f, roof), f);
-    if (this._tool === "roof") for (const w of doc.settings.roof.windows ?? []) consider(w.id, true, roof.find((x) => x.key === w.face) ?? null, windowAsField(w));
+    if (this._tool === "energy") for (const f of doc.settings.roof.solar ?? []) consider(f.id, false, fieldFace(doc, f, roof), f, !!f.locked);
+    if (this._tool === "roof") for (const w of doc.settings.roof.windows ?? []) consider(w.id, true, roof.find((x) => x.key === w.face) ?? null, windowAsField(w), !!w.locked);
     if (!best) return false;
     const b = best as { id: string; win: boolean; du: number; ds: number };
     this.grab3d = { id: b.id, win: b.win, du: b.du, ds: b.ds, base: doc, moved: false };
@@ -783,6 +783,12 @@ export class Fp3dEditor extends LitElement {
     };
   }
 
+  /** Bring a plan point to the middle of the plan, zoomed in enough to see a small item there. */
+  private showPoint(x: number, z: number): void {
+    const scale = Math.max(this._view.scale, 70);
+    this._view = { scale, ox: this._size.w / 2 - x * scale, oy: this._size.h / 2 - z * scale };
+  }
+
   private zoomAt(factor: number, sx: number, sy: number): void {
     const { scale, ox, oy } = this._view;
     const next = Math.max(8, Math.min(600, scale * factor));
@@ -961,7 +967,7 @@ export class Fp3dEditor extends LitElement {
         const hit = face ? this.faceHit(face, world) : null;
         const grab = field && hit ? { du: hit.u - field.u, ds: Number.isNaN(hit.s) ? 0 : hit.s - field.v } : null;
         // solar fields are fittings like furniture: the plan lock (rooms, walls, openings) does not hold them
-        this.drag = this.isAdmin ? { kind: "solarmove", id: solar, start: world, startScreen: local, base: this._doc, moved: false, grab } : { kind: "pan", last: local };
+        this.drag = this.isAdmin && !field?.locked ? { kind: "solarmove", id: solar, start: world, startScreen: local, base: this._doc, moved: false, grab } : { kind: "pan", last: local };
         return;
       }
       const win = this._tool === "roof" ? target.closest("[data-roofwin]")?.getAttribute("data-roofwin") : null;
@@ -972,7 +978,7 @@ export class Fp3dEditor extends LitElement {
         const face = w ? roofFaces(this._doc).find((f) => f.key === w.face) : undefined;
         const hit = face ? pointOnFace(face, world) : null;
         const grab = w && hit ? { du: hit.u - w.u, ds: hit.s - w.v } : null;
-        this.drag = this.isAdmin ? { kind: "solarmove", id: win, start: world, startScreen: local, base: this._doc, moved: false, grab, win: true } : { kind: "pan", last: local };
+        this.drag = this.isAdmin && !w?.locked ? { kind: "solarmove", id: win, start: world, startScreen: local, base: this._doc, moved: false, grab, win: true } : { kind: "pan", last: local };
         return;
       }
       if (this._tool === "roof") this._roofWinId = null;
@@ -2176,7 +2182,7 @@ export class Fp3dEditor extends LitElement {
       if (!face || (face.wall && face.wall.floorId !== this._floorId)) return nothing;
       const sel = f.id === this._solarId;
       let handle: unknown = nothing;
-      if (sel && face.unbounded && this.isAdmin) {
+      if (sel && face.unbounded && this.isAdmin && !f.locked) {
         const [cx, cz] = fieldCenter(face, f);
         const r = ((f.rotation ?? 0) * Math.PI) / 180;
         const reach = 0.9 + Math.max(...fieldModules(face, f, true).flatMap((m) => m.corners.map((p) => Math.hypot(p[0] - cx, p[2] - cz)))) * 0.5;
@@ -2285,7 +2291,14 @@ export class Fp3dEditor extends LitElement {
     const contacts = this.entityOptions((id) => id.startsWith("binary_sensor.") || id.startsWith("sensor."));
     return html`<button class="fp3d-btn fp3d-back" @click=${() => (this._roofWinId = null)}>‹ ${this.t("roof_sections")}</button>
       <section>
-        <h3>🪟 ${this.t("roof_window")} ${index}</h3>
+        <div class="fp3d-h3row">
+          <h3>🪟 ${this.t("roof_window")} ${index}</h3>
+          ${admin
+            ? html`<button class="fp3d-btn fp3d-fix" aria-pressed=${!!w.locked} title=${this.t("fix_hint")} @click=${() => set({ locked: !w.locked })}>
+                ${w.locked ? `🔒 ${this.t("unfix")}` : `🔓 ${this.t("fix")}`}
+              </button>`
+            : nothing}
+        </div>
         <div class="fp3d-form">
           <label class="fp3d-field fp3d-wide"
             >${this.t("solar_face")}
@@ -2490,7 +2503,14 @@ export class Fp3dEditor extends LitElement {
     return html`<button class="fp3d-btn fp3d-back" @click=${() => (this._solarId = null)}>‹ ${this.t("solar_fields")}</button>
       <section>
         ${this.renderRoofFloors()}
-        <h3>☀ ${f.name || `${this.t("solar_field")} ${index}`}</h3>
+        <div class="fp3d-h3row">
+          <h3>☀ ${f.name || `${this.t("solar_field")} ${index}`}</h3>
+          ${admin
+            ? html`<button class="fp3d-btn fp3d-fix" aria-pressed=${!!f.locked} title=${this.t("fix_hint")} @click=${() => this.updateSolar({ locked: !f.locked })}>
+                ${f.locked ? `🔒 ${this.t("unfix")}` : `🔓 ${this.t("fix")}`}
+              </button>`
+            : nothing}
+        </div>
         <div class="fp3d-form">
           <label class="fp3d-field fp3d-wide"
             >${this.t("solar_name")}
@@ -2681,6 +2701,53 @@ export class Fp3dEditor extends LitElement {
     return html`${this.renderSolarList()}${this.renderEnergyDevices()}`;
   }
 
+  /**
+   * Add an energy device where it belongs: a wallbox in the garage (or carport), an inverter or a battery in a
+   * utility room (or the garage), else in the selected room; against the nearest wall, and the plan goes there.
+   */
+  private addEnergyDevice(type: string): void {
+    const floor = this.floor;
+    if (!floor || !this.isAdmin) return;
+    const areaName = (r: Room) => `${r.name} ${(r.area_id && this.hass?.areas?.[r.area_id]?.name) || ""} ${r.area_id ?? ""}`.toLowerCase();
+    const rooms = floor.rooms.filter((r) => r.points.length >= 3);
+    const find = (re: RegExp) => rooms.find((r) => re.test(areaName(r)));
+    const parked = rooms.find((r) => floor.furniture.some((m) => m.type === "parking" && pointInPolygon([m.x, m.z], r.points)));
+    const garage = find(/garage|carport/) ?? parked;
+    const utility = find(/hwr|hauswirt|technik|keller|abstell|utility|basement|boiler|heiz/);
+    const room = (type === "wallbox" ? garage : (utility ?? garage)) ?? this.room ?? rooms.sort((a, b) => Math.abs(signedArea(b.points)) - Math.abs(signedArea(a.points)))[0];
+    const [w, d, h] = furnitureSize(type);
+    let [x, z] = room ? centroid(room.points) : this.toWorld(this._size.w / 2, this._size.h / 2);
+    if (room) {
+      // in front of the room's longest wall, so it snaps to that wall (from the middle no wall is near enough)
+      const [cx, cz] = centroid(room.points);
+      let best: { mx: number; mz: number; nx: number; nz: number; l: number } | null = null;
+      // walls with a door, gate or window are no place for it (the garage door wall least of all)
+      const open = new Set(floor.openings.filter((o) => o.room_id === room.id).map((o) => o.edge));
+      const free = room.points.some((_, i) => !open.has(i));
+      room.points.forEach((p, i) => {
+        if (free && open.has(i)) return;
+        const q = room.points[(i + 1) % room.points.length];
+        const l = Math.hypot(q[0] - p[0], q[1] - p[1]);
+        if (best && l <= best.l) return;
+        const mx = (p[0] + q[0]) / 2;
+        const mz = (p[1] + q[1]) / 2;
+        let nx = -(q[1] - p[1]) / l;
+        let nz = (q[0] - p[0]) / l;
+        if ((cx - mx) * nx + (cz - mz) * nz < 0) [nx, nz] = [-nx, -nz];
+        best = { mx, mz, nx, nz, l };
+      });
+      const b = best as { mx: number; mz: number; nx: number; nz: number; l: number } | null;
+      if (b) [x, z] = [b.mx + b.nx * (d / 2 + 0.25), b.mz + b.nz * (d / 2 + 0.25)];
+    }
+    const item: Furniture = { id: uid("furniture"), type, x: round(x), z: round(z), rotation: 0, w, d, h, variant: null };
+    // against the nearest wall of its room, like furniture snapping to a wall
+    const snapped = room ? snapToWall({ ...floor, furniture: [...floor.furniture, item] }, item, this._doc.settings.wall_interior) : null;
+    if (snapped) Object.assign(item, { x: round(snapped.x), z: round(snapped.z), rotation: snapped.rotation });
+    this.change((_, f) => f.furniture.push(item));
+    this.selectItem("furniture", item.id);
+    this.showPoint(item.x, item.z);
+  }
+
   /** Inverters, batteries and wallboxes of all floors, and buttons to add them on the floor shown. */
   private renderEnergyDevices() {
     const admin = this.isAdmin;
@@ -2698,6 +2765,7 @@ export class Fp3dEditor extends LitElement {
                     this._floorId = fl.id;
                     this._solarId = null;
                     this.selectItem("furniture", m.id);
+                    this.showPoint(m.x, m.z);
                   }}
                 >
                   <span>${this.t(`furn_${m.type}` as I18nKey)} · ${fl.name}</span>
@@ -2713,7 +2781,7 @@ export class Fp3dEditor extends LitElement {
             ?disabled=${!admin || !this.floor}
             @click=${() => {
               this._solarId = null;
-              this.addFurniture(type);
+              this.addEnergyDevice(type);
             }}
           >
             + ${this.t(`furn_${type}` as I18nKey)}
@@ -3065,6 +3133,8 @@ export class Fp3dEditor extends LitElement {
     const item: Furniture = { id: uid("furniture"), type, x: round(x), z: round(z), rotation: 0, w, d, h, variant: null };
     this.change((_, f) => f.furniture.push(item));
     this.selectItem("furniture", item.id);
+    // small items are easy to lose in a large plan: bring the new one into view
+    this.showPoint(item.x, item.z);
   }
 
   /**

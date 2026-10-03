@@ -257,6 +257,7 @@ SOLAR_FIELD_SCHEMA = vol.Schema(
         vol.Optional("rotation", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=-360, max=360))),
         # free-standing fields: height of the surface they stand on (a garage roof); None = the ground
         vol.Optional("base", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=60))),
+        vol.Optional("locked", default=False): bool,
     },
     extra=vol.ALLOW_EXTRA,
 )
@@ -284,6 +285,7 @@ ROOF_WINDOW_SCHEMA = vol.Schema(
         vol.Optional("cover", default=None): _ENTITY_REF,
         vol.Optional("contact", default=None): _ENTITY_REF,
         vol.Optional("tilt", default=None): _ENTITY_REF,
+        vol.Optional("locked", default=False): bool,
     },
     extra=vol.ALLOW_EXTRA,
 )

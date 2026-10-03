@@ -9,7 +9,8 @@ All notable changes to NeonPlan 3D. The full notes in German and English are on 
 ### New
 
 - **Energy tool with solar fields** on the roof, free-standing on frames (garden, garage roof, with height and rotation, turn handle) and on house walls (upright or tilted away, up to a canopy); dragged in the plan and in the 3D view: modules in rows and columns on any roof face, lying in its slope, on flat roofs on tilted frames; placed on the sunniest face, dragged in the plan (also onto another face), with the field's kWp. Rows of their own length ("4, 4, 3"), single modules on/off, full black or blue look, module size, a name and a PV sensor per field, and strings that join fields across roofs (name, PV sensor, inverter). Solar fields are not held by the plan lock. On roof sections the faces include the overhang, so modules reach down to the eave.
-- **Energy devices:** solar inverter, home battery and wallbox, added and moved in the Energy tool.
+- **Energy devices:** solar inverter, home battery and wallbox, added and moved in the Energy tool; placed in the garage or a utility room against a wall, and the plan moves to them.
+- Solar fields and roof windows can be fixed. New furniture brings the plan to where it was put.
 - **Roof windows** in the roof faces, with blind, contact and tilt contact (the sash swings out, the blind comes down).
 
 ## 1.7.0
