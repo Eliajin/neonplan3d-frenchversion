@@ -365,9 +365,13 @@ Below the roof sections, the **Roof** tool lists the **Solar fields**. **+ Solar
 | Field | Effect |
 |---|---|
 | **Roof face** | The face with its compass direction and pitch, e.g. "Main roof · south · 35°" |
-| **Rows** and **Modules per row** | Size of the field; modules that would reach beyond the face are left out |
+| **Name** | E.g. "String 1 south"; several fields for several strings or roof faces |
+| **Rows** and **Modules per row** | Size of the field. A list like **"4, 4, 3"** gives every row its own length (from the eave); shorter rows sit left, centred or right. Modules that would reach beyond the face are left out |
+| **Modules on/off one by one** | Tap single modules in the plan to take them away or put them back, e.g. around a chimney or a roof window |
+| **Full black** / **Blue** | Look of the modules: all black (default) or classic blue |
+| **PV power of this field** | The power sensor of its string, for the coming Pro add-on |
 | **Portrait** / **Landscape** | How the modules (1.13 × 1.72 m) lie |
-| **Distance from the edge** / **from the eave** | Position of the field; you can also drag it in the plan |
+| **Distance from the edge** / **from the eave** | Position of the field. Drag it in the plan, also onto another roof face; it does not slide beyond the edge of its face |
 | **Tilt of the frames** | Flat roofs only: the angle of the frames, plus the direction |
 | **Fill face** | Puts as many modules on the face as fit |
 

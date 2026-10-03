@@ -139,11 +139,30 @@ export interface SolarModule {
   corners: [V3, V3, V3, V3];
   /** Flat roofs: the feet of the raised upper edge (posts from the roof up to the module). */
   posts: [V3, V3][];
+  /** Its cell in the field ("row:column"), and whether it is left out (only listed when asked for). */
+  cell: string;
+  skipped: boolean;
 }
 
 /** Size of a module along the eave and up the slope. */
 export function moduleSize(f: Pick<SolarField, "portrait">): [number, number] {
   return f.portrait === false ? [MODULE_H, MODULE_W] : [MODULE_W, MODULE_H];
+}
+
+/** Modules in each row: the layout (rows of their own length) or `cols` in every row. */
+export function rowCounts(f: Pick<SolarField, "rows" | "cols" | "layout">): number[] {
+  if (f.layout?.length) return f.layout.map((n) => Math.max(0, Math.min(60, Math.round(n))));
+  return Array.from({ length: Math.max(1, f.rows) }, () => Math.max(1, f.cols));
+}
+
+/** Width and depth of a field on its face (the longest row, all rows). */
+export function fieldSize(face: RoofFace, f: SolarField): [number, number] {
+  const [mw, mh] = moduleSize(f);
+  const counts = rowCounts(f);
+  const most = Math.max(1, ...counts);
+  const rows = counts.length;
+  const depth = face.flat ? (rows - 1) * rowPitch(face, f) + mh * Math.cos(Math.min(45, Math.max(0, f.tilt ?? 15)) * DEG) : rows * mh + (rows - 1) * MODULE_GAP;
+  return [most * mw + (most - 1) * MODULE_GAP, depth];
 }
 
 /** Rows a flat-roof field needs per row of modules (module depth plus the distance against shading). */
@@ -154,13 +173,19 @@ export function rowPitch(face: RoofFace, f: Pick<SolarField, "portrait" | "tilt"
   return mh * Math.cos(t) + Math.max(0.3, 2 * mh * Math.sin(t));
 }
 
-/** The modules of a field on its face; modules that would leave the face (a hip, the ridge) are left out. */
-export function fieldModules(face: RoofFace, f: SolarField): SolarModule[] {
+/**
+ * The modules of a field on its face. Modules that would leave the face (a hip, the ridge) are left out,
+ * as are the ones switched off; `withSkipped` lists the switched-off ones too (the editor shows them).
+ */
+export function fieldModules(face: RoofFace, f: SolarField, withSkipped = false): SolarModule[] {
   const [mw, mh] = moduleSize(f);
   const out: SolarModule[] = [];
   const t = face.flat ? Math.min(45, Math.max(0, f.tilt ?? 15)) * DEG : 0;
   const depth = mh * Math.cos(t);
   const pitch = rowPitch(face, f);
+  const counts = rowCounts(f);
+  const most = Math.max(1, ...counts);
+  const skip = new Set(f.skip ?? []);
   const at = (u: number, s: number, up: number): V3 => [
     face.o[0] + face.eu[0] * u + face.es[0] * s + face.n[0] * up,
     face.o[1] + face.eu[1] * u + face.es[1] * s + face.n[1] * up,
@@ -171,15 +196,20 @@ export function fieldModules(face: RoofFace, f: SolarField): SolarModule[] {
     const [a, b] = face.span(s);
     return u >= a - 1e-6 && u <= b + 1e-6;
   };
-  for (let r = 0; r < Math.max(1, f.rows); r++) {
-    for (let c = 0; c < Math.max(1, f.cols); c++) {
-      const u0 = f.u + c * (mw + MODULE_GAP);
+  counts.forEach((count, r) => {
+    // a shorter row sits left, centred or right under the longest one
+    const shift = f.align === "right" ? most - count : f.align === "center" ? (most - count) / 2 : 0;
+    for (let c = 0; c < count; c++) {
+      const cell = `${r}:${c}`;
+      const skipped = skip.has(cell);
+      if (skipped && !withSkipped) continue;
+      const u0 = f.u + (c + shift) * (mw + MODULE_GAP);
       const s0 = f.v + r * pitch;
       const u1 = u0 + mw;
       const s1 = s0 + (face.flat ? depth : mh);
       if (![[u0, s0], [u1, s0], [u1, s1], [u0, s1]].every(([u, s]) => inside(u, s))) continue;
       if (!face.flat) {
-        out.push({ corners: [at(u0, s0, LIFT), at(u1, s0, LIFT), at(u1, s1, LIFT), at(u0, s1, LIFT)], posts: [] });
+        out.push({ corners: [at(u0, s0, LIFT), at(u1, s0, LIFT), at(u1, s1, LIFT), at(u0, s1, LIFT)], posts: [], cell, skipped });
         continue;
       }
       // flat roof: the module leans up towards +s (or towards -s when flipped), on a low frame
@@ -187,10 +217,45 @@ export function fieldModules(face: RoofFace, f: SolarField): SolarModule[] {
       const hi = lo + mh * Math.sin(t);
       const [sl, sh] = f.flip ? [s1, s0] : [s0, s1];
       const corners: [V3, V3, V3, V3] = [at(u0, sl, lo), at(u1, sl, lo), at(u1, sh, hi), at(u0, sh, hi)];
-      out.push({ corners, posts: [u0 + 0.05, u1 - 0.05].flatMap((u) => [[at(u, sl, 0), at(u, sl, lo)], [at(u, sh, 0), at(u, sh, hi)]] as [V3, V3][]) });
+      out.push({ corners, posts: [u0 + 0.05, u1 - 0.05].flatMap((u) => [[at(u, sl, 0), at(u, sl, lo)], [at(u, sh, 0), at(u, sh, hi)]] as [V3, V3][]), cell, skipped });
     }
-  }
+  });
   return out;
+}
+
+/** Where a plan point lies on a face (u along the eave, s up the slope), or null when it is not on it. */
+export function pointOnFace(face: RoofFace, p: Vec2): { u: number; s: number } | null {
+  // solve p = o + eu * u + es * s in the plan (eu and es are not parallel in the plan)
+  const a = [face.eu[0], face.eu[2]];
+  const b = [face.es[0], face.es[2]];
+  const d = [p[0] - face.o[0], p[1] - face.o[2]];
+  const det = a[0] * b[1] - a[1] * b[0];
+  if (Math.abs(det) < 1e-9) return null;
+  const u = (d[0] * b[1] - d[1] * b[0]) / det;
+  const s = (a[0] * d[1] - a[1] * d[0]) / det;
+  if (s < 0 || s > face.ls) return null;
+  const [lo, hi] = face.span(s);
+  return u >= lo && u <= hi ? { u, s } : null;
+}
+
+/** The face under a plan point: the highest one there (an upper roof hides a lower one). */
+export function faceAt(faces: readonly RoofFace[], p: Vec2): { face: RoofFace; u: number; s: number } | null {
+  let best: { face: RoofFace; u: number; s: number; y: number } | null = null;
+  for (const face of faces) {
+    const hit = pointOnFace(face, p);
+    if (!hit) continue;
+    const y = face.o[1] + face.es[1] * hit.s;
+    if (!best || y > best.y) best = { face, ...hit, y };
+  }
+  return best ? { face: best.face, u: best.u, s: best.s } : null;
+}
+
+/** A field kept on its face: its corner moved so the whole field stays on the face where it can. */
+export function clampField(face: RoofFace, f: SolarField): { u: number; v: number } {
+  const [w, d] = fieldSize(face, f);
+  // rounded down to centimetres, so a field pushed to the far edge still fits completely
+  const r = (x: number) => Math.floor(x * 100 + 1e-6) / 100;
+  return { u: r(Math.min(Math.max(0, f.u), Math.max(0, face.lu - w))), v: r(Math.min(Math.max(0, f.v), Math.max(0, face.ls - d))) };
 }
 
 /** Corners of every module of a field in the plan (for the editor). */
@@ -200,7 +265,7 @@ export function fieldPlan(face: RoofFace, f: SolarField): Vec2[][] {
 
 /** A field that fits: as many modules as fit the face, centred along the eave, starting a little above it. */
 export function proposeField(face: RoofFace, id: string): SolarField {
-  const f: SolarField = { id, face: face.key, u: 0, v: 0, rows: 1, cols: 1, portrait: true, tilt: face.flat ? 15 : null, flip: false, entity: null };
+  const f: SolarField = { id, face: face.key, u: 0, v: 0, rows: 1, cols: 1, portrait: true, tilt: face.flat ? 15 : null, flip: false, entity: null, look: "black" };
   const [mw] = moduleSize(f);
   const margin = 0.4;
   const pitch = rowPitch(face, f);

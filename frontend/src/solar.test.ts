@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyBuilding, newFloor, type Building, type RoofSection, type SolarField } from "./model.ts";
-import { bestFace, faceCompass, fieldModules, fieldPlan, proposeField, roofFaces } from "./solar.ts";
+import { bestFace, clampField, faceAt, faceCompass, fieldModules, fieldPlan, proposeField, roofFaces } from "./solar.ts";
 
 /** A 10 × 8 m house of one floor (walls 2.5 m high) with the given roof. */
 function house(roof: Building["settings"]["roof"]): Building {
@@ -91,4 +91,32 @@ test("faces know their compass direction; the best face looks south", () => {
   // north pointing down the plan turns it round
   assert.equal(bestFace(faces, 180)?.key, "main:a");
   assert.equal(fieldPlan(faces[1], proposeField(faces[1], "s"))[0].length, 4);
+});
+
+test("rows of their own length (4, 4, 3), aligned, and single modules switched off", () => {
+  const b = house({ type: "gable", pitch: 35, overhang: 0.4 });
+  const f = roofFaces(b)[1];
+  const field: SolarField = { id: "s", face: f.key, u: 1, v: 0.3, rows: 1, cols: 1, portrait: true, layout: [4, 4, 3] };
+  assert.equal(fieldModules(f, field).length, 11);
+  const xs = (fl: SolarField, row: number) => fieldModules(f, fl).filter((m) => m.cell.startsWith(`${row}:`)).map((m) => Math.min(...m.corners.map((p) => p[0])));
+  // left aligned: the short row starts where the others start; right aligned: one module further
+  assert.equal(Math.min(...xs(field, 2)), Math.min(...xs(field, 0)));
+  near(Math.min(...xs({ ...field, align: "right" }, 2)) - Math.min(...xs(field, 0)), 1.13 + 0.025);
+  const off = { ...field, skip: ["0:0", "2:2"] };
+  assert.equal(fieldModules(f, off).length, 9);
+  // the editor still sees the switched-off ones
+  assert.equal(fieldModules(f, off, true).filter((m) => m.skipped).length, 2);
+});
+
+test("the face under a plan point, and a field kept on its face", () => {
+  const b = house({ type: "gable", pitch: 35, overhang: 0.4 });
+  const faces = roofFaces(b);
+  // the south half of the plan (z > 4) is face b, the north half face a
+  assert.equal(faceAt(faces, [5, 6])?.face.key, "main:b");
+  assert.equal(faceAt(faces, [5, 2])?.face.key, "main:a");
+  assert.equal(faceAt(faces, [30, 2]), null);
+  const f = faces[1];
+  const far: SolarField = { id: "s", face: f.key, u: 40, v: 9, rows: 2, cols: 3, portrait: true };
+  const kept = clampField(f, far);
+  assert.equal(fieldModules(f, { ...far, ...kept }).length, 6);
 });

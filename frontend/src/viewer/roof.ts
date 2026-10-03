@@ -19,10 +19,11 @@ const THICK = 0.14;
 const GLASS = 0x8fd8ff;
 const FRAME = 0xc9d3e6;
 const FRAME_TOP = 0xe3e9f5;
-/** Solar modules: deep blue glass, a light frame and faint cell lines. */
-const PANEL = new Color(0x15295a);
-const PANEL_EDGE = shade(0x9fb8ff, 0.55);
-const PANEL_CELLS = shade(0x3d6cff, 0.35);
+/** Solar modules: full black (glass, frame, barely visible cells) or the classic blue look. */
+const PANEL_LOOKS = {
+  black: { glass: new Color(0x05070b), edge: shade(0x8a96b0, 0.32), cells: shade(0x2a3550, 0.22) },
+  blue: { glass: new Color(0x15295a), edge: shade(0x9fb8ff, 0.55), cells: shade(0x3d6cff, 0.35) },
+};
 const PANEL_POST = shade(0xc9d3e6, 0.5);
 
 /** Roof geometry that sits on a floor: y = 0 is `base` above the floor's own level. */
@@ -65,19 +66,20 @@ function pushSolar(b: Building, parts: RoofGeometry[]): void {
     // faces have heights above the ground; parts count from their floor's level plus their base
     const dy = part.floor.elevation + part.base;
     const L = (p: number[]): number[] => [p[0], p[1] - dy, p[2]];
+    const look = PANEL_LOOKS[field.look === "blue" ? "blue" : "black"];
     const cu = field.portrait === false ? 10 : 6;
     const cv = field.portrait === false ? 6 : 10;
     for (const m of fieldModules(face, field)) {
       const [a, c, d, e] = m.corners.map(L);
-      part.solid.tri(a, c, d, PANEL);
-      part.solid.tri(a, d, e, PANEL);
+      part.solid.tri(a, c, d, look.glass);
+      part.solid.tri(a, d, e, look.glass);
       // the frame a hair above the glass, and the cell grid
       const up = (p: number[], k = 0.004) => [p[0] + face.n[0] * k, p[1] + face.n[1] * k, p[2] + face.n[2] * k];
       const mix = (p: number[], q: number[], t: number) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t];
       const ring = [a, c, d, e].map((p) => up(p));
-      for (let i = 0; i < 4; i++) part.lines.seg(ring[i], ring[(i + 1) % 4], PANEL_EDGE);
-      for (let i = 1; i < cu; i++) part.lines.seg(up(mix(a, c, i / cu)), up(mix(e, d, i / cu)), PANEL_CELLS);
-      for (let j = 1; j < cv; j++) part.lines.seg(up(mix(a, e, j / cv)), up(mix(c, d, j / cv)), PANEL_CELLS);
+      for (let i = 0; i < 4; i++) part.lines.seg(ring[i], ring[(i + 1) % 4], look.edge);
+      for (let i = 1; i < cu; i++) part.lines.seg(up(mix(a, c, i / cu)), up(mix(e, d, i / cu)), look.cells);
+      for (let j = 1; j < cv; j++) part.lines.seg(up(mix(a, e, j / cv)), up(mix(c, d, j / cv)), look.cells);
       for (const [p, q] of m.posts) part.lines.seg(L(p), L(q), PANEL_POST);
     }
   }

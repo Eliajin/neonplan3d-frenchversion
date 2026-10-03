@@ -238,6 +238,16 @@ SOLAR_FIELD_SCHEMA = vol.Schema(
         vol.Optional("tilt", default=None): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=45))),
         vol.Optional("flip", default=False): bool,
         vol.Optional("entity", default=None): vol.Any(None, vol.All(str, vol.Length(max=255))),
+        vol.Optional("name", default=None): vol.Any(None, vol.All(str, vol.Length(max=80))),
+        # modules per row when the rows differ, how shorter rows sit, modules left out ("row:column")
+        vol.Optional("layout", default=None): vol.Any(
+            None, vol.All([vol.All(int, vol.Range(min=0, max=60))], vol.Length(max=40))
+        ),
+        vol.Optional("align", default=None): vol.Any(None, vol.In(["left", "center", "right"])),
+        vol.Optional("skip", default=None): vol.Any(
+            None, vol.All([vol.All(str, vol.Length(max=12))], vol.Length(max=2400))
+        ),
+        vol.Optional("look", default=None): vol.Any(None, vol.In(["black", "blue"])),
     },
     extra=vol.ALLOW_EXTRA,
 )

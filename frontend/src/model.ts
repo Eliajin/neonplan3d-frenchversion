@@ -262,8 +262,18 @@ export interface SolarField {
   tilt?: number | null;
   /** Flat roofs: the modules lean the other way. */
   flip?: boolean;
-  /** PV power sensor of this field (null = the plant's sensor from the energy settings). */
+  /** PV power sensor of this field, e.g. its string (null = the plant's sensor from the energy settings). */
   entity?: string | null;
+  /** Name, e.g. "String 1 south". */
+  name?: string | null;
+  /** Modules per row when the rows differ (e.g. [4, 4, 3]); null = `cols` in every row. */
+  layout?: number[] | null;
+  /** Shorter rows sit left, centred or right. */
+  align?: "left" | "center" | "right" | null;
+  /** Modules left out, as "row:column" (row 0 at the eave). */
+  skip?: string[] | null;
+  /** Look: full black (default) or classic blue. */
+  look?: "black" | "blue" | null;
 }
 
 export interface BuildingSettings {
